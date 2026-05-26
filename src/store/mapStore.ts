@@ -1,6 +1,7 @@
 // État global de l'app + persistance auto dans localStorage (middleware persist).
 // Les cartes sont sauvegardées automatiquement à chaque modification, donc tu
-// ne refais pas tes murs/étages à chaque visite.
+// ne refais pas tes murs/étages à chaque visite. Les états d'UI éphémères
+// (outil actif, sélection...) ne sont volontairement PAS persistés.
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -9,13 +10,20 @@ import {
   createEmptyMap,
   MAX_FLOORS,
   type MapConfig,
-  type Wall,
+  type Shape,
+  type Tool,
 } from '../types/map';
 
 interface MapState {
   maps: MapConfig[];
   activeMapId: string | null;
   activeFloorLevel: number;
+
+  // --- UI de dessin (éphémère) ---
+  activeTool: Tool;
+  strokeColor: string;
+  strokeWidth: number;
+  selectedShapeId: string | null;
 
   // --- Cartes ---
   addMap: (name: string) => void;
@@ -28,11 +36,39 @@ interface MapState {
   setActiveFloor: (level: number) => void;
   addFloor: (mapId: string) => void;
 
-  // --- Murs (stub : la vraie UI de dessin viendra plus tard) ---
-  addWall: (mapId: string, level: number, wall: Wall) => void;
+  // --- Outils de dessin ---
+  setActiveTool: (tool: Tool) => void;
+  setStrokeColor: (color: string) => void;
+  setStrokeWidth: (width: number) => void;
+  setSelectedShape: (id: string | null) => void;
+
+  // --- Formes ---
+  addShape: (mapId: string, level: number, shape: Shape) => void;
+  updateShape: (mapId: string, level: number, shape: Shape) => void;
+  removeShape: (mapId: string, level: number, shapeId: string) => void;
+  clearShapes: (mapId: string, level: number) => void;
 
   // Helpers de lecture
   getActiveMap: () => MapConfig | null;
+}
+
+/** Applique une transformation aux formes d'un étage précis. */
+function mapFloorShapes(
+  maps: MapConfig[],
+  mapId: string,
+  level: number,
+  fn: (shapes: Shape[]) => Shape[],
+): MapConfig[] {
+  return maps.map((m) =>
+    m.id === mapId
+      ? {
+          ...m,
+          floors: m.floors.map((f) =>
+            f.level === level ? { ...f, shapes: fn(f.shapes) } : f,
+          ),
+        }
+      : m,
+  );
 }
 
 export const useMapStore = create<MapState>()(
@@ -41,6 +77,11 @@ export const useMapStore = create<MapState>()(
       maps: [],
       activeMapId: null,
       activeFloorLevel: 0,
+
+      activeTool: 'select',
+      strokeColor: '#ff3b3b',
+      strokeWidth: 3,
+      selectedShapeId: null,
 
       addMap: (name) =>
         set((state) => {
@@ -62,7 +103,8 @@ export const useMapStore = create<MapState>()(
           };
         }),
 
-      setActiveMap: (id) => set({ activeMapId: id, activeFloorLevel: 0 }),
+      setActiveMap: (id) =>
+        set({ activeMapId: id, activeFloorLevel: 0, selectedShapeId: null }),
 
       upsertMap: (map) =>
         set((state) => {
@@ -82,7 +124,8 @@ export const useMapStore = create<MapState>()(
           ),
         })),
 
-      setActiveFloor: (level) => set({ activeFloorLevel: level }),
+      setActiveFloor: (level) =>
+        set({ activeFloorLevel: level, selectedShapeId: null }),
 
       addFloor: (mapId) =>
         set((state) => ({
@@ -93,18 +136,39 @@ export const useMapStore = create<MapState>()(
           }),
         })),
 
-      addWall: (mapId, level, wall) =>
+      setActiveTool: (tool) => set({ activeTool: tool, selectedShapeId: null }),
+      setStrokeColor: (color) => set({ strokeColor: color }),
+      setStrokeWidth: (width) => set({ strokeWidth: width }),
+      setSelectedShape: (id) => set({ selectedShapeId: id }),
+
+      addShape: (mapId, level, shape) =>
         set((state) => ({
-          maps: state.maps.map((m) =>
-            m.id === mapId
-              ? {
-                  ...m,
-                  floors: m.floors.map((f) =>
-                    f.level === level ? { ...f, walls: [...f.walls, wall] } : f,
-                  ),
-                }
-              : m,
+          maps: mapFloorShapes(state.maps, mapId, level, (shapes) => [
+            ...shapes,
+            shape,
+          ]),
+        })),
+
+      updateShape: (mapId, level, shape) =>
+        set((state) => ({
+          maps: mapFloorShapes(state.maps, mapId, level, (shapes) =>
+            shapes.map((s) => (s.id === shape.id ? shape : s)),
           ),
+        })),
+
+      removeShape: (mapId, level, shapeId) =>
+        set((state) => ({
+          maps: mapFloorShapes(state.maps, mapId, level, (shapes) =>
+            shapes.filter((s) => s.id !== shapeId),
+          ),
+          selectedShapeId:
+            state.selectedShapeId === shapeId ? null : state.selectedShapeId,
+        })),
+
+      clearShapes: (mapId, level) =>
+        set((state) => ({
+          maps: mapFloorShapes(state.maps, mapId, level, () => []),
+          selectedShapeId: null,
         })),
 
       getActiveMap: () => {
@@ -114,6 +178,12 @@ export const useMapStore = create<MapState>()(
     }),
     {
       name: 'eva_strat:maps',
+      // On ne persiste que les données de cartes, pas l'état d'UI.
+      partialize: (state) => ({
+        maps: state.maps,
+        activeMapId: state.activeMapId,
+        activeFloorLevel: state.activeFloorLevel,
+      }),
     },
   ),
 );

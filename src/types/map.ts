@@ -5,11 +5,28 @@
 /** Nombre maximum d'étages par carte (les maps EVA montent jusqu'à 3 niveaux). */
 export const MAX_FLOORS = 3;
 
-/** Un mur : polyligne dessinée par-dessus l'image de fond. */
-export interface Wall {
+/** Outils de dessin disponibles dans la barre d'outils. */
+export type Tool = 'select' | 'line' | 'rect' | 'ellipse' | 'pen';
+
+/** Type géométrique d'une forme dessinée. */
+export type ShapeKind = 'line' | 'rect' | 'ellipse' | 'pen';
+
+/**
+ * Une forme dessinée sur un étage (mur, obstacle, repère...).
+ * - `line` / `pen` : utilisent `points` à plat [x0, y0, x1, y1, ...].
+ * - `rect` / `ellipse` : utilisent la boîte englobante `x, y, width, height`
+ *   (x,y = coin haut-gauche ; width/height toujours positifs après dessin).
+ */
+export interface Shape {
   id: string;
-  /** Coordonnées à plat [x0, y0, x1, y1, ...] (format attendu par Konva.Line). */
-  points: number[];
+  kind: ShapeKind;
+  points?: number[];
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  stroke: string;
+  strokeWidth: number;
 }
 
 /** Zone reliant plusieurs étages (typiquement un ascenseur). */
@@ -21,12 +38,12 @@ export interface ElevatorZone {
   levels: number[];
 }
 
-/** Un étage d'une carte : ses murs et ses zones d'ascenseur. */
+/** Un étage d'une carte : ses formes (murs) et ses zones d'ascenseur. */
 export interface Floor {
   id: string;
   /** Niveau de l'étage, 0 = rez-de-chaussée. */
   level: number;
-  walls: Wall[];
+  shapes: Shape[];
   elevatorZones: ElevatorZone[];
 }
 
@@ -61,7 +78,7 @@ export function createEmptyFloor(level: number): Floor {
   return {
     id: crypto.randomUUID(),
     level,
-    walls: [],
+    shapes: [],
     elevatorZones: [],
   };
 }
