@@ -1,0 +1,98 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* --- Toolbar --- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #1b1f2a;
+  border-bottom: 1px solid #2c3242;
+}
+
+.toolbar__brand {
+  margin-right: 0.5rem;
+  color: #ff3b3b;
+  letter-spacing: 0.5px;
+}
+
+.toolbar button,
+.toolbar select {
+  padding: 0.35rem 0.7rem;
+  background: #2c3242;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- Floor selector --- */
+.floor-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 1rem;
+  background: #161a22;
+  border-bottom: 1px solid #2c3242;
+}
+
+.floor-selector__label {
+  color: #9aa3b2;
+  font-size: 0.85rem;
+}
+
+.floor-selector button {
+  width: 2rem;
+  height: 2rem;
+  background: #2c3242;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.floor-selector button.is-active {
+  background: #ff3b3b;
+  border-color: #ff3b3b;
+}
+
+.floor-selector__add {
+  width: auto !important;
+  padding: 0 0.6rem;
+  font-size: 0.8rem;
+}
+
+/* --- Canvas --- */
+.app__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0e1117;
+  overflow: auto;
+}
+
+.map-canvas {
+  position: relative;
+  border: 1px solid #2c3242;
+  background: #11151d;
+}
+
+.map-canvas .hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  color: #6b7385;
+  pointer-events: none;
+}
