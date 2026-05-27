@@ -5,8 +5,15 @@
 /** Nombre maximum d'étages par carte (les maps EVA montent jusqu'à 3 niveaux). */
 export const MAX_FLOORS = 3;
 
-/** Outils de dessin disponibles dans la barre d'outils. */
-export type Tool = 'select' | 'line' | 'rect' | 'ellipse' | 'pen';
+/** Outils disponibles dans la barre d'outils. */
+export type Tool =
+  | 'select'
+  | 'line'
+  | 'rect'
+  | 'ellipse'
+  | 'pen'
+  | 'calibrate' // tracer une ligne de longueur connue pour fixer l'échelle
+  | 'weapon'; // poser l'arme sélectionnée sur la carte
 
 /** Type géométrique d'une forme dessinée. */
 export type ShapeKind = 'line' | 'rect' | 'ellipse' | 'pen';
@@ -53,6 +60,8 @@ export interface MapConfig {
   name: string;
   /** Image de plan importée, stockée en data URL (base64). */
   backgroundImage: string | null;
+  /** Échelle de la carte : nombre de pixels pour 1 mètre (null = non calibrée). */
+  pixelsPerMeter: number | null;
   /** 1 à MAX_FLOORS étages. */
   floors: Floor[];
 }
@@ -89,6 +98,7 @@ export function createEmptyMap(name: string): MapConfig {
     id: crypto.randomUUID(),
     name,
     backgroundImage: null,
+    pixelsPerMeter: null,
     floors: [createEmptyFloor(0)],
   };
 }

@@ -24,6 +24,11 @@ interface MapState {
   strokeColor: string;
   strokeWidth: number;
   selectedShapeId: string | null;
+  showOtherFloors: boolean; // calque grisé de référence (pelure d'oignon)
+
+  // --- Module armes (éphémère) ---
+  selectedStuffName: string | null; // arme/secondaire choisi dans le panneau
+  placedStuff: { name: string; x: number; y: number } | null; // arme posée sur la carte
 
   // --- Cartes ---
   addMap: (name: string) => void;
@@ -31,16 +36,24 @@ interface MapState {
   setActiveMap: (id: string) => void;
   upsertMap: (map: MapConfig) => void; // utilisé par l'import JSON
   setBackground: (mapId: string, dataUrl: string) => void;
+  setMapScale: (mapId: string, pixelsPerMeter: number | null) => void;
 
   // --- Étages ---
   setActiveFloor: (level: number) => void;
   addFloor: (mapId: string) => void;
+  removeFloor: (mapId: string, level: number) => void;
 
   // --- Outils de dessin ---
   setActiveTool: (tool: Tool) => void;
   setStrokeColor: (color: string) => void;
   setStrokeWidth: (width: number) => void;
   setSelectedShape: (id: string | null) => void;
+  toggleOtherFloors: () => void;
+
+  // --- Module armes ---
+  selectStuff: (name: string | null) => void;
+  placeStuff: (x: number, y: number) => void;
+  clearPlacedStuff: () => void;
 
   // --- Formes ---
   addShape: (mapId: string, level: number, shape: Shape) => void;
@@ -82,6 +95,9 @@ export const useMapStore = create<MapState>()(
       strokeColor: '#ff3b3b',
       strokeWidth: 3,
       selectedShapeId: null,
+      showOtherFloors: false,
+      selectedStuffName: null,
+      placedStuff: null,
 
       addMap: (name) =>
         set((state) => {
@@ -124,6 +140,13 @@ export const useMapStore = create<MapState>()(
           ),
         })),
 
+      setMapScale: (mapId, pixelsPerMeter) =>
+        set((state) => ({
+          maps: state.maps.map((m) =>
+            m.id === mapId ? { ...m, pixelsPerMeter } : m,
+          ),
+        })),
+
       setActiveFloor: (level) =>
         set({ activeFloorLevel: level, selectedShapeId: null }),
 
@@ -136,10 +159,47 @@ export const useMapStore = create<MapState>()(
           }),
         })),
 
+      // Supprime un étage et renumérote les étages restants pour qu'ils
+      // restent contigus (0, 1, 2…) — le bouton « + étage » se base sur le
+      // nombre d'étages pour le niveau suivant. On garde toujours ≥ 1 étage.
+      removeFloor: (mapId, level) =>
+        set((state) => {
+          const target = state.maps.find((m) => m.id === mapId);
+          if (!target || target.floors.length <= 1) return state;
+
+          const maps = state.maps.map((m) => {
+            if (m.id !== mapId) return m;
+            const floors = m.floors
+              .filter((f) => f.level !== level)
+              .sort((a, b) => a.level - b.level)
+              .map((f, i) => ({ ...f, level: i }));
+            return { ...m, floors };
+          });
+
+          const newCount = target.floors.length - 1;
+          const activeFloorLevel =
+            state.activeMapId === mapId
+              ? Math.min(state.activeFloorLevel, newCount - 1)
+              : state.activeFloorLevel;
+
+          return { maps, activeFloorLevel, selectedShapeId: null };
+        }),
+
       setActiveTool: (tool) => set({ activeTool: tool, selectedShapeId: null }),
       setStrokeColor: (color) => set({ strokeColor: color }),
       setStrokeWidth: (width) => set({ strokeWidth: width }),
       setSelectedShape: (id) => set({ selectedShapeId: id }),
+      toggleOtherFloors: () =>
+        set((state) => ({ showOtherFloors: !state.showOtherFloors })),
+
+      selectStuff: (name) => set({ selectedStuffName: name }),
+      placeStuff: (x, y) =>
+        set((state) =>
+          state.selectedStuffName
+            ? { placedStuff: { name: state.selectedStuffName, x, y } }
+            : state,
+        ),
+      clearPlacedStuff: () => set({ placedStuff: null }),
 
       addShape: (mapId, level, shape) =>
         set((state) => ({
@@ -178,6 +238,11 @@ export const useMapStore = create<MapState>()(
     }),
     {
       name: 'eva_strat:maps',
+      // Incrémenté pour repartir d'un état vierge : à la montée de version,
+      // `migrate` ignore les données précédentes (reset des cartes sauvegardées).
+      // v2 : purge les cartes corrompues par l'ancien bug d'écrasement de fond.
+      version: 2,
+      migrate: () => ({ maps: [], activeMapId: null, activeFloorLevel: 0 }),
       // On ne persiste que les données de cartes, pas l'état d'UI.
       partialize: (state) => ({
         maps: state.maps,

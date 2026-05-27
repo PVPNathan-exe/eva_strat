@@ -71,6 +71,37 @@
   font-size: 0.8rem;
 }
 
+.floor-selector__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.floor-selector__remove {
+  width: 1.2rem !important;
+  height: 1.2rem !important;
+  padding: 0 !important;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: #9aa3b2;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.floor-selector__remove:hover {
+  color: #ff3b3b;
+}
+
+.floor-selector__ghost-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #9aa3b2;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 /* --- Draw toolbar --- */
 .draw-toolbar {
   display: flex;
@@ -134,6 +165,114 @@
 .draw-toolbar__value {
   min-width: 2.5rem;
   color: #e6e8ee;
+}
+
+/* --- Weapon panel --- */
+.weapon-panel {
+  padding: 0.4rem 1rem;
+  background: #10141c;
+  border-bottom: 1px solid #2c3242;
+}
+
+.weapon-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: #9aa3b2;
+  font-size: 0.85rem;
+}
+
+.weapon-panel__row label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.weapon-panel__row select {
+  background: #2c3242;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+}
+
+.weapon-panel__row button {
+  padding: 0.35rem 0.6rem;
+  background: #2c3242;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.weapon-panel__row button.is-active {
+  background: #ff3b3b;
+  border-color: #ff3b3b;
+}
+
+.weapon-panel__row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.weapon-panel__scale {
+  color: #e6e8ee;
+}
+
+.weapon-stats {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  background: #161b25;
+  border: 1px solid #2c3242;
+  border-radius: 8px;
+  max-width: 360px;
+}
+
+.weapon-stats__name {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #ff8a3b;
+  letter-spacing: 0.04em;
+}
+
+.weapon-stats__desc {
+  margin: 0.3rem 0 0.6rem;
+  color: #9aa3b2;
+  font-size: 0.8rem;
+}
+
+.weapon-stats__block {
+  margin: 0.5rem 0;
+}
+
+.weapon-stats__subtitle {
+  color: #9aa3b2;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.weapon-stats__grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.8rem;
+  font-size: 0.85rem;
+  color: #e6e8ee;
+}
+
+.weapon-stats__line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: #e6e8ee;
+  padding: 0.1rem 0;
+}
+
+.weapon-stats__line span {
+  color: #9aa3b2;
 }
 
 /* --- Canvas --- */
