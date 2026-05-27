@@ -42,6 +42,8 @@ export interface Firearm {
   equipS?: number;
   /** Rafale (Vulcan) : nombre de balles par rafale. */
   burstCount?: number;
+  /** Cooldown du tir chargé (s) (M12 Tactical). */
+  chargedCooldownS?: number;
 }
 
 /** Grenade à dégâts de zone. */

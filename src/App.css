@@ -222,57 +222,41 @@
 }
 
 .weapon-stats {
-  margin-top: 0.6rem;
-  padding: 0.6rem 0.8rem;
-  background: #161b25;
-  border: 1px solid #2c3242;
-  border-radius: 8px;
-  max-width: 360px;
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
 }
 
 .weapon-stats__name {
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   color: #ff8a3b;
   letter-spacing: 0.04em;
+  margin-right: 0.2rem;
+  cursor: help;
 }
 
-.weapon-stats__desc {
-  margin: 0.3rem 0 0.6rem;
-  color: #9aa3b2;
-  font-size: 0.8rem;
-}
-
-.weapon-stats__block {
-  margin: 0.5rem 0;
-}
-
-.weapon-stats__subtitle {
-  color: #9aa3b2;
+.weapon-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.12rem 0.45rem;
+  background: #161b25;
+  border: 1px solid #2c3242;
+  border-radius: 999px;
   font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.25rem;
+  white-space: nowrap;
 }
 
-.weapon-stats__grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.15rem 0.8rem;
-  font-size: 0.85rem;
-  color: #e6e8ee;
-}
-
-.weapon-stats__line {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-  color: #e6e8ee;
-  padding: 0.1rem 0;
-}
-
-.weapon-stats__line span {
+.weapon-chip em {
   color: #9aa3b2;
+  font-style: normal;
+}
+
+.weapon-chip strong {
+  color: #e6e8ee;
 }
 
 /* --- Canvas --- */

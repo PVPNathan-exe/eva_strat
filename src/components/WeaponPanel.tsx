@@ -74,89 +74,87 @@ export function WeaponPanel() {
   );
 }
 
-function DamageRow({ profile, title }: { profile: DamageProfile; title?: string }) {
+function Chip({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  color?: string;
+}) {
   return (
-    <div className="weapon-stats__block">
-      {title && <div className="weapon-stats__subtitle">{title}</div>}
-      <div className="weapon-stats__grid">
-        <span>Tête</span>
-        <strong>{profile.head}</strong>
-        <span>Corps</span>
-        <strong>{profile.body}</strong>
-        <span>Extrémités</span>
-        <strong>{profile.extremities}</strong>
-        <span>Moyenne</span>
-        <strong>{profile.average}</strong>
-      </div>
-    </div>
+    <span className="weapon-chip">
+      <em>{label}</em>
+      <strong style={color ? { color } : undefined}>{value}</strong>
+    </span>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function DamageChips({ profile, prefix }: { profile: DamageProfile; prefix?: string }) {
+  const p = prefix ? `${prefix} ` : '';
   return (
-    <div className="weapon-stats__line">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
+    <>
+      <Chip label={`${p}Tête`} value={profile.head} />
+      <Chip label={`${p}Corps`} value={profile.body} />
+      <Chip label={`${p}Extr.`} value={profile.extremities} />
+      <Chip label={`${p}Moy.`} value={profile.average} />
+    </>
   );
 }
 
 function StuffStats({ stuff }: { stuff: Stuff }) {
   return (
     <div className="weapon-stats">
-      <div className="weapon-stats__name">{stuff.name}</div>
-      {stuff.description && <p className="weapon-stats__desc">{stuff.description}</p>}
+      <span className="weapon-stats__name" title={stuff.description}>
+        {stuff.name}
+      </span>
 
       {stuff.kind === 'firearm' && (
         <>
-          <DamageRow profile={stuff.damage} title="Dégâts" />
-          {stuff.chargedDamage && (
-            <DamageRow profile={stuff.chargedDamage} title="Dégâts (tir chargé)" />
-          )}
-          <div className="weapon-stats__block">
-            <div className="weapon-stats__subtitle">Dégâts par distance</div>
-            {stuff.falloff.map((b, i) => (
-              <div key={i} className="weapon-stats__line">
-                <span>{bandLabel(b)}</span>
-                <strong style={{ color: falloffColor(b.pct) }}>{b.pct}%</strong>
-              </div>
-            ))}
-          </div>
+          <DamageChips profile={stuff.damage} />
+          {stuff.chargedDamage && <DamageChips profile={stuff.chargedDamage} prefix="Chargé" />}
+          {stuff.falloff.map((b, i) => (
+            <Chip key={i} label={bandLabel(b)} value={`${b.pct}%`} color={falloffColor(b.pct)} />
+          ))}
           {stuff.dispersionDeg !== undefined && (
-            <Stat label="Dispersion (deg)" value={stuff.dispersionDeg} />
+            <Chip label="Disp." value={`${stuff.dispersionDeg}°`} />
           )}
-          {stuff.dispersionNote && <Stat label="Dispersion" value={stuff.dispersionNote} />}
-          <Stat label="Cadence (rpm)" value={stuff.fireRateRpm} />
-          {stuff.burstCount && <Stat label="Balles par rafale" value={stuff.burstCount} />}
-          {stuff.magazine !== undefined && <Stat label="Chargeur" value={stuff.magazine} />}
-          {stuff.reloadS !== undefined && <Stat label="Rechargement (s)" value={stuff.reloadS} />}
+          {stuff.dispersionNote && <Chip label="Disp." value={stuff.dispersionNote} />}
+          <Chip label="Cadence" value={`${stuff.fireRateRpm} rpm`} />
+          {stuff.chargedCooldownS !== undefined && (
+            <Chip label="Cooldown chargé" value={`${stuff.chargedCooldownS}s`} />
+          )}
+          {stuff.burstCount && <Chip label="Rafale" value={`${stuff.burstCount} balles`} />}
+          {stuff.magazine !== undefined && <Chip label="Chargeur" value={stuff.magazine} />}
+          {stuff.reloadS !== undefined && <Chip label="Rechg." value={`${stuff.reloadS}s`} />}
           {stuff.bulletSpeedMs !== undefined && (
-            <Stat label="Vitesse de balle (m/s)" value={stuff.bulletSpeedMs} />
+            <Chip label="Vit. balle" value={`${stuff.bulletSpeedMs} m/s`} />
           )}
-          {stuff.equipS !== undefined && <Stat label="Temps à équiper (s)" value={stuff.equipS} />}
+          {stuff.equipS !== undefined && <Chip label="Équiper" value={`${stuff.equipS}s`} />}
         </>
       )}
 
       {stuff.kind === 'grenade' && (
         <>
-          <Stat label="Temps avant explosion (s)" value={stuff.fuseS} />
-          <Stat label="Rechargement (s)" value={stuff.reloadS} />
-          <Stat label="Dégâts max" value={stuff.maxDamage} />
-          <Stat label="Rayon dégâts max (m)" value={stuff.maxDamageRadiusM} />
-          <Stat label="Rayon limite (m)" value={stuff.damageLimitRadiusM} />
+          <Chip label="Explosion" value={`${stuff.fuseS}s`} />
+          <Chip label="Rechg." value={`${stuff.reloadS}s`} />
+          <Chip label="Dégâts max" value={stuff.maxDamage} />
+          <Chip label="Rayon max" value={`${stuff.maxDamageRadiusM} m`} />
+          <Chip label="Rayon limite" value={`${stuff.damageLimitRadiusM} m`} />
         </>
       )}
 
       {stuff.kind === 'utility' && (
         <>
-          {stuff.hp !== undefined && <Stat label="Points de vie" value={stuff.hp} />}
-          {stuff.durationS !== undefined && <Stat label="Durée (s)" value={stuff.durationS} />}
+          {stuff.hp !== undefined && <Chip label="PV" value={stuff.hp} />}
+          {stuff.durationS !== undefined && <Chip label="Durée" value={`${stuff.durationS}s`} />}
           {stuff.activationS !== undefined && (
-            <Stat label="Temps d'activation (s)" value={stuff.activationS} />
+            <Chip label="Activation" value={`${stuff.activationS}s`} />
           )}
-          {stuff.radiusM !== undefined && <Stat label="Rayon (m)" value={stuff.radiusM} />}
-          {stuff.fuseS !== undefined && <Stat label="Temps avant déclenchement (s)" value={stuff.fuseS} />}
-          <Stat label="Rechargement (s)" value={stuff.reloadS} />
+          {stuff.radiusM !== undefined && <Chip label="Rayon" value={`${stuff.radiusM} m`} />}
+          {stuff.fuseS !== undefined && <Chip label="Déclench." value={`${stuff.fuseS}s`} />}
+          <Chip label="Rechg." value={`${stuff.reloadS}s`} />
         </>
       )}
     </div>
