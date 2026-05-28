@@ -28,7 +28,8 @@ interface MapState {
 
   // --- Module armes (éphémère) ---
   selectedStuffName: string | null; // arme/secondaire choisi dans le panneau
-  placedStuff: { name: string; x: number; y: number } | null; // arme posée sur la carte
+  // Armes posées sur la carte (plusieurs possibles pour comparer leurs portées).
+  placedStuffs: { id: string; name: string; x: number; y: number }[];
 
   // --- Cartes ---
   addMap: (name: string) => void;
@@ -53,6 +54,8 @@ interface MapState {
   // --- Module armes ---
   selectStuff: (name: string | null) => void;
   placeStuff: (x: number, y: number) => void;
+  movePlacedStuff: (id: string, x: number, y: number) => void;
+  removePlacedStuff: (id: string) => void;
   clearPlacedStuff: () => void;
 
   // --- Formes ---
@@ -97,7 +100,7 @@ export const useMapStore = create<MapState>()(
       selectedShapeId: null,
       showOtherFloors: false,
       selectedStuffName: null,
-      placedStuff: null,
+      placedStuffs: [],
 
       addMap: (name) =>
         set((state) => {
@@ -194,12 +197,34 @@ export const useMapStore = create<MapState>()(
 
       selectStuff: (name) => set({ selectedStuffName: name }),
       placeStuff: (x, y) =>
-        set((state) =>
-          state.selectedStuffName
-            ? { placedStuff: { name: state.selectedStuffName, x, y } }
-            : state,
-        ),
-      clearPlacedStuff: () => set({ placedStuff: null }),
+        set((state) => {
+          const name = state.selectedStuffName;
+          if (!name) return state;
+          // Même arme déjà posée => on la déplace ; sinon on ajoute.
+          const exists = state.placedStuffs.some((p) => p.name === name);
+          if (exists) {
+            return {
+              placedStuffs: state.placedStuffs.map((p) =>
+                p.name === name ? { ...p, x, y } : p,
+              ),
+            };
+          }
+          return {
+            placedStuffs: [
+              ...state.placedStuffs,
+              { id: crypto.randomUUID(), name, x, y },
+            ],
+          };
+        }),
+      movePlacedStuff: (id, x, y) =>
+        set((state) => ({
+          placedStuffs: state.placedStuffs.map((p) => (p.id === id ? { ...p, x, y } : p)),
+        })),
+      removePlacedStuff: (id) =>
+        set((state) => ({
+          placedStuffs: state.placedStuffs.filter((p) => p.id !== id),
+        })),
+      clearPlacedStuff: () => set({ placedStuffs: [] }),
 
       addShape: (mapId, level, shape) =>
         set((state) => ({

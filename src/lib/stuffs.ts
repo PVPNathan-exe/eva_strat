@@ -36,7 +36,7 @@ export const stuffs: Stuff[] = [
   },
   {
     kind: 'firearm',
-    name: 'ERG',
+    name: 'ERG-51',
     damage: { head: 1.62, body: 1.22, extremities: 1.1, average: 1.3 },
     falloff: [
       { fromM: 0, toM: 20, pct: 100 },
@@ -156,6 +156,25 @@ export const stuffs: Stuff[] = [
     reloadS: 0.5,
     bulletSpeedMs: 500,
     equipS: 0.1,
+  },
+  {
+    kind: 'firearm',
+    name: 'SPECTRE',
+    description:
+      "Compact et nerveux, mise sur la saturation. Peu précis mais redoutable en milieu clos.",
+    damage: { head: 12, body: 10, extremities: 9, average: 10.3 },
+    falloff: [
+      { fromM: 0, toM: 8, pct: 100 },
+      { fromM: 8, toM: 12, pct: 65 },
+      { fromM: 12, toM: 20, pct: 50 },
+      { fromM: 20, toM: null, pct: 40 },
+    ],
+    dispersionDeg: 1.35,
+    fireRateRpm: 1020,
+    magazine: 45,
+    reloadS: 1,
+    bulletSpeedMs: 700,
+    equipS: 0.4,
   },
   {
     kind: 'firearm',

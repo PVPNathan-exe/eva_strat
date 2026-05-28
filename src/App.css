@@ -221,6 +221,34 @@
   color: #e6e8ee;
 }
 
+.weapon-panel__placed {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.4rem;
+}
+
+.weapon-panel__placed-label {
+  color: #9aa3b2;
+  font-size: 0.8rem;
+}
+
+.weapon-chip__remove {
+  padding: 0 !important;
+  width: 1rem;
+  height: 1rem;
+  line-height: 1;
+  background: transparent !important;
+  border: none !important;
+  color: #9aa3b2;
+  cursor: pointer;
+}
+
+.weapon-chip__remove:hover {
+  color: #ff3b3b;
+}
+
 .weapon-stats {
   margin-top: 0.4rem;
   display: flex;

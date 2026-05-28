@@ -11,7 +11,8 @@ export function WeaponPanel() {
   const selectStuff = useMapStore((s) => s.selectStuff);
   const activeTool = useMapStore((s) => s.activeTool);
   const setActiveTool = useMapStore((s) => s.setActiveTool);
-  const placedStuff = useMapStore((s) => s.placedStuff);
+  const placedStuffs = useMapStore((s) => s.placedStuffs);
+  const removePlacedStuff = useMapStore((s) => s.removePlacedStuff);
   const clearPlacedStuff = useMapStore((s) => s.clearPlacedStuff);
 
   if (!map) return null;
@@ -59,15 +60,33 @@ export function WeaponPanel() {
         <button
           className={activeTool === 'weapon' ? 'is-active' : ''}
           disabled={!stuff || !ppm}
-          title={!ppm ? "Calibre d'abord l'échelle" : 'Cliquer sur la carte pour poser'}
+          title={!ppm ? "Calibre d'abord l'échelle" : 'Cliquer sur la carte pour poser (plusieurs possibles)'}
           onClick={() => setActiveTool('weapon')}
         >
           🎯 Poser
         </button>
-        {placedStuff && (
-          <button onClick={clearPlacedStuff}>Retirer de la carte</button>
+        {placedStuffs.length > 0 && (
+          <button onClick={clearPlacedStuff}>Tout retirer</button>
         )}
       </div>
+
+      {placedStuffs.length > 0 && (
+        <div className="weapon-panel__placed">
+          <span className="weapon-panel__placed-label">Sur la carte&nbsp;:</span>
+          {placedStuffs.map((p) => (
+            <span key={p.id} className="weapon-chip">
+              <strong>{p.name}</strong>
+              <button
+                className="weapon-chip__remove"
+                title="Retirer cette arme"
+                onClick={() => removePlacedStuff(p.id)}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {stuff && <StuffStats stuff={stuff} />}
     </div>

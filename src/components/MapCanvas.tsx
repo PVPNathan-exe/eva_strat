@@ -5,7 +5,7 @@
 //  - 'pen' : glisser pour un tracé libre.
 
 import { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Image as KonvaImage, Line, Rect, Ellipse, Circle, Text } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Line, Rect, Ellipse, Circle, Text, Group } from 'react-konva';
 import type Konva from 'konva';
 import { useMapStore } from '../store/mapStore';
 import type { Shape } from '../types/map';
@@ -33,8 +33,9 @@ export function MapCanvas() {
   const updateShape = useMapStore((s) => s.updateShape);
   const removeShape = useMapStore((s) => s.removeShape);
   const setMapScale = useMapStore((s) => s.setMapScale);
-  const placedStuff = useMapStore((s) => s.placedStuff);
+  const placedStuffs = useMapStore((s) => s.placedStuffs);
   const placeStuff = useMapStore((s) => s.placeStuff);
+  const movePlacedStuff = useMapStore((s) => s.movePlacedStuff);
   const clearPlacedStuff = useMapStore((s) => s.clearPlacedStuff);
 
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
@@ -240,9 +241,18 @@ export function MapCanvas() {
             />
           ))}
         </Layer>
-        {placedStuff && ppm && (
-          <Layer listening={false}>
-            <StuffRange placed={placedStuff} ppm={ppm} stageSize={stageSize} />
+        {ppm && placedStuffs.length > 0 && (
+          <Layer>
+            {placedStuffs.map((placed) => (
+              <StuffRange
+                key={placed.id}
+                placed={placed}
+                ppm={ppm}
+                stageSize={stageSize}
+                draggable={tool === 'select'}
+                onMove={movePlacedStuff}
+              />
+            ))}
           </Layer>
         )}
       </Stage>
@@ -265,17 +275,22 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 interface StuffRangeProps {
-  placed: { name: string; x: number; y: number };
+  placed: { id: string; name: string; x: number; y: number };
   ppm: number;
   stageSize: { width: number; height: number };
+  draggable: boolean;
+  onMove: (id: string, x: number, y: number) => void;
 }
 
-/** Cercles de portée / falloff de l'arme posée, dessinés depuis son point. */
-function StuffRange({ placed, ppm, stageSize }: StuffRangeProps) {
+/**
+ * Cercles de portée / falloff d'une arme posée, dans un Group déplaçable.
+ * Les enfants sont dessinés en coordonnées RELATIVES (centre 0,0) ; le Group
+ * est positionné en (placed.x, placed.y). Déplaçable avec l'outil Sélection.
+ */
+function StuffRange({ placed, ppm, stageSize, draggable, onMove }: StuffRangeProps) {
   const stuff = findStuff(placed.name);
   if (!stuff) return null;
 
-  const { x, y } = placed;
   const maxRadiusPx = Math.hypot(stageSize.width, stageSize.height);
 
   // Construit la liste des anneaux à dessiner (rayon px décroissant pour empiler).
@@ -317,34 +332,44 @@ function StuffRange({ placed, ppm, stageSize }: StuffRangeProps) {
   rings.sort((a, b) => b.radius - a.radius);
 
   return (
-    <>
+    <Group
+      x={placed.x}
+      y={placed.y}
+      draggable={draggable}
+      listening={draggable}
+      onDragEnd={(e) => onMove(placed.id, e.target.x(), e.target.y())}
+    >
       {rings.map((ring, i) => (
         <Circle
           key={i}
-          x={x}
-          y={y}
+          x={0}
+          y={0}
           radius={ring.radius}
           fill={hexToRgba(ring.color, 0.16)}
           stroke={ring.color}
           strokeWidth={1.5}
+          listening={false}
         />
       ))}
       {rings.map((ring, i) => (
         <Text
           key={`lbl-${i}`}
-          x={x + 4}
-          y={y - Math.min(ring.radius, maxRadiusPx) - 14}
+          x={4}
+          y={-Math.min(ring.radius, maxRadiusPx) - 14}
           text={ring.label}
           fontSize={12}
           fill="#fff"
           shadowColor="#000"
           shadowBlur={3}
+          listening={false}
         />
       ))}
+      {/* zone de saisie pour attraper l'arme (outil Sélection) */}
+      {draggable && <Circle x={0} y={0} radius={14} fill="rgba(0,0,0,0.01)" />}
       {/* marqueur central */}
-      <Circle x={x} y={y} radius={5} fill="#ffffff" stroke="#000000" strokeWidth={1.5} />
-      <Text x={x + 8} y={y + 6} text={stuff.name} fontSize={12} fill="#fff" shadowColor="#000" shadowBlur={3} />
-    </>
+      <Circle x={0} y={0} radius={6} fill="#ffffff" stroke="#000000" strokeWidth={1.5} />
+      <Text x={8} y={6} text={stuff.name} fontSize={12} fill="#fff" shadowColor="#000" shadowBlur={3} />
+    </Group>
   );
 }
 
