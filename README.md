@@ -1,6 +1,6 @@
 # EVA Strat
 
-Planificateur tactique pour le jeu **EVA** (inspiré de [evabattleplan.com](https://evabattleplan.com/fr)).
+Planificateur tactique pour le jeu **EVA**.
 
 En tant qu'admin tu peux :
 
