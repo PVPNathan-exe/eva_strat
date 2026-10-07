@@ -53,9 +53,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   refreshGames: async () => {
-    const { videoId } = get();
-    if (videoId === null) return;
-    set({ games: await analysisApi.games(videoId) });
+    const requested = get().videoId;
+    if (requested === null) return;
+    const games = await analysisApi.games(requested);
+    // Réponse ignorée si l'utilisateur a changé de vidéo entre-temps.
+    if (get().videoId === requested) set({ games });
   },
 
   selectGame: (id) => set({ selectedGameId: id }),

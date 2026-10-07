@@ -7,6 +7,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { pipeline } from 'node:stream';
 import type { Plugin } from 'vite';
 import { handleApi, type ApiContext, type Zones } from './api.ts';
 import { openDb } from './db.ts';
@@ -53,12 +54,12 @@ function streamVideo(req: IncomingMessage, res: ServerResponse, path: string) {
   if (range === null) {
     res.statusCode = 200;
     res.setHeader('Content-Length', size);
-    return createReadStream(path).pipe(res);
+    return pipeline(createReadStream(path), res, () => {});
   }
   res.statusCode = 206;
   res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
   res.setHeader('Content-Length', range.end - range.start + 1);
-  createReadStream(path, { start: range.start, end: range.end }).pipe(res);
+  pipeline(createReadStream(path, { start: range.start, end: range.end }), res, () => {});
 }
 
 export function analysisPlugin(): Plugin {

@@ -1,4 +1,4 @@
-from segments import build_segments
+from segments import build_segments, clamp_segments
 
 F, T = False, True
 
@@ -35,3 +35,7 @@ def test_step_scales_times():
 def test_empty_and_all_false():
     assert build_segments([], 1.0) == []
     assert build_segments([F] * 50, 1.0, min_len_s=1) == []
+
+
+def test_clamp_segments_borne_la_fin_et_ecarte_les_vides():
+    assert clamp_segments([(10.0, 101.0), (100.4, 101.0)], 100.4) == [(10.0, 100.4)]

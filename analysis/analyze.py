@@ -75,6 +75,7 @@ def run(source, db_path, cache_dir, step_s, min_len_s, gap_s, emit=print_event):
         lambda p: emit({"event": "progress", "stage": "detect", "pct": round(p, 1)}),
     )
     found = segments.build_segments(flags, step_s, min_len_s, gap_s)
+    found = segments.clamp_segments(found, meta["duration_s"])
     db.replace_detected_games(conn, video_id, found)
     emit({"event": "done", "video_id": video_id, "games": len(found)})
 
@@ -97,4 +98,6 @@ def main(argv=None, emit=print_event):
 
 
 if __name__ == "__main__":
+    # Sous Windows, stdout est en cp1252 par défaut : on force l'UTF-8 (Node décode en UTF-8).
+    sys.stdout.reconfigure(encoding="utf-8")
     sys.exit(main())

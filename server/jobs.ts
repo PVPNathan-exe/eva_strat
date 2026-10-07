@@ -19,7 +19,10 @@ export class Job {
   private stderrTail = '';
 
   constructor(command: string, args: string[]) {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    });
 
     child.stdout.setEncoding('utf-8');
     child.stdout.on('data', (chunk: string) => {

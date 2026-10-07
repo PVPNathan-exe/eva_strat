@@ -117,3 +117,13 @@ test('route inconnue → 404', () => {
   const ctx = testContext();
   assert.equal(handleApi(ctx, 'GET', '/api/nimporte', q(), undefined).status, 404);
 });
+
+test('PATCH sans toucher aux bornes accepte une fin qui dépasse un peu la durée', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx, 1000);
+  const id = Number(
+    ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 1000.4, 'detected')").run(videoId).lastInsertRowid,
+  );
+  assert.equal(handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { map: 'Silva' }).status, 200);
+  assert.equal(handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { end_s: 99999 }).status, 400);
+});

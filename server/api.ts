@@ -71,8 +71,11 @@ function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
   if (!current) return fail('Game introuvable', 404);
   const start = body.start_s ?? current.start_s;
   const end = body.end_s ?? current.end_s;
-  const error = validateBounds(ctx.db, current.video_id as number, start, end, id);
-  if (error) return fail(error);
+  // Bornes revalidées seulement si on les modifie (une game existante peut dépasser un peu la durée).
+  if ('start_s' in body || 'end_s' in body) {
+    const error = validateBounds(ctx.db, current.video_id as number, start, end, id);
+    if (error) return fail(error);
+  }
   const status = body.status ?? current.status;
   if (typeof status !== 'string' || !STATUSES.includes(status)) return fail('Statut inconnu');
   const map = 'map' in body ? (typeof body.map === 'string' && body.map ? body.map : null) : (current.map as string | null);

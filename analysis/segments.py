@@ -27,3 +27,8 @@ def build_segments(flags, step_s, min_len_s=120.0, gap_tolerance_s=10.0):
         for first, last in merged
         if (last + 1 - first) * step_s >= min_len_s
     ]
+
+
+def clamp_segments(segments, duration_s):
+    """Borne chaque fin à la durée de la vidéo et écarte les segments devenus vides."""
+    return [(start, min(end, duration_s)) for start, end in segments if min(end, duration_s) > start]

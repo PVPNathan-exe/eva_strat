@@ -83,7 +83,7 @@ export function CalibrationEditor({ onClose }: { onClose: () => void }) {
       <div className="calib__panel">
         <div className="calib__head">
           <h3>Calibrer les zones du HUD</h3>
-          <select value={map} onChange={(e) => setMap(e.target.value)}>
+          <select value={map} onChange={(e) => { setZones(null); setMap(e.target.value); }}>
             {builtinMaps.map((m) => (
               <option key={m.id} value={m.name}>{m.name}</option>
             ))}
