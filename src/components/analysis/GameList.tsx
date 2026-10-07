@@ -85,7 +85,16 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
       <div className="games__head">
         <h3>Games ({games.length})</h3>
         {pendingStart === null ? (
-          <button onClick={markStart}>▶ Début de game ici</button>
+          <div className="games__marking">
+            <button onClick={markStart}>▶ Début de game ici</button>
+            <button
+              title="Crée une game couvrant toute la vidéo"
+              disabled={games.length > 0}
+              onClick={() => void act(() => useAnalysisStore.getState().createWholeGame())}
+            >
+              Toute la vidéo
+            </button>
+          </div>
         ) : (
           <div className="games__marking">
             <button onClick={() => void markEnd()}>■ Fin de game ici</button>

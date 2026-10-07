@@ -383,6 +383,15 @@
   min-width: 0;
 }
 
+.ingest__single {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  color: #c7ccda;
+}
+
 .ingest__input {
   flex: 1;
   padding: 0.4rem 0.6rem;

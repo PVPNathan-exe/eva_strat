@@ -10,6 +10,7 @@ const STAGE_LABEL = { download: 'Téléchargement' } as const;
 export function IngestBar() {
   const [source, setSource] = useState('');
   const [picking, setPicking] = useState(false);
+  const [singleGame, setSingleGame] = useState(false);
   const [pickError, setPickError] = useState<string | null>(null);
   const videos = useAnalysisStore((s) => s.videos);
   const videoId = useAnalysisStore((s) => s.videoId);
@@ -19,7 +20,7 @@ export function IngestBar() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (source.trim() && !job.running) void startIngest(source.trim());
+    if (source.trim() && !job.running) void startIngest(source.trim(), singleGame);
   };
 
   const browse = async () => {
@@ -48,6 +49,10 @@ export function IngestBar() {
           placeholder="Colle un chemin .mp4 ou une URL YouTube, ou clique sur Parcourir"
           disabled={job.running || picking}
         />
+        <label className="ingest__single" title="Crée directement une game couvrant toute la vidéo">
+          <input type="checkbox" checked={singleGame} onChange={(e) => setSingleGame(e.target.checked)} disabled={job.running} />
+          1 seule game
+        </label>
         <button type="submit" disabled={job.running || !source.trim()}>
           Analyser
         </button>
