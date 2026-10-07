@@ -32,8 +32,9 @@ Plus tard, le même onglet accueillera l'éditeur de stratégie en temps réel p
       |<--GET /api/*, SSE progression------+<--lecture-- eva.db <--écriture
 ```
 
-- `analysis/analyze.py` est **le seul à écrire** dans `eva.db`.
-- Le plugin Vite (`server/analysisPlugin.ts`) lit la base en **lecture seule** avec `node:sqlite` (natif dans Node 24), lance et suit le script, et sert la vidéo avec les requêtes par plage d'octets (`Range`) nécessaires pour naviguer dans un fichier de 10 Go.
+- `analysis/analyze.py` est **le seul à écrire les données d'analyse** (`videos`, games détectées, et plus tard `samples` et `capture_state`).
+- Le plugin Vite (`server/analysisPlugin.ts`) utilise `node:sqlite` (natif dans Node 24). Il écrit **uniquement les corrections de l'utilisateur** (confirmer, ajuster, ajouter ou supprimer une game, enregistrer une calibration). Il lance et suit le script, et sert la vidéo avec les requêtes par plage d'octets (`Range`) nécessaires pour naviguer dans un fichier de 10 Go.
+- La base est en mode WAL pour que le script et le serveur puissent l'utiliser en même temps. Le schéma vit dans un seul fichier, `analysis/schema.sql`, lu par Python et par Node.
 - Le code existant sous `src/` n'est modifié que pour ajouter l'onglet et sa navigation.
 
 ### Dépendances à installer
@@ -60,7 +61,7 @@ Plus tard, le même onglet accueillera l'éditeur de stratégie en temps réel p
 
 ### Disposition
 
-- **Barre du haut** : champ pour coller une URL YouTube ou choisir un fichier .mp4, bouton « Analyser », barre de progression.
+- **Barre du haut** : un champ texte où l'on colle une URL YouTube ou le chemin d'un fichier .mp4 (un navigateur ne donne pas le chemin d'un fichier choisi, donc pas de sélecteur de fichier ; les guillemets du « Copier en tant que chemin » de Windows sont retirés), un bouton « Analyser » et une barre de progression.
 - **Zone principale** : lecteur vidéo HTML5 (aucune barre YouTube) et timeline où les segments de game apparaissent en couleur et le lobby en gris.
 - **Panneau latéral** : liste des games détectées (début, fin, carte, durée). On ajuste les bornes (champs ou glisser sur la timeline), on renomme la carte, on confirme ou supprime un segment.
 
@@ -84,7 +85,7 @@ Le futur éditeur de stratégie en temps réel se branchera sur le même store (
 
 ## Détection des segments
 
-- Le script échantillonne la vidéo à 1 image par seconde et teste la présence du HUD de jeu : chrono au format `MM:SS`, bandeaux de joueurs orange et bleu, minimap.
+- Le script échantillonne la vidéo à 1 image par seconde et teste la présence du HUD de jeu : les bandeaux de joueurs orange (une équipe) et bleu (l'autre) dans les zones du haut. Le chrono n'est pas lu par OCR au chantier 1.
 - Une période où le HUD est présent en continu devient un segment `detected`. Une courte coupure (chargement, pause) ne casse pas le segment, grâce à une tolérance réglable (valeur par défaut à fixer à l'implémentation sur des vidéos réelles).
 - Les segments ne sont jamais confirmés automatiquement : c'est l'utilisateur qui valide.
 
@@ -92,7 +93,7 @@ Le futur éditeur de stratégie en temps réel se branchera sur le même store (
 
 - Échec de yt-dlp (URL privée, réseau) : message clair, aucune écriture en base.
 - Fichier introuvable ou illisible : erreur affichée dans la barre du haut.
-- Analyse interrompue : l'état reste en base et la reprise est possible.
+- Analyse interrompue : rien n'est écrit en base (les segments sont enregistrés d'un seul bloc à la fin) et il suffit de relancer. Les games déjà confirmées par l'utilisateur ne sont jamais écrasées par une nouvelle analyse. La reprise partielle ne concerne que l'extraction du chantier 2.
 - Un chrono ou HUD illisible sur une image est ignoré et compté dans un indicateur de qualité par game, sans arrêter l'analyse.
 
 ## Tests
