@@ -1,6 +1,7 @@
 // Plugin Vite : branche l'API d'analyse sur le serveur de dev (aucun serveur en plus).
 //   GET  /api/videos/:id/stream   vidéo locale, avec Range
 //   POST /api/ingest              lance analyze.py, renvoie { jobId }
+//   POST /api/pick-file           ouvre le sélecteur de fichier Windows, renvoie { path } (null si annulé)
 //   GET  /api/jobs/:id/events     progression en SSE
 //   le reste                      handleApi (games, calibrations, vidéos)
 
@@ -11,6 +12,7 @@ import { pipeline } from 'node:stream';
 import type { Plugin } from 'vite';
 import { handleApi, type ApiContext, type Zones } from './api.ts';
 import { openDb } from './db.ts';
+import { pickVideoFile } from './filePicker.ts';
 import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
 import { parseRange } from './range.ts';
@@ -119,6 +121,14 @@ export function analysisPlugin(): Plugin {
             });
             req.on('close', unsubscribe);
             return;
+          }
+
+          if (url.pathname === '/api/pick-file' && method === 'POST') {
+            try {
+              return sendJson(res, 200, { path: await pickVideoFile() });
+            } catch (err) {
+              return sendJson(res, 500, { error: (err as Error).message });
+            }
           }
 
           const body = method === 'GET' || method === 'DELETE' ? undefined : await readJson(req);

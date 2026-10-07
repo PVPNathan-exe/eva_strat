@@ -29,6 +29,7 @@ export const analysisApi = {
   saveCalibration: (map: string, zones: Zones) =>
     fetch('/api/calibrations', jsonInit('PUT', { map, zones })).then(parse<{ ok: true }>),
   ingest: (source: string) => fetch('/api/ingest', jsonInit('POST', { source })).then(parse<{ jobId: string }>),
+  pickFile: () => fetch('/api/pick-file', jsonInit('POST', {})).then(parse<{ path: string | null }>),
 };
 
 /** Suit un job d'analyse en SSE. Renvoie la fonction pour fermer la connexion. */
