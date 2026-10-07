@@ -38,12 +38,14 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
 
   const changeRate = (value: number) => {
     setRate(value);
-    if (video.current) video.current.playbackRate = value;
+    const el = video.current;
+    if (el) el.playbackRate = value;
   };
 
   const toggleMute = () => {
     setMuted(!muted);
-    if (video.current) video.current.muted = !muted;
+    const el = video.current;
+    if (el) el.muted = !muted;
   };
 
   return (
