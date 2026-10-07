@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:js": "node --test --disable-warning=ExperimentalWarning \"tests/**/*.test.ts\"",
+    "test:py": "python -m pytest -q",
+    "test": "npm run test:js && npm run test:py"
   },
   "dependencies": {
     "konva": "^10.3.0",
