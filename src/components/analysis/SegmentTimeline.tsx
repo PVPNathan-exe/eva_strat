@@ -1,4 +1,4 @@
-// Barre de temps : games en couleur (orange = détectée, vert = confirmée), lobby en gris.
+// Barre de temps : games en vert, lobby en gris, début en attente en jaune.
 // Un clic déplace la lecture.
 
 import { formatTime, pctToTime, timeToPct } from '../../lib/timeline';
@@ -8,6 +8,7 @@ export function SegmentTimeline({ duration }: { duration: number }) {
   const games = useAnalysisStore((s) => s.games);
   const selectedGameId = useAnalysisStore((s) => s.selectedGameId);
   const currentTime = useAnalysisStore((s) => s.currentTime);
+  const pendingStart = useAnalysisStore((s) => s.pendingStart);
   const requestSeek = useAnalysisStore((s) => s.requestSeek);
   const selectGame = useAnalysisStore((s) => s.selectGame);
 
@@ -22,7 +23,7 @@ export function SegmentTimeline({ duration }: { duration: number }) {
         {games.map((g) => (
           <div
             key={g.id}
-            className={`timeline__game timeline__game--${g.status}${g.id === selectedGameId ? ' is-selected' : ''}`}
+            className={`timeline__game${g.id === selectedGameId ? ' is-selected' : ''}`}
             style={{
               left: `${timeToPct(g.start_s, duration)}%`,
               width: `${timeToPct(g.end_s, duration) - timeToPct(g.start_s, duration)}%`,
@@ -35,6 +36,7 @@ export function SegmentTimeline({ duration }: { duration: number }) {
             }}
           />
         ))}
+        {pendingStart !== null && <div className="timeline__pending" style={{ left: `${timeToPct(pendingStart, duration)}%` }} />}
         <div className="timeline__cursor" style={{ left: `${timeToPct(currentTime, duration)}%` }} />
       </div>
       <div className="timeline__legend">

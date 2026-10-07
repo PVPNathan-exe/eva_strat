@@ -19,6 +19,7 @@ interface AnalysisState {
   games: Game[];
   selectedGameId: number | null;
   currentTime: number;
+  pendingStart: number | null;
   seekRequest: { t: number; nonce: number } | null;
   job: JobState;
   loadVideos: () => Promise<void>;
@@ -26,6 +27,7 @@ interface AnalysisState {
   refreshGames: () => Promise<void>;
   selectGame: (id: number | null) => void;
   setCurrentTime: (t: number) => void;
+  setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
   startIngest: (source: string) => Promise<void>;
 }
@@ -38,6 +40,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   games: [],
   selectedGameId: null,
   currentTime: 0,
+  pendingStart: null,
   seekRequest: null,
   job: idleJob,
 
@@ -48,7 +51,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   selectVideo: async (id) => {
-    set({ videoId: id, games: [], selectedGameId: null, currentTime: 0 });
+    set({ videoId: id, games: [], selectedGameId: null, currentTime: 0, pendingStart: null });
     if (id !== null) await get().refreshGames();
   },
 
@@ -62,6 +65,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
   selectGame: (id) => set({ selectedGameId: id }),
   setCurrentTime: (t) => set({ currentTime: t }),
+  setPendingStart: (t) => set({ pendingStart: t }),
   requestSeek: (t) => set({ seekRequest: { t, nonce: Date.now() } }),
 
   startIngest: async (source) => {

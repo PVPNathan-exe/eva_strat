@@ -459,20 +459,23 @@
   position: absolute;
   top: 0;
   bottom: 0;
+  background: #2ec27e;
   opacity: 0.85;
 }
 
-.timeline__game--detected {
-  background: #ff9f1c;
-}
-
-.timeline__game--confirmed {
-  background: #2ec27e;
-}
 
 .timeline__game.is-selected {
   outline: 2px solid #fff;
   outline-offset: -2px;
+}
+
+.timeline__pending {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #ffd60a;
+  pointer-events: none;
 }
 
 .timeline__cursor {
@@ -511,6 +514,17 @@
   gap: 0.5rem;
 }
 
+.games__marking {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.games__pending {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #ffd60a;
+}
+
 .games__empty {
   color: #9aa3b8;
   font-size: 0.9rem;
@@ -543,22 +557,6 @@
   margin-left: auto;
   color: #9aa3b8;
   font-variant-numeric: tabular-nums;
-}
-
-.game__badge {
-  padding: 0.05rem 0.4rem;
-  font-size: 0.75rem;
-  border-radius: 999px;
-}
-
-.game__badge--detected {
-  background: #4a3410;
-  color: #ff9f1c;
-}
-
-.game__badge--confirmed {
-  background: #123d29;
-  color: #2ec27e;
 }
 
 .game__actions {
