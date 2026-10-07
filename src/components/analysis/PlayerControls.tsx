@@ -39,12 +39,16 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
   const changeRate = (value: number) => {
     setRate(value);
     const el = video.current;
+    // L'élément <video> est un objet DOM externe : l'écrire est voulu.
+    // eslint-disable-next-line react-hooks/immutability
     if (el) el.playbackRate = value;
   };
 
   const toggleMute = () => {
     setMuted(!muted);
     const el = video.current;
+    // L'élément <video> est un objet DOM externe : l'écrire est voulu.
+    // eslint-disable-next-line react-hooks/immutability
     if (el) el.muted = !muted;
   };
 
