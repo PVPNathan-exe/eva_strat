@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useAnalysisStore } from '../../store/analysisStore';
+import { GameList } from './GameList';
 import { IngestBar } from './IngestBar';
 import { SegmentTimeline } from './SegmentTimeline';
 import { VideoPlayer } from './VideoPlayer';
@@ -22,7 +23,9 @@ export function AnalysisTab() {
             <VideoPlayer videoId={videoId} />
             <SegmentTimeline duration={video.duration_s} />
           </section>
-          <aside className="analysis__side" />
+          <aside className="analysis__side">
+            <GameList videoId={videoId} duration={video.duration_s} />
+          </aside>
         </div>
       ) : (
         <div className="analysis__body">

@@ -491,3 +491,89 @@
   font-size: 0.8rem;
   color: #9aa3b8;
 }
+
+.games__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.games__head h3 {
+  margin: 0;
+}
+
+.games__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.games__empty {
+  color: #9aa3b8;
+  font-size: 0.9rem;
+}
+
+.games__error {
+  color: #ff6b6b;
+  font-size: 0.9rem;
+}
+
+.game {
+  padding: 0.5rem;
+  background: #1b1f2a;
+  border: 1px solid #2c3242;
+  border-radius: 8px;
+}
+
+.game.is-selected {
+  border-color: #6c8cff;
+}
+
+.game__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.game__time {
+  margin-left: auto;
+  color: #9aa3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.game__badge {
+  padding: 0.05rem 0.4rem;
+  font-size: 0.75rem;
+  border-radius: 999px;
+}
+
+.game__badge--detected {
+  background: #4a3410;
+  color: #ff9f1c;
+}
+
+.game__badge--confirmed {
+  background: #123d29;
+  color: #2ec27e;
+}
+
+.game__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.game__actions button,
+.game__actions select {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.game__delete {
+  color: #ff6b6b;
+}
