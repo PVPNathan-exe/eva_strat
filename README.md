@@ -49,3 +49,18 @@ src/
 - [ ] Zones d'ascenseur reliant les étages
 - [ ] Vision joueur en cône (raycasting contre les murs)
 - [ ] Placement et déplacement des joueurs entre étages
+
+## Onglet Analyse
+
+Détecte les games d'une vidéo de partie (fichier .mp4 ou URL YouTube) et permet de les corriger.
+
+**Prérequis** : Python 3.10+, ffmpeg dans le PATH, puis `python -m pip install -r analysis/requirements.txt`.
+
+**Utilisation** : `npm run dev`, onglet « Analyse », coller le chemin d'un .mp4 ou une URL YouTube, « Analyser ».
+Les données sont dans `data/eva.db` (SQLite, ignoré par git) ; les vidéos YouTube téléchargées sont dans `data/cache/`.
+Les vidéos locales ne sont jamais copiées.
+
+**Réglages** : `python analysis/analyze.py --help` (cadence `--step`, durée minimale d'une game `--min-len`, coupure tolérée `--gap`).
+Variable d'environnement `EVA_PYTHON` pour utiliser un autre exécutable Python que `python`.
+
+**Tests** : `npm test` (Node et Python).
