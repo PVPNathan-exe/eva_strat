@@ -360,27 +360,27 @@
 }
 
 .analysis__empty {
-  grid-column: 1 / -1;
   align-self: center;
-  justify-self: center;
+  margin: auto;
   color: #9aa3b8;
 }
 
 .ingest {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   flex-wrap: wrap;
-  padding: 0.5rem 1rem;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
   background: #1b1f2a;
-  border-bottom: 1px solid #2c3242;
+  border: 1px solid #2c3242;
+  border-radius: 8px;
 }
 
 .ingest__form {
   display: flex;
   flex: 1;
-  gap: 0.5rem;
-  min-width: 320px;
+  gap: 0.4rem;
+  min-width: 0;
 }
 
 .ingest__input {
@@ -424,6 +424,7 @@
 }
 
 .analysis__main {
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -441,9 +442,38 @@
 
 .player {
   width: 100%;
-  max-height: calc(100vh - 260px);
+  max-height: calc(100vh - 330px);
+  display: block;
   background: #000;
-  border-radius: 8px;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+}
+
+.player-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: #1b1f2a;
+  border: 1px solid #2c3242;
+  border-radius: 0 0 8px 8px;
+  color: #e6e8ee;
+}
+
+.controls__seek {
+  flex: 1;
+  min-width: 80px;
+}
+
+.controls__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .timeline__bar {
@@ -499,6 +529,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.25rem 0 0.5rem;
+  background: #0e1117;
 }
 
 .games__head h3 {

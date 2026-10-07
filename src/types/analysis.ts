@@ -33,7 +33,7 @@ export type Zones = Record<ZoneName, Zone>;
 
 export const ZONE_LABELS: Record<ZoneName, string> = {
   minimap: 'Minimap',
-  capture_points: 'Points de capture',
+  capture_points: 'Points de capture (sous le chrono)',
   team_a_bar: 'Équipe gauche (bandeaux)',
   team_b_bar: 'Équipe droite (bandeaux)',
   timer: 'Chrono',

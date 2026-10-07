@@ -19,25 +19,27 @@ export function AnalysisTab() {
 
   return (
     <div className="analysis">
-      <IngestBar />
-      {videoId !== null && video ? (
-        <div className="analysis__body">
-          <section className="analysis__main">
-            <VideoPlayer videoId={videoId} />
-            <SegmentTimeline duration={video.duration_s} />
-            <button className="analysis__calibrate" onClick={() => setCalibrating(true)}>
-              Calibrer les zones du HUD
-            </button>
-          </section>
+      <div className="analysis__body">
+        <section className="analysis__main">
+          <IngestBar />
+          {videoId !== null && video ? (
+            <>
+              <VideoPlayer videoId={videoId} duration={video.duration_s} />
+              <SegmentTimeline duration={video.duration_s} />
+              <button className="analysis__calibrate" onClick={() => setCalibrating(true)}>
+                Calibrer les zones du HUD
+              </button>
+            </>
+          ) : (
+            <p className="analysis__empty">Colle un chemin de vidéo ou une URL pour commencer.</p>
+          )}
+        </section>
+        {videoId !== null && video && (
           <aside className="analysis__side">
             <GameList videoId={videoId} duration={video.duration_s} />
           </aside>
-        </div>
-      ) : (
-        <div className="analysis__body">
-          <p className="analysis__empty">Colle un chemin de vidéo ou une URL pour commencer.</p>
-        </div>
-      )}
+        )}
+      </div>
       {calibrating && <CalibrationEditor onClose={() => setCalibrating(false)} />}
     </div>
   );
