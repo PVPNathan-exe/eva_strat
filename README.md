@@ -56,6 +56,8 @@ On charge un .mp4 (bouton « Parcourir… » ou chemin collé) ou une URL YouTub
 
 **Prérequis** : Python 3.10+, ffmpeg dans le PATH, puis `python -m pip install -r analysis/requirements.txt`.
 
+**Source de la vidéo** : il faut un fichier **.mp4** local. Pour une vidéo YouTube, l'extraire d'abord avec [4K Video Downloader](https://www.4kdownload.com/) (en 1080p ou plus, la minimap est illisible en 360p), puis charger le .mp4 obtenu. Le téléchargement direct par URL (yt-dlp) est souvent bloqué par YouTube.
+
 **Utilisation** : `npm run dev`, onglet « Analyse », charger la vidéo, « Analyser ».
 Les données sont dans `data/eva.db` (SQLite, ignoré par git) ; les vidéos YouTube téléchargées sont dans `data/cache/`.
 Les vidéos locales ne sont jamais copiées.
