@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import type { Plugin } from 'vite';
 import { handleApi, type ApiContext, type Zones } from './api.ts';
 import { openDb } from './db.ts';
+import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
 import { parseRange } from './range.ts';
 
@@ -80,6 +81,7 @@ export function analysisPlugin(): Plugin {
         if (!req.url?.startsWith('/api/')) return next();
         const url = new URL(req.url, 'http://localhost');
         const method = req.method ?? 'GET';
+        if (!isAllowedRequest(method, req.headers)) return sendJson(res, 403, { error: 'Requête refusée' });
 
         try {
           const stream = /^\/api\/videos\/(\d+)\/stream$/.exec(url.pathname);
@@ -94,7 +96,7 @@ export function analysisPlugin(): Plugin {
             const source = typeof body?.source === 'string' ? body.source.trim() : '';
             if (!source) return sendJson(res, 400, { error: 'Indique un chemin de fichier ou une URL' });
             try {
-              const job = jobs.start(python, [script, '--source', source, '--db', dbPath, '--cache', cacheDir]);
+              const job = jobs.start(python, [script, `--source=${source}`, '--db', dbPath, '--cache', cacheDir]);
               return sendJson(res, 202, { jobId: job.id });
             } catch (err) {
               return sendJson(res, 409, { error: (err as Error).message });
