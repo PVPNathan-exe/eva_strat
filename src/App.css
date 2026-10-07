@@ -422,3 +422,72 @@
 .ingest__ok {
   color: #5ad18b;
 }
+
+.analysis__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.analysis__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.player {
+  width: 100%;
+  max-height: calc(100vh - 260px);
+  background: #000;
+  border-radius: 8px;
+}
+
+.timeline__bar {
+  position: relative;
+  height: 28px;
+  background: #2a2f3d;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.timeline__game {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0.85;
+}
+
+.timeline__game--detected {
+  background: #ff9f1c;
+}
+
+.timeline__game--confirmed {
+  background: #2ec27e;
+}
+
+.timeline__game.is-selected {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+
+.timeline__cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #fff;
+  pointer-events: none;
+}
+
+.timeline__legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: #9aa3b8;
+}
