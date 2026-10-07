@@ -316,3 +316,109 @@
   color: #6b7385;
   pointer-events: none;
 }
+
+/* --- Onglets --- */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4rem 1rem 0;
+  background: #141822;
+  border-bottom: 1px solid #2c3242;
+}
+
+.tabs button {
+  padding: 0.4rem 1rem;
+  background: transparent;
+  color: #9aa3b8;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+}
+
+.tabs button.is-active {
+  background: #1b1f2a;
+  color: #e6e8ee;
+  border-color: #2c3242;
+}
+
+/* --- Onglet Analyse --- */
+.analysis {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.analysis__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+  padding: 0.75rem;
+}
+
+.analysis__empty {
+  grid-column: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  color: #9aa3b8;
+}
+
+.ingest {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 1rem;
+  background: #1b1f2a;
+  border-bottom: 1px solid #2c3242;
+}
+
+.ingest__form {
+  display: flex;
+  flex: 1;
+  gap: 0.5rem;
+  min-width: 320px;
+}
+
+.ingest__input {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  background: #0e1117;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+}
+
+.ingest button,
+.ingest select,
+.analysis button,
+.analysis select {
+  padding: 0.35rem 0.7rem;
+  background: #2c3242;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.analysis button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ingest__progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ingest__error {
+  color: #ff6b6b;
+}
+
+.ingest__ok {
+  color: #5ad18b;
+}

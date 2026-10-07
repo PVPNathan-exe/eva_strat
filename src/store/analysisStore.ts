@@ -1,0 +1,85 @@
+// État de l'onglet Analyse (non persisté : tout vient de la base via l'API).
+// Le futur éditeur de stratégie temps réel se branchera sur currentTime / selectedGameId.
+
+import { create } from 'zustand';
+import { analysisApi, subscribeJob } from '../lib/analysisApi';
+import type { Game, JobEvent, Video } from '../types/analysis';
+
+export interface JobState {
+  running: boolean;
+  stage: 'download' | 'detect' | null;
+  pct: number;
+  error: string | null;
+  message: string | null;
+}
+
+interface AnalysisState {
+  videos: Video[];
+  videoId: number | null;
+  games: Game[];
+  selectedGameId: number | null;
+  currentTime: number;
+  seekRequest: { t: number; nonce: number } | null;
+  job: JobState;
+  loadVideos: () => Promise<void>;
+  selectVideo: (id: number | null) => Promise<void>;
+  refreshGames: () => Promise<void>;
+  selectGame: (id: number | null) => void;
+  setCurrentTime: (t: number) => void;
+  requestSeek: (t: number) => void;
+  startIngest: (source: string) => Promise<void>;
+}
+
+const idleJob: JobState = { running: false, stage: null, pct: 0, error: null, message: null };
+
+export const useAnalysisStore = create<AnalysisState>((set, get) => ({
+  videos: [],
+  videoId: null,
+  games: [],
+  selectedGameId: null,
+  currentTime: 0,
+  seekRequest: null,
+  job: idleJob,
+
+  loadVideos: async () => {
+    const videos = await analysisApi.videos();
+    set({ videos });
+    if (get().videoId === null && videos.length > 0) await get().selectVideo(videos[0].id);
+  },
+
+  selectVideo: async (id) => {
+    set({ videoId: id, games: [], selectedGameId: null, currentTime: 0 });
+    if (id !== null) await get().refreshGames();
+  },
+
+  refreshGames: async () => {
+    const { videoId } = get();
+    if (videoId === null) return;
+    set({ games: await analysisApi.games(videoId) });
+  },
+
+  selectGame: (id) => set({ selectedGameId: id }),
+  setCurrentTime: (t) => set({ currentTime: t }),
+  requestSeek: (t) => set({ seekRequest: { t, nonce: Date.now() } }),
+
+  startIngest: async (source) => {
+    set({ job: { ...idleJob, running: true } });
+    try {
+      const { jobId } = await analysisApi.ingest(source);
+      subscribeJob(jobId, (e: JobEvent) => {
+        if (e.event === 'progress') {
+          set({ job: { running: true, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
+        } else if (e.event === 'done') {
+          set({ job: { ...idleJob, message: `Analyse terminée : ${e.games ?? 0} game(s) détectée(s)` } });
+          void get()
+            .loadVideos()
+            .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined));
+        } else {
+          set({ job: { ...idleJob, error: e.message ?? 'Erreur inconnue' } });
+        }
+      });
+    } catch (err) {
+      set({ job: { ...idleJob, error: (err as Error).message } });
+    }
+  },
+}));
