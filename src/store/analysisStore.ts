@@ -7,7 +7,7 @@ import type { Game, JobEvent, Video } from '../types/analysis';
 
 export interface JobState {
   running: boolean;
-  stage: 'download' | 'detect' | null;
+  stage: 'download' | null;
   pct: number;
   error: string | null;
   message: string | null;
@@ -72,7 +72,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         if (e.event === 'progress') {
           set({ job: { running: true, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
         } else if (e.event === 'done') {
-          set({ job: { ...idleJob, message: `Analyse terminée : ${e.games ?? 0} game(s) détectée(s)` } });
+          set({ job: { ...idleJob, message: 'Vidéo chargée' } });
           void get()
             .loadVideos()
             .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined));

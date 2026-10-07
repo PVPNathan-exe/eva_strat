@@ -35,24 +35,3 @@ def upsert_video(conn, path, source_url, duration_s, fps, width, height):
     conn.commit()
     return conn.execute("SELECT id FROM videos WHERE path = ?", (path,)).fetchone()["id"]
 
-
-def replace_detected_games(conn, video_id, segments):
-    """Remplace les games 'detected' d'une vidéo, sans toucher aux 'confirmed'.
-
-    Un segment qui chevauche une game confirmée est ignoré.
-    """
-    confirmed = conn.execute(
-        "SELECT start_s, end_s FROM games WHERE video_id = ? AND status = 'confirmed'",
-        (video_id,),
-    ).fetchall()
-    kept = [
-        (start, end)
-        for start, end in segments
-        if not any(start < c["end_s"] and end > c["start_s"] for c in confirmed)
-    ]
-    with conn:
-        conn.execute("DELETE FROM games WHERE video_id = ? AND status = 'detected'", (video_id,))
-        conn.executemany(
-            "INSERT INTO games (video_id, start_s, end_s) VALUES (?, ?, ?)",
-            [(video_id, start, end) for start, end in kept],
-        )

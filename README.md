@@ -52,15 +52,14 @@ src/
 
 ## Onglet Analyse
 
-Détecte les games d'une vidéo de partie (fichier .mp4 ou URL YouTube) et permet de les corriger.
+On charge un .mp4 (bouton « Parcourir… » ou chemin collé) ou une URL YouTube, puis on pose soi-même les marqueurs de début et de fin de chaque game.
 
 **Prérequis** : Python 3.10+, ffmpeg dans le PATH, puis `python -m pip install -r analysis/requirements.txt`.
 
-**Utilisation** : `npm run dev`, onglet « Analyse », coller le chemin d'un .mp4 ou une URL YouTube, « Analyser ».
+**Utilisation** : `npm run dev`, onglet « Analyse », charger la vidéo, « Analyser ».
 Les données sont dans `data/eva.db` (SQLite, ignoré par git) ; les vidéos YouTube téléchargées sont dans `data/cache/`.
 Les vidéos locales ne sont jamais copiées.
 
-**Réglages** : `python analysis/analyze.py --help` (cadence `--step`, durée minimale d'une game `--min-len`, coupure tolérée `--gap`).
-Variable d'environnement `EVA_PYTHON` pour utiliser un autre exécutable Python que `python`.
+**Réglages** : variable d'environnement `EVA_PYTHON` pour utiliser un autre exécutable Python que `python`.
 
 **Tests** : `npm test` (Node et Python).

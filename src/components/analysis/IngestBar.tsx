@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { analysisApi } from '../../lib/analysisApi';
 import { useAnalysisStore } from '../../store/analysisStore';
 
-const STAGE_LABEL = { download: 'Téléchargement', detect: 'Détection des games' } as const;
+const STAGE_LABEL = { download: 'Téléchargement' } as const;
 
 export function IngestBar() {
   const [source, setSource] = useState('');
@@ -65,8 +65,14 @@ export function IngestBar() {
 
       {job.running && (
         <div className="ingest__progress">
-          <span>{job.stage ? STAGE_LABEL[job.stage] : 'Démarrage'}… {Math.round(job.pct)} %</span>
-          <progress value={job.pct} max={100} />
+          {job.stage ? (
+            <>
+              <span>{STAGE_LABEL[job.stage]}… {Math.round(job.pct)} %</span>
+              <progress value={job.pct} max={100} />
+            </>
+          ) : (
+            <span>Lecture du fichier…</span>
+          )}
         </div>
       )}
       {pickError && <span className="ingest__error">{pickError}</span>}
