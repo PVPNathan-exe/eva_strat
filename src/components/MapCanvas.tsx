@@ -5,13 +5,17 @@
 //  - 'pen' : glisser pour un tracé libre.
 
 import { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Image as KonvaImage, Line, Rect, Ellipse } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Line, Rect, Ellipse, Circle, Text, Group } from 'react-konva';
 import type Konva from 'konva';
 import { useMapStore } from '../store/mapStore';
 import type { Shape } from '../types/map';
+import { findStuff, bandLabel, falloffColor } from '../lib/stuffs';
 
-const STAGE_WIDTH = 900;
-const STAGE_HEIGHT = 600;
+// Cadre de dessin : la map est affichée SANS déformation, ajustée à l'intérieur
+// de cette boîte max en conservant son ratio. Le Stage prend donc la taille de
+// l'image (mise à l'échelle), pas une taille fixe.
+const MAX_WIDTH = 900;
+const MAX_HEIGHT = 600;
 const MIN_SIZE = 3; // ignore les dessins trop petits (clic accidentel)
 
 type StageMouseEvent = Konva.KonvaEventObject<MouseEvent>;
@@ -23,24 +27,41 @@ export function MapCanvas() {
   const strokeColor = useMapStore((s) => s.strokeColor);
   const strokeWidth = useMapStore((s) => s.strokeWidth);
   const selectedId = useMapStore((s) => s.selectedShapeId);
+  const showOtherFloors = useMapStore((s) => s.showOtherFloors);
   const setSelected = useMapStore((s) => s.setSelectedShape);
   const addShape = useMapStore((s) => s.addShape);
   const updateShape = useMapStore((s) => s.updateShape);
   const removeShape = useMapStore((s) => s.removeShape);
+  const setMapScale = useMapStore((s) => s.setMapScale);
+  const placedStuffs = useMapStore((s) => s.placedStuffs);
+  const placeStuff = useMapStore((s) => s.placeStuff);
+  const movePlacedStuff = useMapStore((s) => s.movePlacedStuff);
+  const clearPlacedStuff = useMapStore((s) => s.clearPlacedStuff);
 
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [stageSize, setStageSize] = useState({ width: MAX_WIDTH, height: MAX_HEIGHT });
   const [draft, setDraft] = useState<Shape | null>(null);
   const isDrawing = useRef(false);
 
-  // Recharge l'image de fond quand la data URL change.
+  // Recharge l'image de fond quand la data URL change, et ajuste la taille du
+  // Stage au ratio de l'image (fit dans MAX_WIDTH×MAX_HEIGHT) pour éviter toute
+  // déformation : le cadre de dessin colle alors exactement à la map.
   useEffect(() => {
     if (!map?.backgroundImage) {
       setBgImage(null);
+      setStageSize({ width: MAX_WIDTH, height: MAX_HEIGHT });
       return;
     }
     const img = new window.Image();
     img.src = map.backgroundImage;
-    img.onload = () => setBgImage(img);
+    img.onload = () => {
+      setBgImage(img);
+      const scale = Math.min(MAX_WIDTH / img.naturalWidth, MAX_HEIGHT / img.naturalHeight);
+      setStageSize({
+        width: Math.round(img.naturalWidth * scale),
+        height: Math.round(img.naturalHeight * scale),
+      });
+    };
   }, [map?.backgroundImage]);
 
   // Suppr / Backspace efface la forme sélectionnée.
@@ -54,8 +75,15 @@ export function MapCanvas() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedId, map, level, removeShape]);
 
+  // Les coordonnées de l'arme posée sont en pixels du Stage courant : on la
+  // retire quand on change de carte (sinon le marqueur serait au mauvais endroit).
+  useEffect(() => {
+    clearPlacedStuff();
+  }, [map?.id, clearPlacedStuff]);
+
   const floor = map?.floors.find((f) => f.level === level);
   const isDrawingTool = tool !== 'select';
+  const ppm = map?.pixelsPerMeter ?? null;
 
   const pointerPos = (e: StageMouseEvent) => e.target.getStage()?.getPointerPosition() ?? null;
 
@@ -70,6 +98,13 @@ export function MapCanvas() {
 
     const pos = pointerPos(e);
     if (!pos) return;
+
+    // Poser l'arme sélectionnée : un simple clic, pas de glisser.
+    if (tool === 'weapon') {
+      placeStuff(pos.x, pos.y);
+      return;
+    }
+
     isDrawing.current = true;
     const base = { id: crypto.randomUUID(), stroke: strokeColor, strokeWidth };
 
@@ -77,7 +112,8 @@ export function MapCanvas() {
       setDraft({ ...base, kind: 'rect', x: pos.x, y: pos.y, width: 0, height: 0 });
     } else if (tool === 'ellipse') {
       setDraft({ ...base, kind: 'ellipse', x: pos.x, y: pos.y, width: 0, height: 0 });
-    } else if (tool === 'line') {
+    } else if (tool === 'line' || tool === 'calibrate') {
+      // La calibration utilise un trait droit (réutilise le rendu 'line').
       setDraft({ ...base, kind: 'line', points: [pos.x, pos.y, pos.x, pos.y] });
     } else if (tool === 'pen') {
       setDraft({ ...base, kind: 'pen', points: [pos.x, pos.y] });
@@ -105,6 +141,23 @@ export function MapCanvas() {
       return;
     }
     isDrawing.current = false;
+
+    // Calibration : mesure le trait, demande la distance réelle, fixe l'échelle.
+    if (tool === 'calibrate') {
+      if (draft.kind === 'line' && draft.points) {
+        const [x0, y0, x1, y1] = draft.points;
+        const px = Math.hypot(x1 - x0, y1 - y0);
+        if (px >= MIN_SIZE) {
+          const input = window.prompt('Distance réelle de cette ligne, en mètres :', '31');
+          const meters = input ? parseFloat(input.replace(',', '.')) : NaN;
+          if (Number.isFinite(meters) && meters > 0) {
+            setMapScale(map.id, px / meters);
+          }
+        }
+      }
+      setDraft(null);
+      return;
+    }
 
     let shape = draft;
 
@@ -140,20 +193,42 @@ export function MapCanvas() {
 
   const shapesToRender = draft ? [...(floor?.shapes ?? []), draft] : floor?.shapes ?? [];
 
+  // Calque de référence (pelure d'oignon) : formes des autres étages, grisées.
+  const ghostShapes = showOtherFloors
+    ? (map?.floors ?? [])
+        .filter((f) => f.level !== level)
+        .flatMap((f) => f.shapes)
+    : [];
+
   return (
     <div className={`map-canvas${isDrawingTool ? ' is-drawing' : ''}`}>
       <Stage
-        width={STAGE_WIDTH}
-        height={STAGE_HEIGHT}
+        width={stageSize.width}
+        height={stageSize.height}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
       >
         <Layer listening={false}>
           {bgImage && (
-            <KonvaImage image={bgImage} width={STAGE_WIDTH} height={STAGE_HEIGHT} />
+            <KonvaImage image={bgImage} width={stageSize.width} height={stageSize.height} />
           )}
         </Layer>
+        {ghostShapes.length > 0 && (
+          <Layer listening={false} opacity={0.35}>
+            {ghostShapes.map((shape) => (
+              <ShapeView
+                key={`ghost-${shape.id}`}
+                shape={shape}
+                selected={false}
+                selectable={false}
+                ghost
+                onSelect={() => {}}
+                onChange={() => {}}
+              />
+            ))}
+          </Layer>
+        )}
         <Layer>
           {shapesToRender.map((shape) => (
             <ShapeView
@@ -166,6 +241,20 @@ export function MapCanvas() {
             />
           ))}
         </Layer>
+        {ppm && placedStuffs.length > 0 && (
+          <Layer>
+            {placedStuffs.map((placed) => (
+              <StuffRange
+                key={placed.id}
+                placed={placed}
+                ppm={ppm}
+                stageSize={stageSize}
+                draggable={tool === 'select'}
+                onMove={movePlacedStuff}
+              />
+            ))}
+          </Layer>
+        )}
       </Stage>
 
       {!map && <p className="hint">Crée ou importe une carte pour commencer.</p>}
@@ -176,17 +265,126 @@ export function MapCanvas() {
   );
 }
 
+/** Convertit une couleur hex (#rrggbb) en rgba() avec l'alpha donné. */
+function hexToRgba(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+interface StuffRangeProps {
+  placed: { id: string; name: string; x: number; y: number };
+  ppm: number;
+  stageSize: { width: number; height: number };
+  draggable: boolean;
+  onMove: (id: string, x: number, y: number) => void;
+}
+
+/**
+ * Cercles de portée / falloff d'une arme posée, dans un Group déplaçable.
+ * Les enfants sont dessinés en coordonnées RELATIVES (centre 0,0) ; le Group
+ * est positionné en (placed.x, placed.y). Déplaçable avec l'outil Sélection.
+ */
+function StuffRange({ placed, ppm, stageSize, draggable, onMove }: StuffRangeProps) {
+  const stuff = findStuff(placed.name);
+  if (!stuff) return null;
+
+  const maxRadiusPx = Math.hypot(stageSize.width, stageSize.height);
+
+  // Construit la liste des anneaux à dessiner (rayon px décroissant pour empiler).
+  type Ring = { radius: number; color: string; label: string };
+  let rings: Ring[] = [];
+
+  if (stuff.kind === 'firearm') {
+    rings = stuff.falloff
+      .filter((b) => b.pct > 0)
+      .map((b) => {
+        const radius = b.toM === null ? maxRadiusPx : b.toM * ppm;
+        const dmg = Math.round(stuff.damage.body * (b.pct / 100) * 10) / 10;
+        return {
+          radius,
+          color: falloffColor(b.pct),
+          label: `${bandLabel(b)} · ${b.pct}% · ${dmg} dmg`,
+        };
+      });
+  } else if (stuff.kind === 'grenade') {
+    rings = [
+      {
+        radius: stuff.damageLimitRadiusM * ppm,
+        color: '#ff9500',
+        label: `limite ${stuff.damageLimitRadiusM} m`,
+      },
+      {
+        radius: stuff.maxDamageRadiusM * ppm,
+        color: '#ff3b3b',
+        label: `dégâts max ${stuff.maxDamageRadiusM} m · ${stuff.maxDamage}`,
+      },
+    ];
+  } else if (stuff.kind === 'utility' && stuff.radiusM) {
+    rings = [
+      { radius: stuff.radiusM * ppm, color: '#4da3ff', label: `détection ${stuff.radiusM} m` },
+    ];
+  }
+
+  // Tri décroissant : le plus grand dessous, le plus petit par-dessus.
+  rings.sort((a, b) => b.radius - a.radius);
+
+  return (
+    <Group
+      x={placed.x}
+      y={placed.y}
+      draggable={draggable}
+      listening={draggable}
+      onDragEnd={(e) => onMove(placed.id, e.target.x(), e.target.y())}
+    >
+      {rings.map((ring, i) => (
+        <Circle
+          key={i}
+          x={0}
+          y={0}
+          radius={ring.radius}
+          fill={hexToRgba(ring.color, 0.16)}
+          stroke={ring.color}
+          strokeWidth={1.5}
+          listening={false}
+        />
+      ))}
+      {rings.map((ring, i) => (
+        <Text
+          key={`lbl-${i}`}
+          x={4}
+          y={-Math.min(ring.radius, maxRadiusPx) - 14}
+          text={ring.label}
+          fontSize={12}
+          fill="#fff"
+          shadowColor="#000"
+          shadowBlur={3}
+          listening={false}
+        />
+      ))}
+      {/* zone de saisie pour attraper l'arme (outil Sélection) */}
+      {draggable && <Circle x={0} y={0} radius={14} fill="rgba(0,0,0,0.01)" />}
+      {/* marqueur central */}
+      <Circle x={0} y={0} radius={6} fill="#ffffff" stroke="#000000" strokeWidth={1.5} />
+      <Text x={8} y={6} text={stuff.name} fontSize={12} fill="#fff" shadowColor="#000" shadowBlur={3} />
+    </Group>
+  );
+}
+
 interface ShapeViewProps {
   shape: Shape;
   selected: boolean;
   selectable: boolean;
+  ghost?: boolean;
   onSelect: () => void;
   onChange: (shape: Shape) => void;
 }
 
-function ShapeView({ shape, selected, selectable, onSelect, onChange }: ShapeViewProps) {
+function ShapeView({ shape, selected, selectable, ghost, onSelect, onChange }: ShapeViewProps) {
   const common = {
-    stroke: shape.stroke,
+    stroke: ghost ? '#9aa0aa' : shape.stroke,
     strokeWidth: shape.strokeWidth,
     draggable: selectable,
     onClick: selectable ? onSelect : undefined,

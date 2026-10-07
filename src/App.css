@@ -71,6 +71,37 @@
   font-size: 0.8rem;
 }
 
+.floor-selector__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.floor-selector__remove {
+  width: 1.2rem !important;
+  height: 1.2rem !important;
+  padding: 0 !important;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: #9aa3b2;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.floor-selector__remove:hover {
+  color: #ff3b3b;
+}
+
+.floor-selector__ghost-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #9aa3b2;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 /* --- Draw toolbar --- */
 .draw-toolbar {
   display: flex;
@@ -133,6 +164,126 @@
 
 .draw-toolbar__value {
   min-width: 2.5rem;
+  color: #e6e8ee;
+}
+
+/* --- Weapon panel --- */
+.weapon-panel {
+  padding: 0.4rem 1rem;
+  background: #10141c;
+  border-bottom: 1px solid #2c3242;
+}
+
+.weapon-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: #9aa3b2;
+  font-size: 0.85rem;
+}
+
+.weapon-panel__row label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.weapon-panel__row select {
+  background: #2c3242;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+}
+
+.weapon-panel__row button {
+  padding: 0.35rem 0.6rem;
+  background: #2c3242;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.weapon-panel__row button.is-active {
+  background: #ff3b3b;
+  border-color: #ff3b3b;
+}
+
+.weapon-panel__row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.weapon-panel__scale {
+  color: #e6e8ee;
+}
+
+.weapon-panel__placed {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.4rem;
+}
+
+.weapon-panel__placed-label {
+  color: #9aa3b2;
+  font-size: 0.8rem;
+}
+
+.weapon-chip__remove {
+  padding: 0 !important;
+  width: 1rem;
+  height: 1rem;
+  line-height: 1;
+  background: transparent !important;
+  border: none !important;
+  color: #9aa3b2;
+  cursor: pointer;
+}
+
+.weapon-chip__remove:hover {
+  color: #ff3b3b;
+}
+
+.weapon-stats {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+
+.weapon-stats__name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #ff8a3b;
+  letter-spacing: 0.04em;
+  margin-right: 0.2rem;
+  cursor: help;
+}
+
+.weapon-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.12rem 0.45rem;
+  background: #161b25;
+  border: 1px solid #2c3242;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.weapon-chip em {
+  color: #9aa3b2;
+  font-style: normal;
+}
+
+.weapon-chip strong {
   color: #e6e8ee;
 }
 

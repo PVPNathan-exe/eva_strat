@@ -1,13 +1,10 @@
-// Barre d'outils : gérer les cartes, importer une image de fond,
-// exporter / importer la config de carte en JSON.
+// Barre d'outils : choisir une carte du dossier (src/assets/maps), gérer les
+// cartes existantes, exporter / importer la config de carte en JSON.
 
 import { useRef } from 'react';
 import { useMapStore } from '../store/mapStore';
-import {
-  exportMapToJSON,
-  importMapFromJSON,
-  readImageAsDataURL,
-} from '../lib/storage';
+import { exportMapToJSON, importMapFromJSON } from '../lib/storage';
+import { builtinMaps } from '../lib/builtinMaps';
 
 export function Toolbar() {
   const maps = useMapStore((s) => s.maps);
@@ -18,21 +15,40 @@ export function Toolbar() {
   const setBackground = useMapStore((s) => s.setBackground);
   const upsertMap = useMapStore((s) => s.upsertMap);
 
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
 
-  const handleNewMap = () => {
-    const name = window.prompt('Nom de la nouvelle carte :');
-    if (name) addMap(name);
+  // Confirme avant de quitter la carte active (évite un changement accidentel).
+  // Le travail est de toute façon sauvegardé, c'est juste un garde-fou.
+  const confirmSwitch = (targetId: string) => {
+    if (!activeMapId || targetId === activeMapId) return true;
+    return window.confirm('Changer de carte ?');
   };
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && map) {
-      const dataUrl = await readImageAsDataURL(file);
-      setBackground(map.id, dataUrl);
+  // Bascule sur une carte existante (1er menu), avec confirmation.
+  const handleSelectMap = (id: string) => {
+    if (id && confirmSwitch(id)) setActiveMap(id);
+  };
+
+  // Choisir un plan du dossier : chaque plan devient SA propre carte.
+  // Si une carte du même nom existe déjà, on bascule dessus (avec confirmation,
+  // pas de doublon) ; sinon on en crée une nouvelle avec ce plan en fond.
+  const handlePickBuiltin = (id: string) => {
+    const builtin = builtinMaps.find((b) => b.id === id);
+    if (!builtin) return;
+    const existing = maps.find((m) => m.name === builtin.name);
+    if (existing) {
+      if (confirmSwitch(existing.id)) {
+        // Auto-correction : remet le bon plan si le fond a dérivé (ancienne donnée).
+        if (existing.backgroundImage !== builtin.src) {
+          setBackground(existing.id, builtin.src);
+        }
+        setActiveMap(existing.id);
+      }
+      return;
     }
-    e.target.value = '';
+    addMap(builtin.name);
+    const newMapId = useMapStore.getState().activeMapId;
+    if (newMapId) setBackground(newMapId, builtin.src);
   };
 
   const handleJsonChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,7 +70,7 @@ export function Toolbar() {
 
       <select
         value={activeMapId ?? ''}
-        onChange={(e) => setActiveMap(e.target.value)}
+        onChange={(e) => handleSelectMap(e.target.value)}
         disabled={maps.length === 0}
       >
         {maps.length === 0 && <option value="">Aucune carte</option>}
@@ -65,11 +81,21 @@ export function Toolbar() {
         ))}
       </select>
 
-      <button onClick={handleNewMap}>Nouvelle carte</button>
-
-      <button onClick={() => imageInputRef.current?.click()} disabled={!map}>
-        Importer image
-      </button>
+      {builtinMaps.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => handlePickBuiltin(e.target.value)}
+        >
+          <option value="" disabled>
+            Choisir une carte…
+          </option>
+          {builtinMaps.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      )}
 
       <button
         onClick={() => map && exportMapToJSON(map)}
@@ -80,14 +106,7 @@ export function Toolbar() {
 
       <button onClick={() => jsonInputRef.current?.click()}>Importer JSON</button>
 
-      {/* inputs fichiers cachés */}
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={handleImageChange}
-      />
+      {/* input fichier caché (import JSON) */}
       <input
         ref={jsonInputRef}
         type="file"
