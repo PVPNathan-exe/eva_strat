@@ -1,7 +1,7 @@
 """CLI d'analyse : lit (ou télécharge) une vidéo, détecte les games par le chrono et enregistre le tout dans SQLite.
 
 Les événements sont écrits sur stdout, un objet JSON par ligne :
-  {"event": "progress", "stage": "download" | "detect", "pct": 0-100}
+  {"event": "progress", "stage": "download" | "detect" | "maps", "pct": 0-100}
   {"event": "done", "video_id": N}
   {"event": "error", "message": "..."}
 """
@@ -13,6 +13,7 @@ from pathlib import Path
 
 import db
 import ingest
+import mapname
 import segments
 import timer
 
@@ -37,6 +38,26 @@ def detect(path, meta, emit, pre_roll, post_roll):
     return segments.detect_games(samples, meta["duration_s"], pre_roll=pre_roll, post_roll=post_roll)
 
 
+def fill_maps(conn, video_id, path, meta, emit):
+    """Apprend le nom des cartes que l'utilisateur a étiquetées, puis remplit les games sans carte.
+    Une carte déjà choisie n'est jamais écrasée ; une carte non reconnue reste vide."""
+    games = [dict(r) for r in conn.execute("SELECT id, start_s, end_s, map FROM games WHERE video_id = ? ORDER BY start_s", (video_id,))]
+    templates = mapname.load_templates()
+    for g in games:
+        if g["map"] and g["map"] not in templates:
+            masks = mapname.game_masks(path, g, meta["width"], meta["height"])
+            if masks:
+                mapname.save_template(masks[len(masks) // 2], g["map"])
+                templates = mapname.load_templates()
+    todo = [g for g in games if not g["map"]]
+    for i, g in enumerate(todo):
+        emit({"event": "progress", "stage": "maps", "pct": round(100 * i / max(len(todo), 1))})
+        name = mapname.recognize_game(path, g, meta["width"], meta["height"], templates)
+        if name:
+            conn.execute("UPDATE games SET map = ? WHERE id = ? AND map IS NULL", (name, g["id"]))
+    conn.commit()
+
+
 def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S):
     conn = db.connect(db_path)
     source_url = None
@@ -59,6 +80,7 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
     if do_detect:
         emit({"event": "progress", "stage": "detect", "pct": 0})
         db.replace_detected_games(conn, video_id, detect(path, meta, emit, pre_roll, post_roll))
+    fill_maps(conn, video_id, path, meta, emit)
 
     emit({"event": "done", "video_id": video_id})
 

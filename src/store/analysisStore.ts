@@ -7,7 +7,7 @@ import type { Game, JobEvent, Video } from '../types/analysis';
 
 export interface JobState {
   running: boolean;
-  stage: 'download' | 'detect' | null;
+  stage: 'download' | 'detect' | 'maps' | null;
   pct: number;
   error: string | null;
   message: string | null;

@@ -48,7 +48,7 @@ export const ZONE_LABELS: Record<ZoneName, string> = {
 
 export interface JobEvent {
   event: 'progress' | 'done' | 'error';
-  stage?: 'download' | 'detect';
+  stage?: 'download' | 'detect' | 'maps';
   pct?: number;
   video_id?: number;
   message?: string;
