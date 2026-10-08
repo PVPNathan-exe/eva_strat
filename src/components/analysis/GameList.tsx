@@ -57,15 +57,20 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
           {formatTime(g.start_s)} → {formatTime(g.end_s)}
         </span>
       </div>
-      {g.status === 'detected' && (
+      {(g.status === 'detected' || g.doubts.length > 0) && (
         <div className="game__check">
-          <span>Détectée automatiquement{g.doubts.length ? ' — à vérifier :' : ''}</span>
+          <span>
+            {g.status === 'detected' ? 'Détectée automatiquement' : 'Écart avec la détection automatique'}
+            {g.doubts.length ? ' — à vérifier :' : ''}
+          </span>
           {g.doubts.map((d, i) => (
             <button key={i} className="game__doubt" onClick={() => requestSeek(d.start_s)}>
               {formatTime(d.start_s)} · {d.label}
             </button>
           ))}
-          <button onClick={() => void act(() => analysisApi.patchGame(g.id, { status: 'confirmed' }))}>Confirmer</button>
+          {g.status === 'detected' && (
+            <button onClick={() => void act(() => analysisApi.patchGame(g.id, { status: 'confirmed' }))}>Confirmer</button>
+          )}
         </div>
       )}
       <div className="game__actions">

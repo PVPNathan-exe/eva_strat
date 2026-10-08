@@ -34,3 +34,21 @@ def test_replace_detected_games_keeps_confirmed(tmp_path):
     rows = conn.execute("SELECT start_s, status, doubts FROM games ORDER BY start_s").fetchall()
     assert [(r["start_s"], r["status"]) for r in rows] == [(100, "confirmed"), (250, "detected")]
     assert "label" in rows[1]["doubts"]
+
+
+def test_confirmed_games_are_checked_not_modified(tmp_path):
+    conn = db.connect(tmp_path / "eva.db")
+    vid = db.upsert_video(conn, "/v.mp4", None, 600.0, 30.0, 1920, 1080)
+    conn.execute("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 200, 'confirmed')", (vid,))  # bien posée
+    conn.execute("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 300, 400, 'confirmed')", (vid,))  # début 10 s trop tôt
+    conn.execute("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 500, 560, 'confirmed')", (vid,))  # rien détecté
+    found = [
+        {"start_s": 101, "end_s": 199, "doubts": []},
+        {"start_s": 310, "end_s": 400, "doubts": []},
+    ]
+    assert db.replace_detected_games(conn, vid, found) == 0
+    rows = conn.execute("SELECT start_s, end_s, doubts FROM games ORDER BY start_s").fetchall()
+    assert [(r["start_s"], r["end_s"]) for r in rows] == [(100, 200), (300, 400), (500, 560)]
+    assert rows[0]["doubts"] is None
+    assert "trop tôt de 10 s" in rows[1]["doubts"]
+    assert "Aucun chrono" in rows[2]["doubts"]

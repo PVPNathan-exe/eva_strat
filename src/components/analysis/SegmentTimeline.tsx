@@ -37,7 +37,6 @@ export function SegmentTimeline({ duration }: { duration: number }) {
           />
         ))}
         {games
-          .filter((g) => g.id === selectedGameId || g.status === 'detected')
           .flatMap((g) => g.doubts.map((d, i) => ({ ...d, key: `${g.id}-${i}` })))
           .map((d) => (
             <div

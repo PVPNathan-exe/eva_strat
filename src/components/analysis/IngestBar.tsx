@@ -12,7 +12,7 @@ export function IngestBar() {
   const [picking, setPicking] = useState(false);
   const [singleGame, setSingleGame] = useState(false);
   const [preRoll, setPreRoll] = useState(3);
-  const [postRoll, setPostRoll] = useState(8);
+  const [postRoll, setPostRoll] = useState(1);
   const [pickError, setPickError] = useState<string | null>(null);
   const videos = useAnalysisStore((s) => s.videos);
   const videoId = useAnalysisStore((s) => s.videoId);

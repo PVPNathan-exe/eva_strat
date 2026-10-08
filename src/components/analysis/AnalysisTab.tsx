@@ -24,7 +24,7 @@ export function AnalysisTab() {
           <IngestBar />
           {videoId !== null && video ? (
             <>
-              <VideoPlayer videoId={videoId} duration={video.duration_s} />
+              <VideoPlayer key={videoId} videoId={videoId} duration={video.duration_s} />
               <SegmentTimeline duration={video.duration_s} />
               <button className="analysis__calibrate" onClick={() => setCalibrating(true)}>
                 Calibrer les zones du HUD

@@ -41,10 +41,44 @@ def upsert_video(conn, path, source_url, duration_s, fps, width, height):
 
 
 
+BOUNDS_TOLERANCE_S = 1.5  # écart toléré entre une borne posée à la main et la détection (1 lecture par seconde)
+
+
+def _check_confirmed(conn, confirmed, games):
+    """Compare chaque game confirmée à la détection : elle n'est jamais modifiée, seules ses zones à vérifier le sont."""
+    for c in confirmed:
+        doubts = []
+        match = max(
+            (g for g in games if g["start_s"] < c["end_s"] and g["end_s"] > c["start_s"]),
+            key=lambda g: min(g["end_s"], c["end_s"]) - max(g["start_s"], c["start_s"]),
+            default=None,
+        )
+        if match is None:
+            doubts.append({"start_s": c["start_s"], "end_s": c["end_s"], "label": "Aucun chrono lu par la détection dans cette game"})
+        else:
+            for name, mine, found in (("Début", c["start_s"], match["start_s"]), ("Fin", c["end_s"], match["end_s"])):
+                gap = mine - found
+                if abs(gap) > BOUNDS_TOLERANCE_S:
+                    where = "trop tard" if (gap > 0) == (name == "Début") else "trop tôt"
+                    doubts.append(
+                        {
+                            "start_s": min(mine, found),
+                            "end_s": max(mine, found),
+                            "label": f"{name} posé {where} de {abs(gap):.0f} s (la détection propose {found:.0f} s)",
+                        }
+                    )
+        conn.execute(
+            "UPDATE games SET doubts = ? WHERE id = ?",
+            (json.dumps(doubts, ensure_ascii=False) if doubts else None, c["id"]),
+        )
+
+
 def replace_detected_games(conn, video_id, games):
-    """Remplace les games détectées d'une vidéo. Les games confirmées ne sont jamais touchées ni chevauchées."""
+    """Remplace les games détectées d'une vidéo. Les games confirmées ne sont jamais touchées ni chevauchées :
+    on vérifie seulement leurs bornes contre la détection."""
     conn.execute("DELETE FROM games WHERE video_id = ? AND status = 'detected'", (video_id,))
-    confirmed = conn.execute("SELECT start_s, end_s FROM games WHERE video_id = ?", (video_id,)).fetchall()
+    confirmed = conn.execute("SELECT id, start_s, end_s FROM games WHERE video_id = ?", (video_id,)).fetchall()
+    _check_confirmed(conn, confirmed, games)
     added = 0
     for g in games:
         if any(g["start_s"] < c["end_s"] and g["end_s"] > c["start_s"] for c in confirmed):

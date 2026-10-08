@@ -9,7 +9,7 @@ Tout ce qui est estimé plutôt que mesuré devient une « zone à vérifier » 
 from statistics import median
 
 PRE_ROLL_S = 3.0  # secondes gardées avant le départ du chrono (compte à rebours)
-POST_ROLL_S = 8.0  # secondes gardées après la dernière lecture du chrono (écran de victoire)
+POST_ROLL_S = 1.0  # secondes gardées après la dernière lecture du chrono (écran de victoire)
 MIN_GAME_S = 20.0
 MIN_READINGS = 5
 JUMP_UP_S = 5  # le chrono remonte de plus que ça : nouvelle game
