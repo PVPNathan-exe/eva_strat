@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAnalysisStore } from './store/analysisStore';
 import { Toolbar } from './components/Toolbar';
 import { FloorSelector } from './components/FloorSelector';
 import { DrawToolbar } from './components/DrawToolbar';
 import { WeaponPanel } from './components/WeaponPanel';
 import { MapCanvas } from './components/MapCanvas';
 import { AnalysisTab } from './components/analysis/AnalysisTab';
+import { WeaponPrompt } from './components/analysis/WeaponPrompt';
 import { WeaponsTab } from './components/analysis/WeaponsTab';
 import './App.css';
 
@@ -12,6 +14,14 @@ type View = 'strategie' | 'analyse' | 'armes';
 
 export default function App() {
   const [view, setView] = useState<View>('strategie');
+  const weapons = useAnalysisStore((s) => s.weapons);
+  const loadWeapons = useAnalysisStore((s) => s.loadWeapons);
+  const unnamed = (weapons ?? []).filter((w) => !w.name).length;
+
+  // Compteur d'icônes sans nom sur l'onglet Armes (si le serveur d'analyse n'est pas joignable, il n'y en a simplement pas).
+  useEffect(() => {
+    void loadWeapons().catch(() => undefined);
+  }, [loadWeapons]);
 
   return (
     <div className="app">
@@ -23,7 +33,7 @@ export default function App() {
           Analyse
         </button>
         <button className={view === 'armes' ? 'is-active' : ''} onClick={() => setView('armes')}>
-          Armes
+          Armes{unnamed > 0 && <span className="tabs__badge" title="Icônes d'armes à nommer">{unnamed}</span>}
         </button>
       </nav>
       {view === 'strategie' ? (
@@ -41,6 +51,7 @@ export default function App() {
       ) : (
         <AnalysisTab />
       )}
+      <WeaponPrompt />
     </div>
   );
 }

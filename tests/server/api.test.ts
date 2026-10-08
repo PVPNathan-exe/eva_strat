@@ -169,8 +169,8 @@ test('la liste des games porte les pseudos, l’équipement et les kills (avec h
     { slot: 5, name: 'ORXPAPY', weapon1: null, weapon2: null, gadget: null },
   ]);
   assert.deepEqual(game.kills, [
-    { t: 150, killer: 1, victim: 5, weapon: 'W3', headshot: true, kind: 'kill' },
-    { t: 160, killer: null, victim: 5, weapon: null, headshot: false, kind: 'environment' },
+    { t: 150, killer: 1, victim: 5, weapon: 'W3', weaponName: null, stuff: null, headshot: true, kind: 'kill' },
+    { t: 160, killer: null, victim: 5, weapon: null, weaponName: null, stuff: null, headshot: false, kind: 'environment' },
   ]);
 });
 
@@ -215,4 +215,21 @@ test('une correction refuse deux joueurs d’équipes différentes, deux fois le
   assert.equal(post({ slot_a: 1, slot_b: 2, t0: 300, t1: 200 }), 400);
   assert.equal(post({ slot_a: 1, slot_b: 9 }), 400);
   assert.equal(handleApi(ctx, 'POST', '/api/corrections', q(), { game_id: 9999, slot_a: 1, slot_b: 2, t0: 100, t1: 200 }).status, 404);
+});
+
+test('les kills portent le nom de l’arme, et pour une grenade celle équipée par le tueur', () => {
+  const ctx = testContext();
+  ctx.weaponNames = () => ({ W2: 'GRENADE', W3: 'SPECTRE', G1: 'STICKY', G2: 'DX3' });
+  const videoId = insertVideo(ctx);
+  const id = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 700, 'confirmed')").run(videoId).lastInsertRowid);
+  ctx.db.prepare("INSERT INTO players (game_id, slot, name) VALUES (?, 1, 'SHADYJ4Y'), (?, 2, 'NCTXSPIRIT'), (?, 5, 'ORXPAPY')").run(id, id, id);
+  ctx.db.prepare("INSERT INTO loadouts (game_id, slot, weapon1, weapon2, gadget) VALUES (?, 1, 'B1', 'B2', 'G1'), (?, 2, 'B1', 'B2', 'G2')").run(id, id);
+  ctx.db.prepare("INSERT INTO kills (game_id, t, killer_slot, victim_slot, weapon) VALUES (?, 110, 1, 5, 'W2'), (?, 120, 2, 5, 'W2'), (?, 130, 1, 5, 'W3'), (?, 140, 1, 5, 'W9')").run(id, id, id, id);
+  const kills = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { kills: { weaponName: string | null; stuff: string | null }[] }[])[0].kills;
+  assert.deepEqual(kills.map((k) => [k.weaponName, k.stuff]), [
+    ['GRENADE', 'STICKY'], // tué par Shady, dont le gadget est la sticky
+    ['GRENADE', 'DX3'],
+    ['SPECTRE', 'SPECTRE'],
+    [null, null], // icône jamais nommée
+  ]);
 });

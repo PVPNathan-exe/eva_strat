@@ -17,7 +17,7 @@ import { pickVideoFile } from './filePicker.ts';
 import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
 import { parseRange } from './range.ts';
-import { iconFile, listWeapons, setWeaponName } from './weapons.ts';
+import { iconFile, listWeapons, readNames, setWeaponName } from './weapons.ts';
 
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -82,6 +82,7 @@ export function analysisPlugin(): Plugin {
       const ctx: ApiContext = {
         db: openDb(dbPath, join(root, 'analysis', 'schema.sql')),
         defaultZones: JSON.parse(readFileSync(join(root, 'analysis', 'default_zones.json'), 'utf-8')) as Zones,
+        weaponNames: () => readNames(weaponsDir),
       };
       const jobs = new JobManager();
 

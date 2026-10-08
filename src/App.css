@@ -1155,3 +1155,19 @@
   justify-content: space-between;
   gap: 0.4rem;
 }
+
+.tabs__badge {
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #ff9f1c;
+  color: #111;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.weapon-prompt {
+  width: min(900px, 94vw);
+  max-height: 86vh;
+  overflow-y: auto;
+}

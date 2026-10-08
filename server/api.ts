@@ -1,6 +1,7 @@
 // Logique REST de l'onglet Analyse (fonctions pures, testables sans serveur HTTP).
 
 import type { DatabaseSync } from 'node:sqlite';
+import { resolveStuff } from './weapons.ts';
 
 export const ZONE_NAMES = ['minimap', 'capture_points', 'capture_pct_a', 'capture_pct_b', 'team_a_bar', 'team_b_bar', 'timer'] as const;
 export type ZoneName = (typeof ZONE_NAMES)[number];
@@ -15,6 +16,8 @@ export type Zones = Record<ZoneName, Zone>;
 export interface ApiContext {
   db: DatabaseSync;
   defaultZones: Zones;
+  /** Noms donnés aux icônes d'armes (names.json) ; absent dans les tests qui n'en ont pas besoin. */
+  weaponNames?: () => Record<string, string>;
 }
 
 export interface ApiResult {
@@ -51,11 +54,13 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const rows = ctx.db
     .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples FROM games WHERE video_id = ? ORDER BY start_s')
     .all(videoId) as Row[];
-  const kills = new Map<number, { t: number; killer: number | null; victim: number; weapon: string | null; headshot: boolean; kind: string | null }[]>();
+  type KillOut = { t: number; killer: number | null; victim: number; weapon: string | null; weaponName: string | null; stuff: string | null; headshot: boolean; kind: string | null };
+  const kills = new Map<number, KillOut[]>();
+  const names = ctx.weaponNames?.() ?? {};
   for (const k of ctx.db
     .prepare('SELECT game_id, t, killer_slot, victim_slot, weapon, headshot, kind FROM kills WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY t')
     .all(videoId) as { game_id: number; t: number; killer_slot: number | null; victim_slot: number; weapon: string | null; headshot: number; kind: string | null }[]) {
-    kills.set(k.game_id, [...(kills.get(k.game_id) ?? []), { t: k.t, killer: k.killer_slot, victim: k.victim_slot, weapon: k.weapon, headshot: !!k.headshot, kind: k.kind }]);
+    kills.set(k.game_id, [...(kills.get(k.game_id) ?? []), { t: k.t, killer: k.killer_slot, victim: k.victim_slot, weapon: k.weapon, weaponName: null, stuff: null, headshot: !!k.headshot, kind: k.kind }]);
   }
   type PlayerRow = { game_id: number; slot: number; name: string; weapon1: string | null; weapon2: string | null; gadget: string | null };
   const players = new Map<number, Omit<PlayerRow, 'game_id'>[]>();
@@ -70,12 +75,19 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   }
   return reply(
     200,
-    rows.map((r) => ({
-      ...r,
-      doubts: typeof r.doubts === 'string' ? JSON.parse(r.doubts) : [],
-      players: players.get(r.id as number) ?? [],
-      kills: kills.get(r.id as number) ?? [],
-    })),
+    rows.map((r) => {
+      const gamePlayers = players.get(r.id as number) ?? [];
+      return {
+        ...r,
+        doubts: typeof r.doubts === 'string' ? JSON.parse(r.doubts) : [],
+        players: gamePlayers,
+        kills: (kills.get(r.id as number) ?? []).map((k) => {
+          const weaponName = k.weapon ? (names[k.weapon] ?? null) : null;
+          const gadget = gamePlayers.find((p) => p.slot === k.killer)?.gadget;
+          return { ...k, weaponName, stuff: resolveStuff(weaponName, gadget ? (names[gadget] ?? null) : null) };
+        }),
+      };
+    }),
   );
 }
 

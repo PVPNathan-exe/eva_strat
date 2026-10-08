@@ -58,3 +58,20 @@ test('l’aperçu agrandi est servi s’il existe, sinon l’icône de comparais
   assert.equal(iconFile(d, 'W9'), null);
   assert.equal(iconFile(d, '../W1'), null);
 });
+
+import { GRENADE_NAMES, resolveStuff } from '../../server/weapons.ts';
+import { stuffs } from '../../src/lib/stuffs.ts';
+
+test('un kill à la grenade prend la grenade équipée par le tueur', () => {
+  assert.equal(resolveStuff('GRENADE', 'STICKY'), 'STICKY');
+  assert.equal(resolveStuff('GRENADE', 'dx3'), 'DX3');
+  assert.equal(resolveStuff('GRENADE', 'SONAR'), 'GRENADE'); // son gadget n'est pas une grenade : on garde le nom du logo
+  assert.equal(resolveStuff('GRENADE', null), 'GRENADE');
+  assert.equal(resolveStuff('SPECTRE', 'STICKY'), 'SPECTRE'); // une arme à feu n'est jamais remplacée par le gadget
+  assert.equal(resolveStuff(null, 'STICKY'), null);
+});
+
+test('la liste des grenades du serveur est celle de l’onglet Stratégie', () => {
+  const fromStrategy = stuffs.filter((s) => s.kind === 'grenade').map((s) => s.name).sort();
+  assert.deepEqual([...GRENADE_NAMES].sort(), fromStrategy);
+});

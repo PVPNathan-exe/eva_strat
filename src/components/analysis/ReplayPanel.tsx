@@ -107,7 +107,6 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const [rate, setRate] = useState(1);
   const [trails, setTrails] = useState(false);
   const [capture, setCapture] = useState<CaptureSeries | null>(null);
-  const [weaponNames, setWeaponNames] = useState<Record<string, string>>({});
   const [fixing, setFixing] = useState(false); // mode correction : un clic sur une pastille la sélectionne
   const [pickA, setPickA] = useState<number | null>(null);
   const [pickB, setPickB] = useState<number | null>(null);
@@ -131,13 +130,6 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
       .then(setCapture)
       .catch(() => setCapture(null));
   }, [game.id]);
-
-  useEffect(() => {
-    analysisApi
-      .weapons()
-      .then((list) => setWeaponNames(Object.fromEntries(list.filter((w) => w.name).map((w) => [w.id, w.name]))))
-      .catch(() => undefined);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -405,7 +397,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
                 ) : (
                   <span style={{ color: TEAM_COLOR[k.killer > 4 ? 'B' : 'A'] }}>{nameOf.get(k.killer) ?? `n° ${numberOfSlot(k.killer)}`}</span>
                 )}
-                <i title={weaponNames[k.weapon ?? ''] ?? k.weapon ?? 'arme inconnue'}>{k.weapon ? (weaponNames[k.weapon] ?? k.weapon) : '·'}{k.headshot ? ' 🎯' : ''}</i>
+                <i title={k.weapon ? `${k.stuff ?? k.weaponName ?? 'arme non nommée'} (icône ${k.weapon})` : 'arme inconnue'}>{k.stuff ?? k.weaponName ?? k.weapon ?? '·'}{k.headshot ? ' 🎯' : ''}</i>
                 <span style={{ color: TEAM_COLOR[k.victim > 4 ? 'B' : 'A'] }}>{nameOf.get(k.victim) ?? `n° ${numberOfSlot(k.victim)}`}</span>
               </li>
             ))}

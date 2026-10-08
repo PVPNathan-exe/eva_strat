@@ -43,6 +43,10 @@ export interface Kill {
   killer: number | null;
   victim: number;
   weapon: string | null;
+  /** Nom donné à l'icône de l'arme (null tant qu'elle n'est pas nommée). */
+  weaponName: string | null;
+  /** Équipement réel : pour le logo « GRENADE », la grenade équipée par le tueur (DX3, STICKY). */
+  stuff: string | null;
   headshot: boolean;
   kind: 'kill' | 'suicide' | 'environment' | 'unknown' | null;
 }

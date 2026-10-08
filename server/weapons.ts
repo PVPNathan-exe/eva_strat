@@ -16,6 +16,23 @@ export interface WeaponEntry {
 const ID = /^[A-Z]\d{1,4}$/;
 const KIND: Record<string, WeaponKind> = { W: 'killfeed', B: 'arme', G: 'gadget' };
 
+/** Grenades de l'onglet Stratégie (src/lib/stuffs.ts) : le killfeed les affiche toutes avec le même logo. */
+export const GRENADE_NAMES = ['DX3', 'STICKY'];
+
+const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Équipement réellement utilisé pour un kill. Le logo « GRENADE » du killfeed est le même pour toutes les grenades : on prend alors
+ * la grenade que le tueur a équipée (son gadget sur le bandeau). Sans gadget connu, ou si ce n'est pas une grenade, on garde le nom du logo.
+ */
+export function resolveStuff(weaponName: string | null, killerGadgetName: string | null): string | null {
+  if (weaponName && squash(weaponName) === 'grenade' && killerGadgetName) {
+    const grenade = GRENADE_NAMES.find((g) => squash(g) === squash(killerGadgetName));
+    if (grenade) return grenade;
+  }
+  return weaponName;
+}
+
 export const isWeaponId = (id: string) => ID.test(id) && id[0] in KIND;
 
 export function readNames(dir: string): Record<string, string> {
