@@ -51,3 +51,10 @@ def test_video_starting_mid_game_is_flagged():
 
 def test_noise_without_clock_gives_no_game():
     assert segments.detect_games([(float(t), None) for t in range(100)], duration=100) == []
+
+
+def test_post_roll_extends_end_to_victory_screen():
+    games = segments.detect_games(clock(600, 5, 100), duration=300, post_roll=8)
+    assert games[0]["end_s"] == 100 + 1 + 8
+    games = segments.detect_games(clock(600, 5, 100), duration=102, post_roll=8)
+    assert games[0]["end_s"] == 102  # jamais au-delà de la vidéo

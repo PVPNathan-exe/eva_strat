@@ -9,6 +9,7 @@ Tout ce qui est estimé plutôt que mesuré devient une « zone à vérifier » 
 from statistics import median
 
 PRE_ROLL_S = 3.0  # secondes gardées avant le départ du chrono (compte à rebours)
+POST_ROLL_S = 8.0  # secondes gardées après la dernière lecture du chrono (écran de victoire)
 MIN_GAME_S = 20.0
 MIN_READINGS = 5
 JUMP_UP_S = 5  # le chrono remonte de plus que ça : nouvelle game
@@ -55,7 +56,7 @@ def _split(readings, gap_s):
     return groups
 
 
-def _build_game(group, doubts, duration, pre_roll):
+def _build_game(group, doubts, duration, pre_roll, post_roll):
     t_first, v_first = group[0]
     t_last, v_last = group[-1]
     doubts = list(doubts)
@@ -91,20 +92,20 @@ def _build_game(group, doubts, duration, pre_roll):
                 )
             run_start = None
 
-    end = min(duration, t_last + 1)
+    end = min(duration, t_last + 1 + post_roll)
     if t_last + 2 >= duration and v_last > EARLY_END_S:
         doubts.append({"start_s": max(start, t_last - 10), "end_s": end, "label": f"La vidéo s'arrête avant la fin de la game (chrono à {fmt(v_last)})"})
     elif v_last > EARLY_END_S:
-        doubts.append({"start_s": max(start, t_last - 5), "end_s": min(duration, t_last + 10), "label": f"Fin à vérifier : chrono arrêté à {fmt(v_last)}"})
+        doubts.append({"start_s": max(start, t_last - 5), "end_s": end, "label": f"Fin à vérifier : chrono arrêté à {fmt(v_last)}"})
     return {"start_s": start, "end_s": end, "doubts": doubts}
 
 
-def detect_games(samples, duration, pre_roll=PRE_ROLL_S, gap_s=30.0):
+def detect_games(samples, duration, pre_roll=PRE_ROLL_S, post_roll=POST_ROLL_S, gap_s=30.0):
     """samples : liste de (t, secondes restantes ou None), triée par t. Renvoie les games détectées avec leurs doutes."""
     readings = _drop_outliers([(t, v) for t, v in samples if v is not None])
     games = []
     for group, doubts in _split(readings, gap_s):
         if len(group) < MIN_READINGS or group[-1][0] - group[0][0] < MIN_GAME_S:
             continue
-        games.append(_build_game(group, doubts, duration, pre_roll))
+        games.append(_build_game(group, doubts, duration, pre_roll, post_roll))
     return games

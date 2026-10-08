@@ -23,7 +23,7 @@ def print_event(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
-def detect(path, meta, emit, pre_roll):
+def detect(path, meta, emit, pre_roll, post_roll):
     """Lit le chrono toutes les secondes (zone par défaut) et en déduit les games."""
     zone = json.loads(ZONES_PATH.read_text(encoding="utf-8"))["timer"]
     templates = timer.load_templates()
@@ -34,10 +34,10 @@ def detect(path, meta, emit, pre_roll):
         if pct != last_pct:
             last_pct = pct
             emit({"event": "progress", "stage": "detect", "pct": pct})
-    return segments.detect_games(samples, meta["duration_s"], pre_roll=pre_roll)
+    return segments.detect_games(samples, meta["duration_s"], pre_roll=pre_roll, post_roll=post_roll)
 
 
-def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S):
+def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S):
     conn = db.connect(db_path)
     source_url = None
 
@@ -58,7 +58,7 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
 
     if do_detect:
         emit({"event": "progress", "stage": "detect", "pct": 0})
-        db.replace_detected_games(conn, video_id, detect(path, meta, emit, pre_roll))
+        db.replace_detected_games(conn, video_id, detect(path, meta, emit, pre_roll, post_roll))
 
     emit({"event": "done", "video_id": video_id})
 
@@ -70,9 +70,10 @@ def main(argv=None, emit=print_event):
     parser.add_argument("--cache", default="data/cache")
     parser.add_argument("--no-detect", action="store_true", help="Ne pas chercher les games (vidéo d'une seule game)")
     parser.add_argument("--pre-roll", type=float, default=segments.PRE_ROLL_S, help="Secondes gardées avant le départ du chrono")
+    parser.add_argument("--post-roll", type=float, default=segments.POST_ROLL_S, help="Secondes gardées après la fin du chrono (écran de victoire)")
     args = parser.parse_args(argv)
     try:
-        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll)
+        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll)
     except Exception as exc:  # noqa: BLE001 - tout échec doit être signalé à l'UI
         emit({"event": "error", "message": str(exc)})
         return 1

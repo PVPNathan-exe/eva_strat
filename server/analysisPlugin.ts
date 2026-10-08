@@ -95,7 +95,7 @@ export function analysisPlugin(): Plugin {
           }
 
           if (url.pathname === '/api/ingest' && method === 'POST') {
-            const body = (await readJson(req)) as { source?: unknown; detect?: unknown; preRoll?: unknown } | undefined;
+            const body = (await readJson(req)) as { source?: unknown; detect?: unknown; preRoll?: unknown; postRoll?: unknown } | undefined;
             const source = typeof body?.source === 'string' ? body.source.trim() : '';
             if (!source) return sendJson(res, 400, { error: 'Indique un chemin de fichier ou une URL' });
             try {
@@ -103,6 +103,9 @@ export function analysisPlugin(): Plugin {
               if (body?.detect === false) extra.push('--no-detect');
               if (typeof body?.preRoll === 'number' && Number.isFinite(body.preRoll) && body.preRoll >= 0 && body.preRoll <= 60) {
                 extra.push(`--pre-roll=${body.preRoll}`);
+              }
+              if (typeof body?.postRoll === 'number' && Number.isFinite(body.postRoll) && body.postRoll >= 0 && body.postRoll <= 120) {
+                extra.push(`--post-roll=${body.postRoll}`);
               }
               const job = jobs.start(python, [script, `--source=${source}`, '--db', dbPath, '--cache', cacheDir, ...extra]);
               return sendJson(res, 202, { jobId: job.id });

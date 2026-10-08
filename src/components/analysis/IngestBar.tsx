@@ -12,6 +12,7 @@ export function IngestBar() {
   const [picking, setPicking] = useState(false);
   const [singleGame, setSingleGame] = useState(false);
   const [preRoll, setPreRoll] = useState(3);
+  const [postRoll, setPostRoll] = useState(8);
   const [pickError, setPickError] = useState<string | null>(null);
   const videos = useAnalysisStore((s) => s.videos);
   const videoId = useAnalysisStore((s) => s.videoId);
@@ -21,7 +22,7 @@ export function IngestBar() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (source.trim() && !job.running) void startIngest(source.trim(), { singleGame, preRoll });
+    if (source.trim() && !job.running) void startIngest(source.trim(), { singleGame, preRoll, postRoll });
   };
 
   const browse = async () => {
@@ -55,7 +56,7 @@ export function IngestBar() {
           1 seule game
         </label>
         <label className="ingest__single" title="Secondes gardées avant le départ du chrono (compte à rebours)">
-          Marge
+          Avant
           <input
             className="ingest__preroll"
             type="number"
@@ -64,6 +65,20 @@ export function IngestBar() {
             step={0.5}
             value={preRoll}
             onChange={(e) => setPreRoll(Math.min(60, Math.max(0, Number(e.target.value) || 0)))}
+            disabled={job.running || singleGame}
+          />
+          s
+        </label>
+        <label className="ingest__single" title="Secondes gardées après la fin du chrono (écran de victoire)">
+          Après
+          <input
+            className="ingest__preroll"
+            type="number"
+            min={0}
+            max={120}
+            step={0.5}
+            value={postRoll}
+            onChange={(e) => setPostRoll(Math.min(120, Math.max(0, Number(e.target.value) || 0)))}
             disabled={job.running || singleGame}
           />
           s
