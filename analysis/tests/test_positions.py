@@ -160,3 +160,23 @@ def test_static_unnumbered_blobs_are_dropped_but_numbered_markers_stay():
     assert all(not any(abs(d["x"] - 0.5) < 1e-9 and abs(d["y"] - 0.5) < 1e-9 and d["number"] is None for d in dets) for _, _, dets in kept)
     assert all(any(d["number"] == 6 for d in dets) for _, _, dets in kept)
     assert sum(len(dets) for _, _, dets in kept) == 100 * 2
+
+
+def _disc_crop(value, size=(440, 330)):
+    import cv2
+    import numpy as np
+
+    img = np.full((size[1], size[0], 3), 60, np.uint8)  # fond gris sombre
+    color = cv2.cvtColor(np.uint8([[[12, 200, value]]]), cv2.COLOR_HSV2BGR)[0, 0].tolist()
+    cv2.circle(img, (220, 160), 10, color, -1)
+    return img
+
+
+def test_a_dimmed_marker_is_still_found_but_without_trusting_its_digit():
+    import minimap
+
+    bright = [d for d in minimap.find_markers(_disc_crop(230), {}) if d["team"] == "A"]
+    dim = [d for d in minimap.find_markers(_disc_crop(150), {}) if d["team"] == "A"]  # luminosité sous le seuil habituel (195)
+    assert len(bright) == 1 and len(dim) == 1
+    assert dim[0]["number"] is None and abs(dim[0]["x"] - 0.5) < 0.02
+    assert minimap.find_markers(_disc_crop(100), {}) == []  # trop sombre : du décor, pas une pastille

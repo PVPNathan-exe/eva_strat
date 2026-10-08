@@ -25,8 +25,19 @@ MIN_DIGIT_MARGIN = 0.03
 
 ORANGE = ((3, 150, 195), (22, 255, 255))  # V élevé : les zones d'apparition colorées sont plus sombres
 BLUE = ((98, 100, 195), (118, 255, 255))
+# Pastille atténuée (apparition, fond sombre derrière la minimap transparente) : même teinte, luminosité plus basse. Acceptée sans numéro,
+# seulement si aucune pastille de la même équipe n'est déjà là ; le suivi la rattache à une trajectoire, et les taches fixes du décor
+# sont retirées plus tard (tracking.drop_static_noise).
+ORANGE_DIM = ((3, 150, 135), (22, 255, 255))
+BLUE_DIM = ((98, 100, 140), (118, 255, 255))
+WHITE_MIN_AREA = 90  # le joueur observé rétrécit par moments (animation) : sa pastille blanche peut tomber vers 100 pixels ; le liseré coloré reste exigé
+DIM_MIN_SEPARATION = 0.03  # distance minimale (relative à la largeur) à une pastille déjà trouvée de la même équipe
 RING_ORANGE = ((3, 110, 110), (22, 255, 255))  # liseré du joueur observé : plus sombre qu'une pastille pleine
 RING_BLUE = ((98, 90, 110), (118, 255, 255))
+# Halo pâle du joueur observé quand la scène derrière la minimap est sombre : moins saturé, donc plus de pixels exigés.
+RING_ORANGE_WEAK = ((3, 45, 60), (22, 255, 255))
+RING_BLUE_WEAK = ((98, 35, 60), (125, 255, 255))
+RING_WEAK_PIXELS = 25  # à l'échelle de référence
 
 
 def _scale(crop):
@@ -249,14 +260,17 @@ def find_markers(crop, templates=None):
     scale = _scale(crop)
     found = []
 
-    def add(blob, team, alive, spectated, silhouette=None):
+    def add(blob, team, alive, spectated, silhouette=None, no_digit=False, require_digit=False):
         m = cv2.moments(blob, binaryImage=True)
         if not m["m00"]:
             return
         glyph = _glyph(gray, blob)
         # Direction mesurée sur la silhouette complète (pour le joueur observé : blanc + liseré coloré, dont la pointe est plus nette).
         orient = _orientation(silhouette if silhouette is not None else blob) if alive else None
-        number = _read_blue_digit(glyph, templates) if team == "B" else _read_digit(glyph, templates)
+        # Pastille atténuée : le numéro y est mal lu (un 1 passe pour un 2), on ne s'y fie pas ; le suivi la relie par sa position.
+        number = None if no_digit else (_read_blue_digit(glyph, templates) if team == "B" else _read_digit(glyph, templates))
+        if require_digit and number is None:
+            return
         found.append(
             {
                 "team": team,
@@ -278,19 +292,40 @@ def find_markers(crop, templates=None):
         for blob, split in _blobs(_color_mask(hsv, bounds), scale):
             add(blob, team, alive=split or _touches_border(blob) or _solidity(blob) >= DEAD_SOLIDITY or not _is_cross(blob), spectated=False)
 
+    # Pastilles atténuées que le seuil de luminosité élevé a manquées.
+    for team, bounds in (("A", ORANGE_DIM), ("B", BLUE_DIM)):
+        for blob, split in _blobs(_color_mask(hsv, bounds), scale):
+            if split:
+                continue  # un gros amas (zone d'apparition) n'est pas une pastille
+            m = cv2.moments(blob, binaryImage=True)
+            if not m["m00"]:
+                continue
+            cx, cy = m["m10"] / m["m00"] / w, m["m01"] / m["m00"] / h
+            if any(d["team"] == team and math.hypot(d["x"] - cx, d["y"] - cy) < DIM_MIN_SEPARATION for d in found):
+                continue
+            add(blob, team, alive=not _is_cross(blob), spectated=False, no_digit=True)
+
     # Joueur observé : pastille blanche, cerclée de la couleur de son équipe.
     white = cv2.inRange(hsv, np.array((0, 0, 205)), np.array((180, 70, 255)))
     white = cv2.morphologyEx(white, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-    for blob, _ in _blobs(white, scale, min_area=180 * scale):
+    for blob, _ in _blobs(white, scale, min_area=WHITE_MIN_AREA * scale):
         ring = cv2.dilate(blob, np.ones((7, 7), np.uint8)) - blob
         votes = {
             "A": int((_color_mask(hsv, RING_ORANGE) > 0)[ring > 0].sum()),
             "B": int((_color_mask(hsv, RING_BLUE) > 0)[ring > 0].sum()),
         }
         team = max(votes, key=votes.get)
+        pale_ring = votes[team] < 10 * scale
+        if pale_ring:
+            weak = {
+                "A": int((_color_mask(hsv, RING_ORANGE_WEAK) > 0)[ring > 0].sum()),
+                "B": int((_color_mask(hsv, RING_BLUE_WEAK) > 0)[ring > 0].sum()),
+            }
+            team = max(weak, key=weak.get)
+            votes[team] = weak[team] if weak[team] >= RING_WEAK_PIXELS * scale and weak[team] > 2 * weak["A" if team == "B" else "B"] else 0
         if votes[team] >= 10 * scale:
             # Le liseré coloré qui entoure la pastille blanche en dessine la pointe : on l'ajoute pour mesurer la direction.
             rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)
             silhouette = cv2.morphologyEx(np.maximum(blob, rim.astype(np.uint8)), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-            add(blob, team, alive=True, spectated=True, silhouette=silhouette)
+            add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring)  # halo pâle : le numéro doit être lisible
     return found

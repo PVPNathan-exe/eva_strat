@@ -16,6 +16,9 @@ NAMES_PATH = ICON_DIR / "names.json"
 SIZE = (32, 12)
 MIN_PIXELS = 25
 MATCH_SCORE = 0.6  # avec le flou ci-dessous : une même arme dépasse 0,62, deux armes différentes restent sous 0,45
+# Armes des bandeaux : la même arme revient à 0,96 et plus, deux armes différentes mais proches (NEEDLE et SPECTRE) à 0,77 au plus.
+# Un seuil plus haut en fait deux icônes distinctes, à nommer une fois ; un seuil bas les confondait.
+MATCH_SCORE_BY_PREFIX = {"B": 0.85}
 _cache = {}
 
 
@@ -78,7 +81,14 @@ def _is_binary_preview(folder, name):
     return img is None or bool(np.isin(img, (0, 255)).all())
 
 
-def identify(icon, folder=ICON_DIR, create=True, prefix="W", tone=None):
+def similarity(icon, icon_id, folder=ICON_DIR):
+    """Ressemblance (corrélation, -1 à 1) d'une icône avec un modèle connu, ou -1 s'il n'existe pas."""
+    v = _vec(icon)
+    template = _templates(folder).get(icon_id)
+    return -1.0 if v is None or template is None else _score(v, template)
+
+
+def identify(icon, folder=ICON_DIR, create=True, prefix="W", tone=None, exclude=()):
     """Identifiant (« W3 ») d'une icône binaire, ou None si elle est vide. Crée un modèle si elle est inconnue.
     tone : relief de l'icône (même taille), pour un aperçu plus net ; il remplace aussi un ancien aperçu binaire.
 
@@ -89,8 +99,8 @@ def identify(icon, folder=ICON_DIR, create=True, prefix="W", tone=None):
     if v is None:
         return None
     templates = _templates(folder)
-    best = max(((_score(v, t), name) for name, t in templates.items() if name.startswith(prefix)), default=(-1.0, None))
-    if best[0] >= MATCH_SCORE:
+    best = max(((_score(v, t), name) for name, t in templates.items() if name.startswith(prefix) and name not in exclude), default=(-1.0, None))
+    if best[0] >= MATCH_SCORE_BY_PREFIX.get(prefix, MATCH_SCORE):
         if tone is not None and create and _is_binary_preview(folder, best[1]):
             _write_preview(folder, best[1], icon, tone)
         return best[1]

@@ -65,9 +65,23 @@ def merge_masks(masks):
     return keep * 255 if keep.sum() else None
 
 
-def identify(shape, kind, folder=weapons.ICON_DIR, create=True, tone=None):
+def identify(shape, kind, folder=weapons.ICON_DIR, create=True, tone=None, exclude=()):
     """Identifiant d'une icône d'équipement (« B3 » pour une arme, « G1 » pour un gadget)."""
-    return weapons.identify(shape, folder=folder, create=create, prefix=PREFIX[kind], tone=tone)
+    return weapons.identify(shape, folder=folder, create=create, prefix=PREFIX[kind], tone=tone, exclude=exclude)
+
+
+def resolve_loadout(reads, folder=weapons.ICON_DIR):
+    """Équipement d'un joueur {« arme1 », « arme2 », « gadget »} -> identifiant, à partir de [(forme, relief)] par case.
+
+    Un joueur n'a jamais deux fois la même arme : si les deux cases sont reconnues comme la même icône, celle qui ressemble le moins
+    au modèle est relue sans pouvoir prendre ce modèle (autre icône connue, sinon nouvelle icône)."""
+    out = {kind: identify(shape, kind, folder=folder, tone=tone) for kind, (shape, tone) in reads.items()}
+    a, b = out.get("arme1"), out.get("arme2")
+    if a is not None and a == b:
+        weaker = min(("arme1", "arme2"), key=lambda k: weapons.similarity(reads[k][0], a, folder))
+        shape, tone = reads[weaker]
+        out[weaker] = identify(shape, weaker, folder=folder, tone=tone, exclude=(a,))
+    return out
 
 
 def read_loadouts(video, game, team_zones, width, height, frames=8):
@@ -87,13 +101,12 @@ def read_loadouts(video, game, team_zones, width, height, frames=8):
             for i, row in enumerate(icons_of_banners(crop, tones=True)):
                 for kind, (mask, tone) in row.items():
                     acc.setdefault((slots[i], kind), []).append((mask, tone))
-    out = {}
+    merged = {}
     for (slot, kind), reads in acc.items():
         shape = merge_masks([m for m, _ in reads])
         if shape is not None:
-            tone = np.mean([t.astype(np.float32) for _, t in reads], axis=0).astype(np.uint8)
-            out.setdefault(slot, {})[kind] = identify(shape, kind, tone=tone)
-    return out
+            merged.setdefault(slot, {})[kind] = (shape, np.mean([t.astype(np.float32) for _, t in reads], axis=0).astype(np.uint8))
+    return {slot: resolve_loadout(reads) for slot, reads in merged.items()}
 
 
 HELD_MIN_MARGIN = 30  # l'arme tenue est en noir sur le bandeau (relief vers 120-140), l'autre en pâle (vers 40) : en dessous, on ne tranche pas
