@@ -449,6 +449,10 @@
   color: #5ad18b;
 }
 
+.analysis__main > * {
+  flex-shrink: 0;
+}
+
 .analysis__main {
   overflow-y: auto;
   display: flex;
@@ -468,8 +472,9 @@
 
 .player {
   width: 100%;
-  flex: 1;
-  min-height: 240px;
+  /* Hauteur liée à la fenêtre (et non à la place restante) : la colonne défile au lieu d'écraser la vidéo sous la timeline. */
+  height: clamp(220px, 54vh, 680px);
+  flex: none;
   object-fit: contain;
   display: block;
   background: #000;
@@ -480,8 +485,7 @@
 .player-box {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  flex: none;
 }
 
 .controls {
