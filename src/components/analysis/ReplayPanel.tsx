@@ -396,7 +396,13 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
                 ) : k.killer === k.victim ? (
                   <span className="kill__env" title="Même pseudo des deux côtés">suicide</span>
                 ) : (
-                  <span style={{ color: TEAM_COLOR[k.killer > 4 ? 'B' : 'A'] }}>{nameOf.get(k.killer) ?? `n° ${numberOfSlot(k.killer)}`}</span>
+                  <span
+                    style={{ color: TEAM_COLOR[k.killer > 4 ? 'B' : 'A'], fontStyle: k.kind === 'inferred' ? 'italic' : undefined }}
+                    title={k.kind === 'inferred' ? "Tueur déduit par élimination : adversaire en vie, arme tenue et distance cohérentes (le pseudo n'a pas pu être lu)" : undefined}
+                  >
+                    {nameOf.get(k.killer) ?? `n° ${numberOfSlot(k.killer)}`}
+                    {k.kind === 'inferred' && ' ?'}
+                  </span>
                 )}
                 <i title={k.weapon ? `${k.stuff ?? k.weaponName ?? 'arme non nommée'} (icône ${k.weapon})` : 'arme inconnue'}>{k.stuff ?? k.weaponName ?? k.weapon ?? '·'}
                   {k.headshot && <Crosshair className="ic ic--hs" aria-label="Headshot" />}

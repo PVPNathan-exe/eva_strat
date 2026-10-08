@@ -321,6 +321,13 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
             if shape is not None:
                 shape = clean_icon(shape)
                 grenade = icon_is_reliable(shape) and weapons.is_grenade_shape(shape)
+        # Tueur illisible : l'icône de l'arme, si elle ressemble à un modèle connu, aide à le retrouver par déduction (analyze.infer_killers).
+        hint = None
+        if killer is None and not ev["alone"] and not grenade:
+            for mask, _ in icons[len(icons) // 2 :] + icons[: len(icons) // 2]:
+                shape, _ = split_icon(mask)
+                if hint is None and shape is not None:
+                    hint = weapons.identify(shape, create=False)
         kind = "environment" if ev["alone"] else ("unknown" if killer is None else ("suicide" if killer == ev["victim"] else "kill"))
-        out.append({"t": ev["t"], "kind": kind, "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": None, "grenade": grenade, "headshot": sum(heads) * 2 > len(heads) if heads else False})
+        out.append({"t": ev["t"], "kind": kind, "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": None, "grenade": grenade, "hint": hint, "headshot": sum(heads) * 2 > len(heads) if heads else False})
     return out

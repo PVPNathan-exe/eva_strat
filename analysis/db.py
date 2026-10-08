@@ -259,10 +259,30 @@ def games_with_icon_kills(conn, video_id):
         dict(r)
         for r in conn.execute(
             "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
-            "AND id IN (SELECT game_id FROM kills WHERE weapon LIKE 'W%') ORDER BY start_s",
+            "AND id IN (SELECT game_id FROM kills WHERE weapon LIKE 'W%' AND killer_slot IS NOT NULL) ORDER BY start_s",
             (video_id,),
         )
     ]
+
+
+def games_with_unknown_killers(conn, video_id):
+    """Games qui ont des kills dont le tueur n'a pas pu être lu et qui ont leurs positions (nécessaires pour le déduire)."""
+    return [
+        dict(r)
+        for r in conn.execute(
+            "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
+            "AND id IN (SELECT game_id FROM kills WHERE kind = 'unknown') "
+            "AND id IN (SELECT game_id FROM samples_meta) ORDER BY start_s",
+            (video_id,),
+        )
+    ]
+
+
+def set_kill_killer(conn, game_id, t, victim_slot, killer_slot, weapon, kind):
+    conn.execute(
+        "UPDATE kills SET killer_slot = ?, weapon = ?, kind = ? WHERE game_id = ? AND t = ? AND victim_slot = ?",
+        (killer_slot, weapon, kind, game_id, t, victim_slot),
+    )
 
 
 def set_kill_weapon(conn, game_id, t, victim_slot, weapon):

@@ -66,7 +66,7 @@ export interface Kill {
   /** Équipement réel : pour le logo « GRENADE », la grenade équipée par le tueur (DX3, STICKY). */
   stuff: string | null;
   headshot: boolean;
-  kind: 'kill' | 'suicide' | 'environment' | 'unknown' | null;
+  kind: 'kill' | 'suicide' | 'environment' | 'unknown' | 'inferred' | null;
 }
 
 export interface Game {

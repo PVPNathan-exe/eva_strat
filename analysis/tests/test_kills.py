@@ -307,3 +307,33 @@ def test_grenade_logo_is_recognised_by_its_compact_shape():
     long = np.zeros((20, 60), np.uint8)
     long[7:13, 3:57] = 255
     assert weapons.is_grenade_shape(compact) and not weapons.is_grenade_shape(long)
+
+
+def _cand(slot, dist, icon):
+    return {"slot": slot, "dist": dist, "icon": icon}
+
+
+_NAMES = {"B1": "SPECTRE", "B2": "ATLAS", "B3": "WESTFIRE"}
+
+
+def test_a_single_living_enemy_is_the_killer_if_his_weapon_fits():
+    import analyze
+
+    best = analyze.infer_killer([_cand(1, 0.3, "B1")], "SPECTRE", _NAMES.get)
+    assert best["slot"] == 1
+    assert analyze.infer_killer([_cand(1, 0.3, "B2")], "SPECTRE", _NAMES.get) is None  # il tenait un ATLAS : incohérent, on ne devine pas
+
+
+def test_the_weapon_of_the_killfeed_eliminates_the_other_enemies():
+    import analyze
+
+    cands = [_cand(1, 0.2, "B2"), _cand(2, 0.5, "B1"), _cand(3, 0.9, "B3")]
+    assert analyze.infer_killer(cands, "SPECTRE", _NAMES.get)["slot"] == 2  # seul le 2 tient un SPECTRE, même s'il n'est pas le plus proche
+
+
+def test_without_a_weapon_hint_only_a_clearly_nearest_enemy_is_accepted():
+    import analyze
+
+    assert analyze.infer_killer([_cand(1, 0.1, "B1"), _cand(2, 0.5, "B1")], None, _NAMES.get)["slot"] == 1
+    assert analyze.infer_killer([_cand(1, 0.3, "B1"), _cand(2, 0.4, "B1")], None, _NAMES.get) is None  # trop proches l'un de l'autre
+    assert analyze.infer_killer([], None, _NAMES.get) is None  # personne en vie

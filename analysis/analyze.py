@@ -8,6 +8,7 @@ Les événements sont écrits sur stdout, un objet JSON par ligne :
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -161,6 +162,75 @@ def kill_weapon(path, meta, zones, loads, killer, t, grenade):
     return row.get(held) if held else None
 
 
+INFER_NEAR_RATIO = 0.6  # le tueur déduit doit être nettement plus proche de la victime que les autres candidats compatibles
+INFER_LOOKBACK_S = 1.0
+
+
+def _enemy_slots(victim):
+    return range(5, 9) if victim <= 4 else range(1, 5)
+
+
+def infer_killer(candidates, hint_name, weapon_name_of):
+    """Tueur le plus probable parmi les adversaires en vie, ou None si ce n'est pas assez cohérent.
+
+    candidates : [{"slot", "dist" (ou None), "icon" (arme tenue à ce moment, ou None)}].
+    Règles : un adversaire en vie ; si l'arme du killfeed est connue, il doit tenir la même (sinon on écarte les autres) ;
+    s'il en reste plusieurs, le plus proche de la victime l'emporte seulement s'il est nettement plus proche (rapport INFER_NEAR_RATIO)."""
+    pool = list(candidates)
+    if hint_name:
+        same = [c for c in pool if c["icon"] and weapon_name_of(c["icon"]) == hint_name]
+        if same:
+            pool = same
+        elif all(c["icon"] for c in pool):
+            return None  # personne ne tenait cette arme : incohérent, on ne devine pas
+    if not pool:
+        return None
+    if len(pool) == 1:
+        return pool[0]
+    known = sorted((c for c in pool if c["dist"] is not None), key=lambda c: c["dist"])
+    if len(known) >= 2 and known[0]["dist"] <= INFER_NEAR_RATIO * known[1]["dist"]:
+        return known[0]
+    return None
+
+
+def infer_killers(conn, video_id, path, meta, emit, control=None):
+    """Kills dont le tueur n'a pas pu être lu : on cherche par élimination parmi les adversaires en vie (positions de la minimap),
+    avec l'arme tenue sur leur bandeau à ce moment et leur distance à la victime. Le programme n'accepte que ce qui est cohérent ;
+    le reste garde « tueur ? ». Un tueur déduit est marqué kind = « inferred »."""
+    disp = weapons.display_names()
+    name_of = lambda i: str(disp.get(i, "")).strip().upper() or None
+    todo = db.games_with_unknown_killers(conn, video_id)
+    for i, g in enumerate(todo):
+        wait_if_paused(control)
+        emit({"event": "progress", "stage": "kills", "pct": round(100 * i / len(todo), 1)})
+        zones = _bar_zones(conn, g)
+        for k in [k for k in db.kills_of(conn, g["id"]) if k["kind"] == "unknown"]:
+            t, victim = k["t"], k["victim_slot"]
+            rows = conn.execute(
+                "SELECT slot, x, y, alive, t FROM samples WHERE game_id = ? AND t BETWEEN ? AND ? ORDER BY t",
+                (g["id"], t - INFER_LOOKBACK_S, t + 0.2),
+            ).fetchall()
+            last = {}
+            for r in rows:
+                last[r["slot"]] = r
+            vpos = last.get(victim)
+            cands = []
+            for s in _enemy_slots(victim):
+                r = last.get(s)
+                if r is None or not r["alive"]:
+                    continue  # absent des positions ou mort : ce n'est pas lui
+                dist = None if vpos is None else math.hypot(r["x"] - vpos["x"], r["y"] - vpos["y"])
+                cands.append({"slot": s, "dist": dist, "icon": loadout.held_icon(path, zones, meta["width"], meta["height"], t, s)})
+            hint = name_of(k["weapon"]) if (k["weapon"] or "").startswith("W") else None
+            best = infer_killer(cands, hint, name_of)
+            if best is not None:
+                db.set_kill_killer(conn, g["id"], t, victim, best["slot"], best["icon"], "inferred")
+            else:
+                db.set_kill_weapon(conn, g["id"], t, victim, None)  # la piste ne sert plus
+        conn.commit()
+    return len(todo)
+
+
 def _bar_zones(conn, g):
     return {key: db.zone_for(conn, g["map"], key) for key in ("team_a_bar", "team_b_bar")}
 
@@ -200,6 +270,8 @@ def extract_kills(conn, video_id, path, meta, emit, control=None):
             return done, str(exc)
         zones, loads = _bar_zones(conn, g), db.loadouts_of(conn, g["id"])
         for e in events:
+            if e["kind"] == "unknown":
+                e["weapon"] = e.get("hint")  # piste pour retrouver le tueur après la lecture des positions (infer_killers), sinon effacée
             if e.get("killer") is not None and (e["kind"] == "kill" or (e["kind"] == "suicide" and e.get("grenade"))):
                 e["weapon"] = kill_weapon(path, meta, zones, loads, e["killer"], e["t"], e.get("grenade"))
         db.replace_kills(conn, g["id"], events)
@@ -269,6 +341,7 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
             message = f"{message} · killfeed non lu ({kills_error})" if message else f"Killfeed non lu ({kills_error})"
         step_s = pos_every / meta["fps"] if meta.get("fps") else positions.STEP_S
         n = extract_positions(conn, video_id, path, meta, emit, control, step_s=step_s)
+        infer_killers(conn, video_id, path, meta, emit, control)
         text = f"positions lues sur {n} game(s)" if n else "positions déjà à jour"
         message = f"{message} · {text}" if message else text.capitalize()
 
