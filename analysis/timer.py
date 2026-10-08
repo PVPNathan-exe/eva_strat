@@ -97,13 +97,16 @@ def timer_box(zone, width, height):
     return round(zone["x"] * width), round(zone["y"] * height), w, h
 
 
-def iter_crops(video, zone, width, height, step_s=1.0):
-    """Génère (t, recadrage BGR du chrono) toutes les step_s secondes, décodé par ffmpeg (seule la zone sort du pipe)."""
+def iter_crops(video, zone, width, height, step_s=1.0, t0=0.0, t1=None):
+    """Génère (t, recadrage BGR du chrono) toutes les step_s secondes entre t0 et t1, décodé par ffmpeg (seule la zone sort du pipe)."""
     import subprocess
 
     x, y, w, h = timer_box(zone, width, height)
     cmd = [
-        "ffmpeg", "-v", "error", "-an", "-i", str(video),
+        "ffmpeg", "-v", "error", "-an",
+        *(["-ss", f"{t0:.2f}"] if t0 > 0 else []),
+        *(["-t", f"{t1 - t0:.2f}"] if t1 is not None else []),
+        "-i", str(video),
         "-vf", f"fps=1/{step_s},crop={w}:{h}:{x}:{y}",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
@@ -115,7 +118,7 @@ def iter_crops(video, zone, width, height, step_s=1.0):
             buf = proc.stdout.read(size)
             if len(buf) < size:
                 break
-            yield i * step_s, np.frombuffer(buf, np.uint8).reshape(h, w, 3)
+            yield t0 + i * step_s, np.frombuffer(buf, np.uint8).reshape(h, w, 3)
             i += 1
     finally:
         proc.stdout.close()

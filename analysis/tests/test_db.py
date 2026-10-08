@@ -64,3 +64,15 @@ def test_all_verified_requires_every_game_checked_confirmed_with_map(tmp_path):
     assert db.all_verified(conn, vid)
     conn.execute("UPDATE games SET map = NULL")
     assert not db.all_verified(conn, vid)
+
+
+def test_games_in_order_are_left_alone_when_keep_ok(tmp_path):
+    conn = db.connect(tmp_path / "eva.db")
+    vid = db.upsert_video(conn, "/v.mp4", None, 1000.0, 30.0, 1920, 1080)
+    conn.execute("INSERT INTO games (video_id, start_s, end_s, status, map, checked) VALUES (?, 100, 200, 'confirmed', 'Silva', 1)", (vid,))
+    conn.execute("INSERT INTO games (video_id, start_s, end_s, status, map, checked) VALUES (?, 300, 400, 'confirmed', 'Ceres', 0)", (vid,))
+    found = [{"start_s": 310, "end_s": 400, "doubts": []}]  # la détection n'a lu que la zone de la 2e
+    db.replace_detected_games(conn, vid, found, keep_ok=True)
+    rows = conn.execute("SELECT start_s, doubts, checked FROM games ORDER BY start_s").fetchall()
+    assert rows[0]["doubts"] is None and rows[0]["checked"] == 1  # pas de faux « aucun chrono lu »
+    assert "Début posé trop tôt" in rows[1]["doubts"] and rows[1]["checked"] == 1

@@ -24,18 +24,39 @@ def print_event(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
-def detect(path, meta, emit, pre_roll, post_roll):
-    """Lit le chrono toutes les secondes (zone par défaut) et en déduit les games."""
+MIN_RANGE_S = 25.0  # un trou plus court entre deux games en ordre ne peut pas contenir une game
+
+
+def gaps_around(ok, duration):
+    """Parties de la vidéo qui ne sont pas couvertes par des games en ordre (seules à relire)."""
+    gaps, cursor = [], 0.0
+    for g in ok:
+        if g["start_s"] - cursor >= MIN_RANGE_S:
+            gaps.append((cursor, g["start_s"]))
+        cursor = max(cursor, g["end_s"])
+    if duration - cursor >= MIN_RANGE_S:
+        gaps.append((cursor, duration))
+    return gaps
+
+
+def detect(path, meta, emit, pre_roll, post_roll, ranges=None):
+    """Lit le chrono toutes les secondes (zone par défaut) et en déduit les games, sur toute la vidéo ou sur des plages."""
     zone = json.loads(ZONES_PATH.read_text(encoding="utf-8"))["timer"]
     templates = timer.load_templates()
-    samples, last_pct = [], -1
-    for t, crop in timer.iter_crops(path, zone, meta["width"], meta["height"]):
-        samples.append((t, timer.read_timer(crop, templates)))
-        pct = int(100 * t / max(meta["duration_s"], 1))
-        if pct != last_pct:
-            last_pct = pct
-            emit({"event": "progress", "stage": "detect", "pct": pct})
-    return segments.detect_games(samples, meta["duration_s"], pre_roll=pre_roll, post_roll=post_roll)
+    ranges = ranges or [(0.0, meta["duration_s"])]
+    total = max(sum(b - a for a, b in ranges), 1)
+    done, last_pct, games = 0.0, -1, []
+    for a, b in ranges:
+        samples = []
+        for t, crop in timer.iter_crops(path, zone, meta["width"], meta["height"], t0=a, t1=b):
+            samples.append((t, timer.read_timer(crop, templates)))
+            pct = int(100 * (done + t - a) / total)
+            if pct != last_pct:
+                last_pct = pct
+                emit({"event": "progress", "stage": "detect", "pct": pct})
+        done += b - a
+        games += segments.detect_games(samples, b, pre_roll=pre_roll, post_roll=post_roll)
+    return games
 
 
 def fill_maps(conn, video_id, path, meta, emit):
@@ -83,7 +104,10 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
 
     if do_detect:
         emit({"event": "progress", "stage": "detect", "pct": 0})
-        db.replace_detected_games(conn, video_id, detect(path, meta, emit, pre_roll, post_roll))
+        ok = db.ok_games(conn, video_id) if skip_if_ok else []
+        ranges = gaps_around(ok, meta["duration_s"]) if ok else None
+        found = detect(path, meta, emit, pre_roll, post_roll, ranges) if ranges != [] else []
+        db.replace_detected_games(conn, video_id, found, keep_ok=skip_if_ok)
     fill_maps(conn, video_id, path, meta, emit)
 
     emit({"event": "done", "video_id": video_id})

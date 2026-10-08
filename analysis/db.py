@@ -46,6 +46,16 @@ def upsert_video(conn, path, source_url, duration_s, fps, width, height):
 BOUNDS_TOLERANCE_S = 1.5  # écart toléré entre une borne posée à la main et la détection (1 lecture par seconde)
 
 
+OK_SQL = "status = 'confirmed' AND checked = 1 AND doubts IS NULL AND map IS NOT NULL"
+
+
+def ok_games(conn, video_id):
+    """Games déjà en ordre (confirmées, vérifiées, sans doute, avec carte) : inutile de les relire."""
+    return conn.execute(
+        f"SELECT id, start_s, end_s FROM games WHERE video_id = ? AND {OK_SQL} ORDER BY start_s", (video_id,)
+    ).fetchall()
+
+
 def _check_confirmed(conn, confirmed, games):
     """Compare chaque game confirmée à la détection : elle n'est jamais modifiée, seules ses zones à vérifier le sont."""
     for c in confirmed:
@@ -75,12 +85,13 @@ def _check_confirmed(conn, confirmed, games):
         )
 
 
-def replace_detected_games(conn, video_id, games):
+def replace_detected_games(conn, video_id, games, keep_ok=False):
     """Remplace les games détectées d'une vidéo. Les games confirmées ne sont jamais touchées ni chevauchées :
     on vérifie seulement leurs bornes contre la détection."""
     conn.execute("DELETE FROM games WHERE video_id = ? AND status = 'detected'", (video_id,))
     confirmed = conn.execute("SELECT id, start_s, end_s FROM games WHERE video_id = ?", (video_id,)).fetchall()
-    _check_confirmed(conn, confirmed, games)
+    skipped = {r["id"] for r in ok_games(conn, video_id)} if keep_ok else set()
+    _check_confirmed(conn, [c for c in confirmed if c["id"] not in skipped], games)
     added = 0
     for g in games:
         if any(g["start_s"] < c["end_s"] and g["end_s"] > c["start_s"] for c in confirmed):

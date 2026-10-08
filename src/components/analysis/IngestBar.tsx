@@ -20,9 +20,12 @@ export function IngestBar() {
   const selectVideo = useAnalysisStore((s) => s.selectVideo);
   const startIngest = useAnalysisStore((s) => s.startIngest);
 
+  // Champ vide : on réanalyse la vidéo choisie dans le sélecteur.
+  const target = source.trim() || currentVideo?.path || '';
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (source.trim() && !job.running) void startIngest(source.trim(), { preRoll, postRoll });
+    if (target && !job.running) void startIngest(target, { preRoll, postRoll });
   };
 
   const browse = async () => {
@@ -51,7 +54,11 @@ export function IngestBar() {
           placeholder="Colle un chemin .mp4 ou une URL YouTube, ou clique sur Parcourir"
           disabled={job.running || picking}
         />
-        <button type="submit" disabled={job.running || !source.trim()}>
+        <button
+          type="submit"
+          disabled={job.running || !target}
+          title={source.trim() ? 'Charge et analyse ce fichier ou cette URL' : "Relit toute la vidéo choisie (champ vide) : détection des games et des cartes"}
+        >
           Analyser
         </button>
       </form>

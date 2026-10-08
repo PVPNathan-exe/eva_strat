@@ -40,3 +40,10 @@ def test_run_reports_missing_file(tmp_path):
     assert code == 1
     assert events[-1]["event"] == "error"
     assert "introuvable" in events[-1]["message"].lower()
+
+
+def test_gaps_around_games_already_ok():
+    ok = [{"start_s": 100.0, "end_s": 300.0}, {"start_s": 310.0, "end_s": 500.0}, {"start_s": 700.0, "end_s": 900.0}]
+    # trou de 10 s ignoré ; avant, entre et après les games en ordre sinon
+    assert analyze.gaps_around(ok, 1000.0) == [(0.0, 100.0), (500.0, 700.0), (900.0, 1000.0)]
+    assert analyze.gaps_around([], 1000.0) == [(0.0, 1000.0)]
