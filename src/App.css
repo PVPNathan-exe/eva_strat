@@ -1103,3 +1103,55 @@
   color: #9aa3b8;
   font-style: normal;
 }
+
+.replay__dot.is-pickable {
+  cursor: pointer;
+}
+
+.replay__dot.is-picked {
+  box-shadow: 0 0 0 3px #fff, 0 0 10px 3px var(--c);
+  z-index: 2;
+}
+
+.replay__fix {
+  font-size: 0.8rem;
+  color: #9aa3b8;
+}
+
+.replay__fix p {
+  margin: 0.3rem 0;
+}
+
+.replay__fixform {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.replay__fixrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.replay__fixrow select {
+  flex: 1;
+  min-width: 90px;
+}
+
+.replay__fixlist {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.replay__fixlist li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}

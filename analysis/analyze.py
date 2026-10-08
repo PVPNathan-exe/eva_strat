@@ -171,6 +171,7 @@ def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=pos
         deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, g["id"])]
         rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s, deaths=deaths)
         db.replace_samples(conn, g["id"], rows, tracking.PARAMS_VERSION, with_kills=scanned)
+        db.apply_corrections(conn, g["id"])
     return len(todo)
 
 

@@ -188,6 +188,58 @@ function getCapture(ctx: ApiContext, query: URLSearchParams): ApiResult {
   return reply(200, out);
 }
 
+const teamOf = (slot: number) => (slot <= 4 ? 'A' : 'B');
+const validSlot = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 8;
+
+/** Échange deux joueurs entre t0 et t1 dans les positions enregistrées (même logique que db.swap_slots côté Python). */
+export function swapSlots(db: DatabaseSync, gameId: number, a: number, b: number, t0: number, t1: number): void {
+  const rows = db
+    .prepare('SELECT * FROM samples WHERE game_id = ? AND slot IN (?, ?) AND t BETWEEN ? AND ?')
+    .all(gameId, a, b, t0, t1) as Record<string, number | null>[];
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM samples WHERE game_id = ? AND slot IN (?, ?) AND t BETWEEN ? AND ?').run(gameId, a, b, t0, t1);
+    const insert = db.prepare(
+      'INSERT OR REPLACE INTO samples (game_id, frame, t, slot, team, x, y, angle, alive, hp, weapon, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    for (const r of rows) {
+      insert.run(gameId, r.frame, r.t, r.slot === a ? b : a, r.team as never, r.x, r.y, r.angle, r.alive, r.hp, r.weapon as never, r.confidence);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+function listCorrections(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = Number(query.get('game'));
+  if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
+  return reply(200, ctx.db.prepare('SELECT id, t0, t1, slot_a, slot_b FROM corrections WHERE game_id = ? ORDER BY id').all(gameId));
+}
+
+function createCorrection(ctx: ApiContext, body: Row): ApiResult {
+  const { game_id, t0, t1, slot_a, slot_b } = body;
+  if (!validSlot(slot_a) || !validSlot(slot_b) || slot_a === slot_b) return fail('Deux joueurs différents sont nécessaires');
+  if (teamOf(slot_a) !== teamOf(slot_b)) return fail('On ne peut échanger que deux joueurs de la même équipe');
+  const gid = num(game_id);
+  const a = num(t0);
+  const b = num(t1);
+  if (gid === null || a === null || b === null || b <= a) return fail('Période invalide');
+  if (!ctx.db.prepare('SELECT 1 FROM games WHERE id = ?').get(gid)) return fail('Game introuvable', 404);
+  swapSlots(ctx.db, gid, slot_a, slot_b, a, b);
+  const result = ctx.db.prepare('INSERT INTO corrections (game_id, t0, t1, slot_a, slot_b) VALUES (?, ?, ?, ?, ?)').run(gid, a, b, slot_a, slot_b);
+  return reply(201, { id: Number(result.lastInsertRowid) });
+}
+
+function deleteCorrection(ctx: ApiContext, id: number): ApiResult {
+  const c = ctx.db.prepare('SELECT game_id, t0, t1, slot_a, slot_b FROM corrections WHERE id = ?').get(id) as Record<string, number> | undefined;
+  if (!c) return fail('Correction introuvable', 404);
+  swapSlots(ctx.db, c.game_id, c.slot_a, c.slot_b, c.t0, c.t1); // un échange refait annule le précédent
+  ctx.db.prepare('DELETE FROM corrections WHERE id = ?').run(id);
+  return reply(200, { ok: true });
+}
+
 export function handleApi(
   ctx: ApiContext,
   method: string,
@@ -206,6 +258,12 @@ export function handleApi(
   }
   if (method === 'GET' && pathname === '/api/samples') return listSamples(ctx, query);
   if (method === 'GET' && pathname === '/api/capture') return getCapture(ctx, query);
+  if (pathname === '/api/corrections') {
+    if (method === 'GET') return listCorrections(ctx, query);
+    if (method === 'POST') return createCorrection(ctx, payload);
+  }
+  const correctionMatch = /^\/api\/corrections\/(\d+)$/.exec(pathname);
+  if (correctionMatch && method === 'DELETE') return deleteCorrection(ctx, Number(correctionMatch[1]));
   const gameMatch = /^\/api\/games\/(\d+)$/.exec(pathname);
   if (gameMatch) {
     const id = Number(gameMatch[1]);

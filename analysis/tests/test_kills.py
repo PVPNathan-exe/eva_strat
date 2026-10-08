@@ -197,3 +197,38 @@ def test_killfeed_rows_must_end_on_the_right_edge_and_extra_text_is_ignored():
     nowhere = np.zeros((120, 340, 3), np.uint8)
     cv2.putText(nowhere, "DECOR", (120, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (235, 140, 60), 2)  # texte bleu au milieu
     assert killfeed.find_rows(nowhere) == []
+
+
+def _game_with_samples(tmp_path):
+    conn = db.connect(tmp_path / "eva.db")
+    vid = db.upsert_video(conn, "/v.mp4", None, 600.0, 30.0, 1920, 1080)
+    conn.execute("INSERT INTO games (video_id, start_s, end_s) VALUES (?, 10, 200)", (vid,))
+    gid = conn.execute("SELECT id FROM games").fetchone()["id"]
+    rows = []
+    for i in range(10):  # joueur 1 à gauche, joueur 2 à droite, à 1 lecture par seconde
+        rows.append((i, 10.0 + i, 1, "A", 0.1, 0.5, None, 1, 1.0))
+        rows.append((i, 10.0 + i, 2, "A", 0.9, 0.5, None, 1, 1.0))
+    db.replace_samples(conn, gid, rows)
+    return conn, gid
+
+
+def test_swap_exchanges_two_players_only_inside_the_period(tmp_path):
+    conn, gid = _game_with_samples(tmp_path)
+    db.swap_slots(conn, gid, 1, 2, 15.0, 18.0)
+    x = lambda slot, t: conn.execute("SELECT x FROM samples WHERE game_id = ? AND slot = ? AND t = ?", (gid, slot, t)).fetchone()["x"]
+    assert (x(1, 12.0), x(2, 12.0)) == (0.1, 0.9)  # avant : inchangé
+    assert (x(1, 16.0), x(2, 16.0)) == (0.9, 0.1)  # pendant : échangés
+    assert (x(1, 19.0), x(2, 19.0)) == (0.1, 0.9)  # après : inchangé
+    assert conn.execute("SELECT COUNT(*) AS n FROM samples WHERE game_id = ?", (gid,)).fetchone()["n"] == 20
+    db.swap_slots(conn, gid, 1, 2, 15.0, 18.0)  # un second échange annule le premier
+    assert (x(1, 16.0), x(2, 16.0)) == (0.1, 0.9)
+
+
+def test_corrections_are_reapplied_after_the_positions_are_read_again(tmp_path):
+    conn, gid = _game_with_samples(tmp_path)
+    conn.execute("INSERT INTO corrections (game_id, t0, t1, slot_a, slot_b) VALUES (?, 15, 18, 1, 2)", (gid,))
+    conn.commit()
+    db.replace_samples(conn, gid, [(i, 10.0 + i, s, "A", 0.1 if s == 1 else 0.9, 0.5, None, 1, 1.0) for i in range(10) for s in (1, 2)])
+    db.apply_corrections(conn, gid)  # ce que fait analyze après chaque relecture
+    row = conn.execute("SELECT x FROM samples WHERE game_id = ? AND slot = 1 AND t = 16.0", (gid,)).fetchone()
+    assert row["x"] == 0.9

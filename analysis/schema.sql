@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS players (
   PRIMARY KEY (game_id, slot)
 );
 
+-- Corrections manuelles du suivi : entre t0 et t1, les deux joueurs (de la même équipe) sont échangés. Réappliquées si les positions sont relues.
+CREATE TABLE IF NOT EXISTS corrections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  slot_a INTEGER NOT NULL CHECK (slot_a BETWEEN 1 AND 8),
+  slot_b INTEGER NOT NULL CHECK (slot_b BETWEEN 1 AND 8),
+  CHECK (t1 > t0 AND slot_a <> slot_b)
+);
+
 -- Équipement des joueurs (icônes des bandeaux, identifiants voir weapons.py : B = arme, G = gadget).
 CREATE TABLE IF NOT EXISTS loadouts (
   game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,

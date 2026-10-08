@@ -8,7 +8,7 @@ import { builtinMaps } from '../../lib/builtinMaps';
 import { formatTime } from '../../lib/timeline';
 import { getVideoElement } from '../../lib/videoRef';
 import { useAnalysisStore } from '../../store/analysisStore';
-import type { CaptureSeries, Game, Sample } from '../../types/analysis';
+import type { CaptureSeries, Correction, Game, Sample } from '../../types/analysis';
 
 const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
 const RATES = [0.5, 1, 2, 4, 8];
@@ -108,6 +108,11 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const [trails, setTrails] = useState(false);
   const [capture, setCapture] = useState<CaptureSeries | null>(null);
   const [weaponNames, setWeaponNames] = useState<Record<string, string>>({});
+  const [fixing, setFixing] = useState(false); // mode correction : un clic sur une pastille la sélectionne
+  const [pickA, setPickA] = useState<number | null>(null);
+  const [pickB, setPickB] = useState<number | null>(null);
+  const [corrections, setCorrections] = useState<Correction[]>([]);
+  const [reload, setReload] = useState(0);
   const [labels, setLabels] = useState(large); // pseudos affichés d'emblée dans la vue agrandie
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [inset, setInset] = useState<Inset>(() => loadInset(game.map ?? ''));
@@ -143,7 +148,27 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     return () => {
       cancelled = true;
     };
-  }, [game.id, game.samples]);
+  }, [game.id, game.samples, reload]);
+
+  useEffect(() => {
+    analysisApi
+      .corrections(game.id)
+      .then(setCorrections)
+      .catch(() => setCorrections([]));
+  }, [game.id, reload]);
+
+  // Clic sur une pastille en mode correction : la première choisie est A, la suivante de la même équipe est B.
+  const pick = (slot: number) => {
+    if (pickA === null || (pickB !== null && slot !== pickA && slot !== pickB) || (slot <= 4) !== (pickA <= 4)) {
+      setPickA(slot);
+      setPickB(null);
+    } else if (slot === pickA) {
+      setPickA(null);
+      setPickB(null);
+    } else {
+      setPickB(slot);
+    }
+  };
 
   useEffect(() => {
     if (!follow) return;
@@ -269,7 +294,8 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           return (
             <div
               key={p.slot}
-              className={`replay__dot${p.alive ? '' : ' is-dead'}${(p.confidence ?? 1) < 0.5 ? ' is-unsure' : ''}`}
+              className={`replay__dot${p.alive ? '' : ' is-dead'}${(p.confidence ?? 1) < 0.5 ? ' is-unsure' : ''}${fixing ? ' is-pickable' : ''}${p.slot === pickA || p.slot === pickB ? ' is-picked' : ''}`}
+              onClick={fixing ? () => pick(p.slot) : undefined}
               style={{ left: `${x}%`, top: `${y}%`, ['--c' as string]: TEAM_COLOR[p.team] }}
               title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.confidence !== null && p.confidence < 1 ? ` · identité ${Math.round(p.confidence * 100)} %` : ''}`}
             >
@@ -336,6 +362,30 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           </button>
         ))}
       </div>
+
+      <details className="replay__fix" open={fixing} onToggle={(e) => setFixing((e.currentTarget as HTMLDetailsElement).open)}>
+        <summary>Corriger le suivi</summary>
+        <p>
+          Si deux joueurs de la même équipe se sont échangé leurs numéros, clique sur leurs deux pastilles (ou choisis-les ci-dessous), puis la
+          durée à partir de l'instant affiché.
+        </p>
+        <FixForm
+          game={game}
+          time={time}
+          nameOf={nameOf}
+          slots={slotsPresent}
+          pickA={pickA}
+          pickB={pickB}
+          setPickA={setPickA}
+          setPickB={setPickB}
+          corrections={corrections}
+          onChanged={() => {
+            setPickA(null);
+            setPickB(null);
+            setReload((n) => n + 1);
+          }}
+        />
+      </details>
 
       {game.kills.length > 0 && (
         <div className="replay__kills">
@@ -409,6 +459,90 @@ function ScoreChart({ capture, start, end, time, onSeek }: { capture: CaptureSer
         <b style={{ color: TEAM_COLOR.A }}>{at(capture.A)} %</b> · <b style={{ color: TEAM_COLOR.B }}>{at(capture.B)} %</b>
         <em> (fin : {last(capture.A)} % / {last(capture.B)} %)</em>
       </span>
+    </div>
+  );
+}
+
+const DURATIONS = [
+  { label: 'jusqu\'à la fin de la game', seconds: Infinity },
+  { label: 'pendant 60 s', seconds: 60 },
+  { label: 'pendant 30 s', seconds: 30 },
+  { label: 'pendant 10 s', seconds: 10 },
+];
+
+/** Échange deux joueurs d'une équipe à partir de l'instant affiché ; les échanges déjà faits sont listés et annulables. */
+function FixForm(props: {
+  game: Game;
+  time: number;
+  nameOf: Map<number, string>;
+  slots: number[];
+  pickA: number | null;
+  pickB: number | null;
+  setPickA: (s: number | null) => void;
+  setPickB: (s: number | null) => void;
+  corrections: Correction[];
+  onChanged: () => void;
+}) {
+  const { game, time, nameOf, slots, pickA, pickB, corrections } = props;
+  const [duration, setDuration] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const label = (slot: number) => `${numberOfSlot(slot)} · ${nameOf.get(slot) ?? 'joueur'}`;
+  const sameTeam = pickA !== null && pickB !== null && (pickA <= 4) === (pickB <= 4);
+  const optionsFor = (other: number | null) => slots.filter((s) => other === null || ((s <= 4) === (other <= 4) && s !== other));
+
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      props.onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const swap = () => {
+    if (pickA === null || pickB === null) return;
+    const end = DURATIONS[duration].seconds === Infinity ? game.end_s : Math.min(game.end_s, time + DURATIONS[duration].seconds);
+    void run(() => analysisApi.swapPlayers(game.id, pickA, pickB, time, end));
+  };
+
+  return (
+    <div className="replay__fixform">
+      <div className="replay__fixrow">
+        <select value={pickA ?? ''} onChange={(e) => { props.setPickA(e.target.value ? Number(e.target.value) : null); props.setPickB(null); }}>
+          <option value="">Joueur A…</option>
+          {slots.map((s) => <option key={s} value={s}>{label(s)}</option>)}
+        </select>
+        <span>↔</span>
+        <select value={pickB ?? ''} disabled={pickA === null} onChange={(e) => props.setPickB(e.target.value ? Number(e.target.value) : null)}>
+          <option value="">Joueur B…</option>
+          {optionsFor(pickA).map((s) => <option key={s} value={s}>{label(s)}</option>)}
+        </select>
+      </div>
+      <div className="replay__fixrow">
+        <span>À partir de {formatTime(time - game.start_s)}</span>
+        <select value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
+          {DURATIONS.map((d, i) => <option key={d.label} value={i}>{d.label}</option>)}
+        </select>
+        <button disabled={!sameTeam || busy} onClick={swap}>Échanger</button>
+      </div>
+      {error && <p className="games__error">{error}</p>}
+      {corrections.length > 0 && (
+        <ul className="replay__fixlist">
+          {corrections.map((c) => (
+            <li key={c.id}>
+              <span>
+                {formatTime(c.t0 - game.start_s)} → {formatTime(c.t1 - game.start_s)} : {nameOf.get(c.slot_a) ?? `n° ${numberOfSlot(c.slot_a)}`} ↔ {nameOf.get(c.slot_b) ?? `n° ${numberOfSlot(c.slot_b)}`}
+              </span>
+              <button disabled={busy} onClick={() => void run(() => analysisApi.undoCorrection(c.id))}>Annuler</button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

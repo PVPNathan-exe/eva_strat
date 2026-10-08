@@ -21,6 +21,14 @@ export interface CaptureSeries {
   B: { t: number; v: number }[];
 }
 
+export interface Correction {
+  id: number;
+  t0: number;
+  t1: number;
+  slot_a: number;
+  slot_b: number;
+}
+
 export type WeaponKind = 'killfeed' | 'arme' | 'gadget';
 
 export interface Weapon {

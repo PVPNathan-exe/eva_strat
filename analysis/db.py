@@ -289,3 +289,29 @@ def capture_of(conn, game_id):
     for r in conn.execute("SELECT t, pct, team FROM capture_state WHERE game_id = ? AND point IN ('score_A', 'score_B') ORDER BY t", (game_id,)):
         out[r["team"]].append((r["t"], r["pct"]))
     return out
+
+
+def _team_of(slot):
+    return "A" if slot <= 4 else "B"
+
+
+def swap_slots(conn, game_id, slot_a, slot_b, t0, t1):
+    """Échange deux joueurs d'une même équipe entre t0 et t1 dans les positions déjà enregistrées."""
+    rows = conn.execute(
+        "SELECT * FROM samples WHERE game_id = ? AND slot IN (?, ?) AND t BETWEEN ? AND ?", (game_id, slot_a, slot_b, t0, t1)
+    ).fetchall()
+    conn.execute("DELETE FROM samples WHERE game_id = ? AND slot IN (?, ?) AND t BETWEEN ? AND ?", (game_id, slot_a, slot_b, t0, t1))
+    for r in rows:
+        new = slot_b if r["slot"] == slot_a else slot_a
+        conn.execute(
+            "INSERT OR REPLACE INTO samples (game_id, frame, t, slot, team, x, y, angle, alive, hp, weapon, confidence) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (game_id, r["frame"], r["t"], new, r["team"], r["x"], r["y"], r["angle"], r["alive"], r["hp"], r["weapon"], r["confidence"]),
+        )
+    conn.commit()
+
+
+def apply_corrections(conn, game_id):
+    """Réapplique, dans l'ordre, les corrections manuelles d'une game (après une relecture des positions)."""
+    for c in conn.execute("SELECT slot_a, slot_b, t0, t1 FROM corrections WHERE game_id = ? ORDER BY id", (game_id,)).fetchall():
+        swap_slots(conn, game_id, c["slot_a"], c["slot_b"], c["t0"], c["t1"])

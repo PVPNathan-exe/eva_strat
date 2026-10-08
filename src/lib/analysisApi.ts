@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { CaptureSeries, Game, JobEvent, Sample, Video, Weapon, Zones } from '../types/analysis';
+import type { CaptureSeries, Correction, Game, JobEvent, Sample, Video, Weapon, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -23,6 +23,10 @@ export const analysisApi = {
   weapons: () => fetch('/api/weapons', { cache: 'no-store' }).then(parse<Weapon[]>),
   nameWeapon: (id: string, name: string) => fetch(`/api/weapons/${id}`, jsonInit('PUT', { name })).then(parse<{ ok: true }>),
   capture: (gameId: number) => fetch(`/api/capture?game=${gameId}`, { cache: 'no-store' }).then(parse<CaptureSeries>),
+  corrections: (gameId: number) => fetch(`/api/corrections?game=${gameId}`, { cache: 'no-store' }).then(parse<Correction[]>),
+  swapPlayers: (gameId: number, slotA: number, slotB: number, t0: number, t1: number) =>
+    fetch('/api/corrections', jsonInit('POST', { game_id: gameId, slot_a: slotA, slot_b: slotB, t0, t1 })).then(parse<{ id: number }>),
+  undoCorrection: (id: number) => fetch(`/api/corrections/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
   samples: (gameId: number) => fetch(`/api/samples?game=${gameId}`).then(parse<Sample[]>),
   createGame: (videoId: number, start: number, end: number, map?: string) =>
     fetch('/api/games', jsonInit('POST', { video_id: videoId, start_s: start, end_s: end, map })).then(parse<{ id: number }>),

@@ -183,3 +183,36 @@ test('GET /api/capture renvoie la courbe de score de chaque équipe', () => {
   assert.deepEqual(res.json, { A: [{ t: 100, v: 0 }, { t: 101, v: 3 }], B: [{ t: 100, v: 0 }] });
   assert.equal(handleApi(ctx, 'GET', '/api/capture', q(), undefined).status, 400);
 });
+
+test('une correction échange deux joueurs d’une équipe sur une période, et l’annuler remet tout en place', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  const id = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 700, 'confirmed')").run(videoId).lastInsertRowid);
+  const put = ctx.db.prepare("INSERT INTO samples (game_id, frame, t, slot, team, x, y) VALUES (?, ?, ?, ?, 'A', ?, 0.5)");
+  for (let i = 0; i < 6; i++) {
+    put.run(id, i, 100 + i, 1, 0.1);
+    put.run(id, i, 100 + i, 2, 0.9);
+  }
+  const x = (slot: number, t: number) =>
+    (ctx.db.prepare('SELECT x FROM samples WHERE game_id = ? AND slot = ? AND t = ?').get(id, slot, t) as { x: number }).x;
+  const created = handleApi(ctx, 'POST', '/api/corrections', q(), { game_id: id, slot_a: 1, slot_b: 2, t0: 102, t1: 104 });
+  assert.equal(created.status, 201);
+  assert.deepEqual([x(1, 101), x(1, 103), x(1, 105)], [0.1, 0.9, 0.1]);
+  const list = handleApi(ctx, 'GET', '/api/corrections', q(`game=${id}`), undefined).json as { id: number }[];
+  assert.equal(list.length, 1);
+  assert.equal(handleApi(ctx, 'DELETE', `/api/corrections/${list[0].id}`, q(), undefined).status, 200);
+  assert.deepEqual([x(1, 103), x(2, 103)], [0.1, 0.9]);
+  assert.equal((handleApi(ctx, 'GET', '/api/corrections', q(`game=${id}`), undefined).json as unknown[]).length, 0);
+});
+
+test('une correction refuse deux joueurs d’équipes différentes, deux fois le même, une période inversée', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  const id = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 700, 'confirmed')").run(videoId).lastInsertRowid);
+  const post = (body: object) => handleApi(ctx, 'POST', '/api/corrections', q(), { game_id: id, t0: 100, t1: 200, ...body }).status;
+  assert.equal(post({ slot_a: 1, slot_b: 5 }), 400);
+  assert.equal(post({ slot_a: 3, slot_b: 3 }), 400);
+  assert.equal(post({ slot_a: 1, slot_b: 2, t0: 300, t1: 200 }), 400);
+  assert.equal(post({ slot_a: 1, slot_b: 9 }), 400);
+  assert.equal(handleApi(ctx, 'POST', '/api/corrections', q(), { game_id: 9999, slot_a: 1, slot_b: 2, t0: 100, t1: 200 }).status, 404);
+});
