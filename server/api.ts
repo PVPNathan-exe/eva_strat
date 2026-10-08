@@ -141,6 +141,15 @@ function putCalibration(ctx: ApiContext, body: Row): ApiResult {
   return reply(200, { ok: true });
 }
 
+function listSamples(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = Number(query.get('game'));
+  if (!Number.isInteger(gameId)) return fail('Paramètre game manquant');
+  const rows = ctx.db
+    .prepare('SELECT frame, t, slot, team, x, y, angle, alive, confidence FROM samples WHERE game_id = ? ORDER BY frame, slot')
+    .all(gameId);
+  return reply(200, rows);
+}
+
 export function handleApi(
   ctx: ApiContext,
   method: string,
@@ -157,6 +166,7 @@ export function handleApi(
     if (method === 'GET') return listGames(ctx, query);
     if (method === 'POST') return createGame(ctx, payload);
   }
+  if (method === 'GET' && pathname === '/api/samples') return listSamples(ctx, query);
   const gameMatch = /^\/api\/games\/(\d+)$/.exec(pathname);
   if (gameMatch) {
     const id = Number(gameMatch[1]);

@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { Game, JobEvent, Video, Zones } from '../types/analysis';
+import type { Game, JobEvent, Sample, Video, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -19,6 +19,7 @@ export const streamUrl = (videoId: number) => `/api/videos/${videoId}/stream`;
 export const analysisApi = {
   videos: () => fetch('/api/videos').then(parse<Video[]>),
   games: (videoId: number) => fetch(`/api/games?video=${videoId}`).then(parse<Game[]>),
+  samples: (gameId: number) => fetch(`/api/samples?game=${gameId}`).then(parse<Sample[]>),
   createGame: (videoId: number, start: number, end: number, map?: string) =>
     fetch('/api/games', jsonInit('POST', { video_id: videoId, start_s: start, end_s: end, map })).then(parse<{ id: number }>),
   patchGame: (id: number, patch: Partial<Pick<Game, 'start_s' | 'end_s' | 'map' | 'status' | 'winner'>>) =>

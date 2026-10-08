@@ -28,6 +28,18 @@ export interface Game {
   samples: number;
 }
 
+export interface Sample {
+  frame: number;
+  t: number;
+  slot: number;
+  team: 'A' | 'B';
+  x: number;
+  y: number;
+  angle: number | null;
+  alive: number;
+  confidence: number | null;
+}
+
 export const ZONE_NAMES = ['minimap', 'capture_points', 'team_a_bar', 'team_b_bar', 'timer'] as const;
 export type ZoneName = (typeof ZONE_NAMES)[number];
 
