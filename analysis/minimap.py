@@ -30,6 +30,8 @@ BLUE = ((98, 100, 195), (118, 255, 255))
 # sont retirées plus tard (tracking.drop_static_noise).
 ORANGE_DIM = ((3, 150, 135), (22, 255, 255))
 BLUE_DIM = ((98, 100, 140), (118, 255, 255))
+WHITE_REQUIRE_DIGIT = False  # vrai : une pastille blanche n'est acceptée que si son numéro est lisible (les symboles blancs de la carte n'en ont pas)
+WHITE_MAX_UNNUMBERED = 2  # une image normale a au plus un joueur observé : plus de pastilles blanches sans numéro, c'est du décor (Polaris)
 WHITE_MIN_AREA = 90  # le joueur observé rétrécit par moments (animation) : sa pastille blanche peut tomber vers 100 pixels ; le liseré coloré reste exigé
 DIM_MIN_SEPARATION = 0.03  # distance minimale (relative à la largeur) à une pastille déjà trouvée de la même équipe
 RING_ORANGE = ((3, 110, 110), (22, 255, 255))  # liseré du joueur observé : plus sombre qu'une pastille pleine
@@ -327,5 +329,8 @@ def find_markers(crop, templates=None):
             # Le liseré coloré qui entoure la pastille blanche en dessine la pointe : on l'ajoute pour mesurer la direction.
             rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)
             silhouette = cv2.morphologyEx(np.maximum(blob, rim.astype(np.uint8)), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-            add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring)  # halo pâle : le numéro doit être lisible
+            add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT)  # halo pâle : le numéro doit être lisible
+    noise = [d for d in found if d["spectated"] and not d["number"]]
+    if len(noise) > WHITE_MAX_UNNUMBERED:
+        found = [d for d in found if not (d["spectated"] and not d["number"])]
     return found
