@@ -35,6 +35,8 @@ function readJson(req: IncomingMessage): Promise<unknown> {
 function sendJson(res: ServerResponse, status: number, json: unknown) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  // Données vivantes (le script Python les modifie en dehors de la page) : jamais de cache navigateur.
+  res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(json));
 }
 
