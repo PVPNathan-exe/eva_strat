@@ -63,11 +63,33 @@ class Track:
         return slot if n >= 2 else None
 
 
+EXHAUSTIVE_BUDGET = 20000  # nombre maximal de combinaisons essayées pour apparier trajectoires et détections
+
+
+def _greedy_matching(costs):
+    """Appariement glouton : les liaisons les moins chères d'abord, chaque trajectoire et chaque détection une seule fois."""
+    cells = sorted((c, i, j) for i, row in enumerate(costs) for j, c in enumerate(row) if c is not None)
+    used_i, used_j, pairs = set(), set(), []
+    for _, i, j in cells:
+        if i not in used_i and j not in used_j:
+            used_i.add(i)
+            used_j.add(j)
+            pairs.append((i, j))
+    return pairs
+
+
 def _best_matching(costs, n_dets):
     """costs[i][j] : coût de relier la trajectoire i à la détection j (None = interdit). Maximise le nombre de liaisons,
     puis minimise le coût total. Petits effectifs (≤ 4 trajectoires) : recherche exhaustive."""
     best = (0.0, [])
     n = len(costs)
+    # La recherche exhaustive explose quand il y a beaucoup de trajectoires ouvertes et de détections (lectures parasites) :
+    # au-delà d'un budget, on apparie au plus proche (glouton), ce qui reste correct pour des pastilles bien séparées.
+    size = 1
+    for row in costs:
+        size *= 1 + sum(c is not None for c in row)
+        if size > EXHAUSTIVE_BUDGET:
+            return _greedy_matching(costs)
 
     def rec(i, used, total, pairs):
         nonlocal best

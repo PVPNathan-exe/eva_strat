@@ -128,3 +128,17 @@ def test_a_player_standing_still_keeps_the_side_given_by_the_shape():
     seq = [[{**det("A", 0.5, 0.5, number=1), "axis": 90.0, "skew": -0.6, "angle": 270.0}] for _ in range(20)]
     rows = by_slot(tracking.solve(frames_of(seq), STEP))
     assert all(abs(rows[1][i][6] - 270.0) < 10 for i in range(20))  # à l'arrêt, le déplacement n'impose rien
+
+
+def test_matching_does_not_explode_with_many_tracks_and_detections():
+    import time
+
+    import tracking
+
+    n = 30  # 30 trajectoires ouvertes et 30 détections voisines : la recherche exhaustive ne finirait jamais
+    costs = [[abs(i - j) * 0.01 if abs(i - j) <= 3 else None for j in range(n)] for i in range(n)]
+    start = time.time()
+    pairs = tracking._best_matching(costs, n)
+    assert time.time() - start < 2
+    assert len({i for i, _ in pairs}) == len(pairs) == len({j for _, j in pairs})  # chaque trajectoire et chaque détection une fois
+    assert len(pairs) >= n - 3  # presque tout est apparié
