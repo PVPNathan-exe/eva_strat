@@ -19,6 +19,7 @@ export function IngestBar() {
   const job = useAnalysisStore((s) => s.job);
   const selectVideo = useAnalysisStore((s) => s.selectVideo);
   const startIngest = useAnalysisStore((s) => s.startIngest);
+  const controlJob = useAnalysisStore((s) => s.controlJob);
 
   // Champ vide : on réanalyse la vidéo choisie dans le sélecteur.
   const target = source.trim() || currentVideo?.path || '';
@@ -118,12 +119,16 @@ export function IngestBar() {
         <div className="ingest__progress">
           {job.stage ? (
             <>
-              <span>{STAGE_LABEL[job.stage]}… {Math.round(job.pct)} %</span>
+              <span>{job.paused ? 'En pause' : `${STAGE_LABEL[job.stage]}…`} {Math.round(job.pct)} %</span>
               <progress value={job.pct} max={100} />
             </>
           ) : (
             <span>Lecture du fichier…</span>
           )}
+          <button onClick={() => void controlJob(job.paused ? 'resume' : 'pause')}>
+            {job.paused ? '▶ Reprendre' : '⏸ Pause'}
+          </button>
+          <button onClick={() => void controlJob('stop')}>■ Arrêter</button>
         </div>
       )}
       {pickError && <span className="ingest__error">{pickError}</span>}

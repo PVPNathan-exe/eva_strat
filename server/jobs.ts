@@ -1,6 +1,7 @@
 // Lance le script d'analyse et garde ses événements (une ligne JSON par événement sur stdout).
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 export interface JobEvent {
@@ -17,12 +18,18 @@ export class Job {
   private listeners = new Set<Listener>();
   private stdoutBuffer = '';
   private stderrTail = '';
+  private child: ChildProcess;
+  private controlPath: string | undefined;
 
-  constructor(command: string, args: string[]) {
+  constructor(command: string, args: string[], controlPath?: string) {
+    this.controlPath = controlPath;
+    this.setPaused(false);
     const child = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     });
+
+    this.child = child;
 
     child.stdout.setEncoding('utf-8');
     child.stdout.on('data', (chunk: string) => {
@@ -46,6 +53,31 @@ export class Job {
     });
   }
 
+  // La pause passe par un fichier de contrôle que le script consulte entre deux étapes.
+  private setPaused(paused: boolean) {
+    if (!this.controlPath) return;
+    if (paused) writeFileSync(this.controlPath, 'pause');
+    else rmSync(this.controlPath, { force: true });
+  }
+
+  pause() {
+    if (!this.finished) this.setPaused(true);
+  }
+
+  resume() {
+    this.setPaused(false);
+  }
+
+  /** Arrête le script (et ffmpeg, lancé par lui). Rien n'est écrit en base : les résultats sont enregistrés à la fin. */
+  stop() {
+    if (this.finished) return;
+    this.setPaused(false);
+    const pid = this.child.pid;
+    if (process.platform === 'win32' && pid) spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    else this.child.kill('SIGTERM');
+    this.finish({ event: 'error', message: 'Analyse arrêtée' });
+  }
+
   private handleLine(line: string) {
     if (!line.trim()) return;
     try {
@@ -65,6 +97,7 @@ export class Job {
   private finish(event: JobEvent) {
     if (this.finished) return;
     this.finished = true;
+    this.setPaused(false);
     this.push(event);
   }
 
@@ -80,9 +113,9 @@ export class JobManager {
   private jobs = new Map<string, Job>();
   private current: Job | null = null;
 
-  start(command: string, args: string[]): Job {
+  start(command: string, args: string[], controlPath?: string): Job {
     if (this.current && !this.current.finished) throw new Error('Une analyse est déjà en cours');
-    const job = new Job(command, args);
+    const job = new Job(command, args, controlPath);
     this.jobs.set(job.id, job);
     this.current = job;
     return job;

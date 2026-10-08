@@ -7,6 +7,8 @@ import type { Game, JobEvent, Video } from '../types/analysis';
 
 export interface JobState {
   running: boolean;
+  jobId: string | null;
+  paused: boolean;
   stage: 'download' | 'detect' | 'maps' | null;
   pct: number;
   error: string | null;
@@ -29,10 +31,11 @@ interface AnalysisState {
   setCurrentTime: (t: number) => void;
   setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
+  controlJob: (action: 'pause' | 'resume' | 'stop') => Promise<void>;
   startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean }) => Promise<void>;
 }
 
-const idleJob: JobState = { running: false, stage: null, pct: 0, error: null, message: null };
+const idleJob: JobState = { running: false, jobId: null, paused: false, stage: null, pct: 0, error: null, message: null };
 
 export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   videos: [],
@@ -68,13 +71,25 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   setPendingStart: (t) => set({ pendingStart: t }),
   requestSeek: (t) => set({ seekRequest: { t, nonce: Date.now() } }),
 
+  controlJob: async (action) => {
+    const { jobId, running } = get().job;
+    if (!jobId || !running) return;
+    try {
+      await analysisApi.jobControl(jobId, action);
+      if (action !== 'stop') set({ job: { ...get().job, paused: action === 'pause' } });
+    } catch (err) {
+      set({ job: { ...get().job, error: (err as Error).message } });
+    }
+  },
+
   startIngest: async (source, { preRoll, postRoll, skipIfOk } = {}) => {
     set({ job: { ...idleJob, running: true } });
     try {
       const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk });
+      set({ job: { ...get().job, jobId } });
       subscribeJob(jobId, (e: JobEvent) => {
         if (e.event === 'progress') {
-          set({ job: { running: true, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
+          set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
         } else if (e.event === 'done') {
           set({ job: { ...idleJob, message: e.message ?? 'Vidéo chargée' } });
           void get()

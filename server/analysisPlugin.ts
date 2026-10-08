@@ -110,11 +110,20 @@ export function analysisPlugin(): Plugin {
                 extra.push(`--post-roll=${body.postRoll}`);
               }
               if (body?.skipIfOk === true) extra.push('--skip-if-ok');
-              const job = jobs.start(python, [script, `--source=${source}`, '--db', dbPath, '--cache', cacheDir, ...extra]);
+              const controlPath = join(root, 'data', 'job.control');
+              const job = jobs.start(python, [script, `--source=${source}`, '--db', dbPath, '--cache', cacheDir, `--control=${controlPath}`, ...extra], controlPath);
               return sendJson(res, 202, { jobId: job.id });
             } catch (err) {
               return sendJson(res, 409, { error: (err as Error).message });
             }
+          }
+
+          const control = /^\/api\/jobs\/([\w-]+)\/(pause|resume|stop)$/.exec(url.pathname);
+          if (control && method === 'POST') {
+            const job = jobs.get(control[1]);
+            if (!job || job.finished) return sendJson(res, 404, { error: 'Aucune analyse en cours' });
+            job[control[2] as 'pause' | 'resume' | 'stop']();
+            return sendJson(res, 200, { ok: true });
           }
 
           const events = /^\/api\/jobs\/([\w-]+)\/events$/.exec(url.pathname);

@@ -55,3 +55,29 @@ test('refuse un second job tant que le premier tourne', async () => {
   await new Promise((r) => setTimeout(r, 1000));
   assert.doesNotThrow(() => manager.start(node, ['-e', '0']));
 });
+
+test('stop arrête le script et signale « Analyse arrêtée »', async () => {
+  const manager = new JobManager();
+  const job = manager.start(node, ['-e', 'setInterval(() => {}, 1000)']);
+  const done = new Promise<JobEvent>((resolve) => job.subscribe((e) => e.event === 'error' && resolve(e)));
+  job.stop();
+  assert.equal((await done).message, 'Analyse arrêtée');
+  assert.equal(job.finished, true);
+});
+
+test('pause écrit le fichier de contrôle, reprise et fin le retirent', async () => {
+  const { existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const control = join(tmpdir(), `eva-control-${process.pid}`);
+  const manager = new JobManager();
+  const job = manager.start(node, ['-e', 'setTimeout(() => console.log(JSON.stringify({event:"done"})), 400)'], control);
+  assert.equal(existsSync(control), false);
+  job.pause();
+  assert.equal(existsSync(control), true);
+  job.resume();
+  assert.equal(existsSync(control), false);
+  job.pause();
+  await new Promise<void>((resolve) => job.subscribe((e) => e.event === 'done' && resolve()));
+  assert.equal(existsSync(control), false);
+});

@@ -9,6 +9,7 @@ Les événements sont écrits sur stdout, un objet JSON par ligne :
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 import db
@@ -39,7 +40,13 @@ def gaps_around(ok, duration):
     return gaps
 
 
-def detect(path, meta, emit, pre_roll, post_roll, ranges=None):
+def wait_if_paused(control):
+    """Bloque tant que le fichier de contrôle existe (pause demandée par l'interface)."""
+    while control and Path(control).exists():
+        time.sleep(0.25)
+
+
+def detect(path, meta, emit, pre_roll, post_roll, ranges=None, control=None):
     """Lit le chrono toutes les secondes (zone par défaut) et en déduit les games, sur toute la vidéo ou sur des plages."""
     zone = json.loads(ZONES_PATH.read_text(encoding="utf-8"))["timer"]
     templates = timer.load_templates()
@@ -49,6 +56,7 @@ def detect(path, meta, emit, pre_roll, post_roll, ranges=None):
     for a, b in ranges:
         samples = []
         for t, crop in timer.iter_crops(path, zone, meta["width"], meta["height"], t0=a, t1=b):
+            wait_if_paused(control)
             samples.append((t, timer.read_timer(crop, templates)))
             pct = int(100 * (done + t - a) / total)
             if pct != last_pct:
@@ -59,7 +67,7 @@ def detect(path, meta, emit, pre_roll, post_roll, ranges=None):
     return games
 
 
-def fill_maps(conn, video_id, path, meta, emit):
+def fill_maps(conn, video_id, path, meta, emit, control=None):
     """Apprend le nom des cartes que l'utilisateur a étiquetées, puis remplit les games sans carte.
     Une carte déjà choisie n'est jamais écrasée ; une carte non reconnue reste vide."""
     games = [dict(r) for r in conn.execute("SELECT id, start_s, end_s, map FROM games WHERE video_id = ? ORDER BY start_s", (video_id,))]
@@ -72,6 +80,7 @@ def fill_maps(conn, video_id, path, meta, emit):
                 templates = mapname.load_templates()
     todo = [g for g in games if not g["map"]]
     for i, g in enumerate(todo):
+        wait_if_paused(control)
         emit({"event": "progress", "stage": "maps", "pct": round(100 * i / max(len(todo), 1))})
         name = mapname.recognize_game(path, g, meta["width"], meta["height"], templates)
         if name:
@@ -79,7 +88,7 @@ def fill_maps(conn, video_id, path, meta, emit):
     conn.commit()
 
 
-def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False):
+def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False, control=None):
     conn = db.connect(db_path)
     source_url = None
 
@@ -106,9 +115,9 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
         emit({"event": "progress", "stage": "detect", "pct": 0})
         ok = db.ok_games(conn, video_id) if skip_if_ok else []
         ranges = gaps_around(ok, meta["duration_s"]) if ok else None
-        found = detect(path, meta, emit, pre_roll, post_roll, ranges) if ranges != [] else []
+        found = detect(path, meta, emit, pre_roll, post_roll, ranges, control) if ranges != [] else []
         db.replace_detected_games(conn, video_id, found, keep_ok=skip_if_ok)
-    fill_maps(conn, video_id, path, meta, emit)
+    fill_maps(conn, video_id, path, meta, emit, control)
 
     emit({"event": "done", "video_id": video_id})
 
@@ -122,9 +131,10 @@ def main(argv=None, emit=print_event):
     parser.add_argument("--pre-roll", type=float, default=segments.PRE_ROLL_S, help="Secondes gardées avant le départ du chrono")
     parser.add_argument("--post-roll", type=float, default=segments.POST_ROLL_S, help="Secondes gardées après la fin du chrono (écran de victoire)")
     parser.add_argument("--skip-if-ok", action="store_true", help="Ne rien relire si toutes les games sont déjà confirmées et vérifiées")
+    parser.add_argument("--control", default=None, help="Fichier dont la présence met l'analyse en pause")
     args = parser.parse_args(argv)
     try:
-        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok)
+        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok, control=args.control)
     except Exception as exc:  # noqa: BLE001 - tout échec doit être signalé à l'UI
         emit({"event": "error", "message": str(exc)})
         return 1
