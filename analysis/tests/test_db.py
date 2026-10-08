@@ -52,3 +52,15 @@ def test_confirmed_games_are_checked_not_modified(tmp_path):
     assert rows[0]["doubts"] is None
     assert "trop tôt de 10 s" in rows[1]["doubts"]
     assert "Aucun chrono" in rows[2]["doubts"]
+
+
+def test_all_verified_requires_every_game_checked_confirmed_with_map(tmp_path):
+    conn = db.connect(tmp_path / "eva.db")
+    vid = db.upsert_video(conn, "/v.mp4", None, 600.0, 30.0, 1920, 1080)
+    assert not db.all_verified(conn, vid)  # aucune game
+    conn.execute("INSERT INTO games (video_id, start_s, end_s, status, map) VALUES (?, 100, 200, 'confirmed', 'Silva')", (vid,))
+    assert not db.all_verified(conn, vid)  # jamais comparée à la détection
+    db.replace_detected_games(conn, vid, [{"start_s": 100, "end_s": 200, "doubts": []}])
+    assert db.all_verified(conn, vid)
+    conn.execute("UPDATE games SET map = NULL")
+    assert not db.all_verified(conn, vid)

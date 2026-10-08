@@ -19,6 +19,8 @@ def connect(db_path):
     # Bases créées avant l'ajout de la colonne doubts.
     if "doubts" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
         conn.execute("ALTER TABLE games ADD COLUMN doubts TEXT")
+    if "checked" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
+        conn.execute("ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0")
     return conn
 
 
@@ -68,7 +70,7 @@ def _check_confirmed(conn, confirmed, games):
                         }
                     )
         conn.execute(
-            "UPDATE games SET doubts = ? WHERE id = ?",
+            "UPDATE games SET doubts = ?, checked = 1 WHERE id = ?",
             (json.dumps(doubts, ensure_ascii=False) if doubts else None, c["id"]),
         )
 
@@ -90,3 +92,16 @@ def replace_detected_games(conn, video_id, games):
         added += 1
     conn.commit()
     return added
+
+
+def all_verified(conn, video_id):
+    """Vrai si la vidéo a des games et que toutes sont confirmées, vérifiées, sans doute restant et avec une carte."""
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS n,
+               SUM(status = 'confirmed' AND checked = 1 AND doubts IS NULL AND map IS NOT NULL) AS ok
+        FROM games WHERE video_id = ?
+        """,
+        (video_id,),
+    ).fetchone()
+    return row["n"] > 0 and row["ok"] == row["n"]

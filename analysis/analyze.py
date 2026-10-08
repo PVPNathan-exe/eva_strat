@@ -58,7 +58,7 @@ def fill_maps(conn, video_id, path, meta, emit):
     conn.commit()
 
 
-def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S):
+def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False):
     conn = db.connect(db_path)
     source_url = None
 
@@ -77,6 +77,10 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
     meta = ingest.probe(path)
     video_id = db.upsert_video(conn, str(path.resolve()), source_url, **meta)
 
+    if skip_if_ok and db.all_verified(conn, video_id):
+        emit({"event": "done", "video_id": video_id, "message": "Toutes les games sont déjà vérifiées : rien à relancer"})
+        return
+
     if do_detect:
         emit({"event": "progress", "stage": "detect", "pct": 0})
         db.replace_detected_games(conn, video_id, detect(path, meta, emit, pre_roll, post_roll))
@@ -93,9 +97,10 @@ def main(argv=None, emit=print_event):
     parser.add_argument("--no-detect", action="store_true", help="Ne pas chercher les games (vidéo d'une seule game)")
     parser.add_argument("--pre-roll", type=float, default=segments.PRE_ROLL_S, help="Secondes gardées avant le départ du chrono")
     parser.add_argument("--post-roll", type=float, default=segments.POST_ROLL_S, help="Secondes gardées après la fin du chrono (écran de victoire)")
+    parser.add_argument("--skip-if-ok", action="store_true", help="Ne rien relire si toutes les games sont déjà confirmées et vérifiées")
     args = parser.parse_args(argv)
     try:
-        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll)
+        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok)
     except Exception as exc:  # noqa: BLE001 - tout échec doit être signalé à l'UI
         emit({"event": "error", "message": str(exc)})
         return 1

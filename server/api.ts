@@ -86,8 +86,8 @@ function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
   // Les zones à vérifier ne valent plus rien une fois la game confirmée ou ses bornes déplacées.
   const clearDoubts = status !== current.status || 'start_s' in body || 'end_s' in body;
   ctx.db
-    .prepare('UPDATE games SET start_s = ?, end_s = ?, map = ?, status = ?, winner = ?, doubts = CASE WHEN ? THEN NULL ELSE doubts END WHERE id = ?')
-    .run(start as number, end as number, map, status, winner, clearDoubts ? 1 : 0, id);
+    .prepare('UPDATE games SET start_s = ?, end_s = ?, map = ?, status = ?, winner = ?, doubts = CASE WHEN ? THEN NULL ELSE doubts END, checked = CASE WHEN ? THEN 0 ELSE checked END WHERE id = ?')
+    .run(start as number, end as number, map, status, winner, clearDoubts ? 1 : 0, 'start_s' in body || 'end_s' in body ? 1 : 0, id);
   return reply(200, { ok: true });
 }
 

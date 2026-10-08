@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS games (
   map TEXT,
   status TEXT NOT NULL DEFAULT 'detected' CHECK (status IN ('detected', 'confirmed')),
   winner TEXT,
+  checked INTEGER NOT NULL DEFAULT 0,  -- 1 : bornes comparées à la détection automatique (remis à 0 si on les déplace)
   doubts TEXT,  -- JSON : zones à vérifier [{start_s, end_s, label}] posées par la détection automatique
   CHECK (end_s > start_s)
 );

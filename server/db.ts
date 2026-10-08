@@ -14,5 +14,6 @@ export function openDb(path: string, schemaPath: string): DatabaseSync {
   // Bases créées avant l'ajout de la colonne doubts.
   const columns = db.prepare('PRAGMA table_info(games)').all() as { name: string }[];
   if (!columns.some((c) => c.name === 'doubts')) db.exec('ALTER TABLE games ADD COLUMN doubts TEXT');
+  if (!columns.some((c) => c.name === 'checked')) db.exec('ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0');
   return db;
 }

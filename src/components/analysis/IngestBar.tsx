@@ -90,7 +90,7 @@ export function IngestBar() {
         <button
           title="Relit le chrono de la vidéo choisie et propose les games (tes games confirmées ne sont jamais modifiées)"
           disabled={job.running}
-          onClick={() => void startIngest(currentVideo.path, { preRoll, postRoll })}
+          onClick={() => void startIngest(currentVideo.path, { preRoll, postRoll, skipIfOk: true })}
         >
           Détecter les games
         </button>
