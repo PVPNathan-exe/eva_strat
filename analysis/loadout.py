@@ -94,3 +94,44 @@ def read_loadouts(video, game, team_zones, width, height, frames=8):
             tone = np.mean([t.astype(np.float32) for _, t in reads], axis=0).astype(np.uint8)
             out.setdefault(slot, {})[kind] = identify(shape, kind, tone=tone)
     return out
+
+
+HELD_MIN_MARGIN = 30  # l'arme tenue est en noir sur le bandeau (relief vers 120-140), l'autre en pâle (vers 40) : en dessous, on ne tranche pas
+HELD_OFFSETS = (-0.5, 0.0)  # images lues avant l'apparition de l'entrée du killfeed (le kill a eu lieu juste avant)
+
+
+def _held_scores(video, zone, width, height, t, index):
+    """Relief (95e centile) des deux armes du bandeau d'un joueur à l'instant t : (arme1, arme2), ou None."""
+    import names
+
+    crop = names._grab(video, t, zone, width, height)
+    if crop is None:
+        return None
+    h, w = crop.shape[:2]
+    bw = w / 4
+    banner = crop[:, int(index * bw) : int((index + 1) * bw)]
+    scores = []
+    for key in ("arme1", "arme2"):
+        a, b, c, d = BOXES[key]
+        piece = banner[int(c * h) : int(d * h), int(a * bw) : int(b * bw)]
+        scores.append(float(np.percentile(_dark(piece), 95)))
+    return scores[0], scores[1]
+
+
+def held_weapon(video, zones, width, height, t, slot):
+    """« arme1 » ou « arme2 » : l'arme que le joueur tenait juste avant l'instant t (la dernière image où le bandeau tranche nettement),
+    ou None si le bandeau est illisible ou ambigu (changement d'arme en cours, joueur mort)."""
+    import names
+
+    for key, slots in names.TEAM_SLOTS.items():
+        if slot in slots:
+            zone, index = zones[key], slots.index(slot)
+            break
+    else:
+        return None
+    held = None
+    for dt in HELD_OFFSETS:
+        scores = _held_scores(video, zone, width, height, t + dt, index)
+        if scores and abs(scores[0] - scores[1]) >= HELD_MIN_MARGIN:
+            held = "arme1" if scores[0] > scores[1] else "arme2"
+    return held

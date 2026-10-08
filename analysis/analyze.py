@@ -24,6 +24,7 @@ import positions
 import segments
 import timer
 import tracking
+import weapons
 
 ZONES_PATH = Path(__file__).with_name("default_zones.json")
 
@@ -139,6 +140,40 @@ def extract_loadouts(conn, video_id, path, meta, emit, control=None):
     return len(todo)
 
 
+def kill_weapon(path, meta, zones, loads, killer, t, grenade):
+    """Arme d'un kill : le gadget du tueur pour une grenade, sinon l'arme tenue sur son bandeau juste avant l'entrée du killfeed.
+    None si on ne sait pas (pas de tueur, bandeau illisible ou ambigu)."""
+    row = loads.get(killer) if killer is not None else None
+    if row is None:
+        return None
+    if grenade:
+        return row.get("gadget")
+    held = loadout.held_weapon(path, zones, meta["width"], meta["height"], t, killer)
+    return row.get(held) if held else None
+
+
+def _bar_zones(conn, g):
+    return {key: db.zone_for(conn, g["map"], key) for key in ("team_a_bar", "team_b_bar")}
+
+
+def upgrade_kill_weapons(conn, video_id, path, meta, emit, control=None):
+    """Kills déjà lus avec une icône de killfeed (« W… ») : l'arme est relue sur le bandeau du tueur, sans relire le killfeed."""
+    todo = db.games_with_icon_kills(conn, video_id)
+    for i, g in enumerate(todo):
+        wait_if_paused(control)
+        emit({"event": "progress", "stage": "kills", "pct": round(100 * i / len(todo), 1)})
+        zones, loads = _bar_zones(conn, g), db.loadouts_of(conn, g["id"])
+        for k in db.kills_of(conn, g["id"]):
+            if not (k["weapon"] or "").startswith("W"):
+                continue
+            weapon = None
+            if k["killer_slot"] is not None:
+                weapon = kill_weapon(path, meta, zones, loads, k["killer_slot"], k["t"], weapons.is_grenade_icon(k["weapon"]))
+            db.set_kill_weapon(conn, g["id"], k["t"], k["victim_slot"], weapon)
+        conn.commit()
+    return len(todo)
+
+
 def extract_kills(conn, video_id, path, meta, emit, control=None):
     """Killfeed des games qui ont leurs pseudos et pas encore de kills lus. Renvoie le nombre de games lues, ou (n, erreur)."""
     todo = db.games_without_kills(conn, video_id)
@@ -154,6 +189,10 @@ def extract_kills(conn, video_id, path, meta, emit, control=None):
             )
         except ocr.OcrUnavailable as exc:
             return done, str(exc)
+        zones, loads = _bar_zones(conn, g), db.loadouts_of(conn, g["id"])
+        for e in events:
+            if e.get("killer") is not None and (e["kind"] == "kill" or (e["kind"] == "suicide" and e.get("grenade"))):
+                e["weapon"] = kill_weapon(path, meta, zones, loads, e["killer"], e["t"], e.get("grenade"))
         db.replace_kills(conn, g["id"], events)
         done += 1
     return done, None
@@ -216,6 +255,7 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
         extract_loadouts(conn, video_id, path, meta, emit, control)
         extract_capture(conn, video_id, path, meta, emit, control)
         n_kills, kills_error = extract_kills(conn, video_id, path, meta, emit, control)
+        upgrade_kill_weapons(conn, video_id, path, meta, emit, control)
         if kills_error:
             message = f"{message} · killfeed non lu ({kills_error})" if message else f"Killfeed non lu ({kills_error})"
         step_s = pos_every / meta["fps"] if meta.get("fps") else positions.STEP_S

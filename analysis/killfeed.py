@@ -312,23 +312,15 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
         killer = max(set(known), key=known.count) if known else None
         icons = [i for i in ev["icons"] if i is not None]
         heads = [split_icon(mask)[1] for mask, _ in icons]
-        weapon = None
-        # 1. Comme avant : on cherche d'abord un modèle connu, en partant de l'image du milieu de l'affichage (la plus nette).
-        #    Les identifiants déjà en place ne changent donc pas.
-        for mask, _ in icons[len(icons) // 2 :] + icons[: len(icons) // 2]:
+        # L'arme n'est plus lue sur l'icône du killfeed (trop petite, trop sale) : elle vient du bandeau du tueur (analyze.kill_weapon).
+        # L'icône ne sert qu'à reconnaître le logo de grenade, compact : toutes les lectures du kill votent ensemble.
+        grenade = False
+        mask, _, _ = consensus_icon(icons)
+        if mask is not None:
             shape, _ = split_icon(mask)
-            if weapon is None and shape is not None:
-                weapon = weapons.identify(shape, create=False)
-        # 2. Icône inconnue : toutes les lectures du kill (images voisines) votent ensemble, et on ne crée un modèle que si la forme
-        #    est fiable. Une image sale ou un morceau de ligne ne fait plus une fausse arme.
-        if weapon is None:
-            mask, tone, _ = consensus_icon(icons)
-            if mask is not None:
-                shape, _ = split_icon(mask)
-                if shape is not None:
-                    shape = clean_icon(shape)
-                    if icon_is_reliable(shape):
-                        weapon = weapons.identify(shape, tone=tone)
+            if shape is not None:
+                shape = clean_icon(shape)
+                grenade = icon_is_reliable(shape) and weapons.is_grenade_shape(shape)
         kind = "environment" if ev["alone"] else ("unknown" if killer is None else ("suicide" if killer == ev["victim"] else "kill"))
-        out.append({"t": ev["t"], "kind": kind, "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": weapon, "headshot": sum(heads) * 2 > len(heads) if heads else False})
+        out.append({"t": ev["t"], "kind": kind, "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": None, "grenade": grenade, "headshot": sum(heads) * 2 > len(heads) if heads else False})
     return out

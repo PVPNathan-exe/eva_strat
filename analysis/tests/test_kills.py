@@ -265,3 +265,39 @@ def test_stray_pixels_are_removed_but_the_weapon_stays():
     mask[0, 0] = mask[13, 59] = 255
     cleaned = killfeed.clean_icon(mask)
     assert cleaned[0, 0] == 0 and cleaned[13, 59] == 0 and cleaned[6, 30] == 255
+
+
+def test_kill_weapon_comes_from_the_held_weapon_of_the_killer_banner(monkeypatch):
+    import analyze
+
+    loads = {2: {"arme1": "B2", "arme2": "B3", "gadget": "G1"}}
+    meta = {"width": 1920, "height": 1080}
+    monkeypatch.setattr(analyze.loadout, "held_weapon", lambda *a: "arme2")
+    assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=False) == "B3"
+    assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=True) == "G1"  # une grenade : le gadget du tueur
+    assert analyze.kill_weapon("v.mp4", meta, {}, loads, None, 10.0, grenade=False) is None  # pas de tueur
+    monkeypatch.setattr(analyze.loadout, "held_weapon", lambda *a: None)  # bandeau ambigu : on ne devine pas
+    assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=False) is None
+
+
+def test_held_weapon_is_the_black_icon_and_ignores_unclear_banners(monkeypatch):
+    import loadout
+    import names
+
+    def fake_scores(video, zone, width, height, t, index):
+        return {-0.5: (130.0, 40.0), 0.0: (35.0, 135.0)}[round(t, 1)]
+
+    monkeypatch.setattr(loadout, "_held_scores", fake_scores)
+    zones = {"team_a_bar": {}, "team_b_bar": {}}
+    assert loadout.held_weapon("v.mp4", zones, 1920, 1080, 0.0, 1) == "arme2"  # la dernière image tranchée l'emporte (changement d'arme)
+    monkeypatch.setattr(loadout, "_held_scores", lambda *a: (80.0, 70.0))
+    assert loadout.held_weapon("v.mp4", zones, 1920, 1080, 0.0, 1) is None
+    assert names.TEAM_SLOTS["team_a_bar"][0] == 1
+
+
+def test_grenade_logo_is_recognised_by_its_compact_shape():
+    compact = np.zeros((20, 20), np.uint8)
+    compact[3:17, 4:16] = 255
+    long = np.zeros((20, 60), np.uint8)
+    long[7:13, 3:57] = 255
+    assert weapons.is_grenade_shape(compact) and not weapons.is_grenade_shape(long)

@@ -245,6 +245,30 @@ def kills_of(conn, game_id):
     return [dict(r) for r in conn.execute("SELECT t, killer_slot, victim_slot, weapon, headshot, kind FROM kills WHERE game_id = ? ORDER BY t", (game_id,))]
 
 
+def loadouts_of(conn, game_id):
+    """Équipement des joueurs d'une game : {slot: {"arme1", "arme2", "gadget"}} (identifiants d'icônes)."""
+    return {
+        r["slot"]: {"arme1": r["weapon1"], "arme2": r["weapon2"], "gadget": r["gadget"]}
+        for r in conn.execute("SELECT slot, weapon1, weapon2, gadget FROM loadouts WHERE game_id = ?", (game_id,))
+    }
+
+
+def games_with_icon_kills(conn, video_id):
+    """Games dont des kills portent encore une icône de killfeed (« W… ») : à convertir en arme lue sur le bandeau du tueur."""
+    return [
+        dict(r)
+        for r in conn.execute(
+            "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
+            "AND id IN (SELECT game_id FROM kills WHERE weapon LIKE 'W%') ORDER BY start_s",
+            (video_id,),
+        )
+    ]
+
+
+def set_kill_weapon(conn, game_id, t, victim_slot, weapon):
+    conn.execute("UPDATE kills SET weapon = ? WHERE game_id = ? AND t = ? AND victim_slot = ?", (weapon, game_id, t, victim_slot))
+
+
 def games_without_loadouts(conn, video_id):
     return [
         dict(r)

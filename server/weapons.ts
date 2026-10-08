@@ -175,6 +175,8 @@ export function listWeapons(db: DatabaseSync, dir: string): WeaponEntry[] {
     .map((id) => ({ id, kind: KIND[id[0]], name: names[id] ?? '', inferred: !manual[id] && !!auto[id], uses: uses.get(id) ?? 0, sources: sources.get(id) ?? [] }))
     // Le logo de grenade du killfeed est le même pour toutes les grenades : rien à nommer, on ne le montre pas.
     .filter((w) => !(w.kind === 'killfeed' && squash(w.name) === 'grenade'))
+    // L'arme d'un kill se lit maintenant sur le bandeau du tueur : une icône de killfeed que plus aucun kill n'utilise n'est plus à nommer.
+    .filter((w) => !(w.kind === 'killfeed' && w.uses === 0))
     .sort((a, b) => a.kind.localeCompare(b.kind) || Number(a.id.slice(1)) - Number(b.id.slice(1)));
 }
 

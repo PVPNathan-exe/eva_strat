@@ -40,9 +40,19 @@ test('le catalogue range les icônes par type et compte leurs usages', () => {
   ]);
 });
 
+test('une icône de killfeed que plus aucun kill n’utilise n’est plus à nommer (l’arme vient du bandeau)', () => {
+  const ctx = testContext();
+  const d = dir();
+  const ids = listWeapons(ctx.db, d).map((w) => w.id);
+  assert.deepEqual(ids, ['B1', 'G1']);
+});
+
 test('nommer une arme écrit names.json, vider le nom le retire', () => {
   const ctx = testContext();
   const d = dir();
+  ctx.db.prepare("INSERT INTO videos (id, path, duration_s, fps, width, height) VALUES (1, '/v.mp4', 600, 30, 1920, 1080)").run();
+  ctx.db.prepare("INSERT INTO games (id, video_id, start_s, end_s) VALUES (1, 1, 10, 200)").run();
+  ctx.db.prepare("INSERT INTO kills (game_id, t, killer_slot, victim_slot, weapon) VALUES (1, 20, 1, 5, 'W1')").run();
   setWeaponName(d, 'W1', '  Blaster ');
   assert.deepEqual(JSON.parse(readFileSync(join(d, 'names.json'), 'utf-8')), { W1: 'Blaster' });
   assert.equal(listWeapons(ctx.db, d).find((w) => w.id === 'W1')?.name, 'Blaster');

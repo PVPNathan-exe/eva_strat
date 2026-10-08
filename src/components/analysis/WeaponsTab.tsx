@@ -38,9 +38,9 @@ export function WeaponsTab() {
         </label>
       </header>
       <p className="weapons__intro">
-        Ces noms servent au programme (liste des kills, équipement des joueurs). Il déduit tout seul le nom des armes du killfeed à partir de
-        l'équipement des joueurs qui ont fait les kills (marqué « deviné ») et ne te demande que ce qu'il ne trouve pas.
-        Le logo de grenade du killfeed, identique pour toutes les grenades, n'est pas affiché. Les propositions viennent de l'onglet Stratégie, tu peux aussi écrire un autre nom. Plusieurs icônes peuvent porter le même
+        Ces noms servent au programme (liste des kills, équipement des joueurs). L'arme d'un kill n'est plus lue sur le killfeed : c'est
+        l'arme tenue (en noir) sur le bandeau du tueur juste avant le kill, et le gadget du tueur pour une grenade. Il ne reste ici
+        que les icônes des bandeaux, et d'anciennes icônes de killfeed tant que des kills les utilisent encore. Les propositions viennent de l'onglet Stratégie, tu peux aussi écrire un autre nom. Plusieurs icônes peuvent porter le même
         nom (une même arme est parfois vue sous des aspects différents).
       </p>
       {error && <p className="games__error">{error}</p>}

@@ -117,3 +117,24 @@ def display_names(folder=ICON_DIR):
         except ValueError:
             return {}
     return {}
+
+
+GRENADE_MAX_ASPECT = 1.4  # le logo de grenade du killfeed est compact (presque carré) ; une arme à feu est longue et fine
+
+
+def is_grenade_shape(shape):
+    """Vrai si la forme (masque binaire nettoyé) est compacte comme le logo de grenade."""
+    ys, xs = np.nonzero(shape)
+    if xs.size == 0:
+        return False
+    return (xs.max() - xs.min() + 1) / (ys.max() - ys.min() + 1) < GRENADE_MAX_ASPECT
+
+
+def is_grenade_icon(icon_id, folder=ICON_DIR):
+    """Vrai si une icône de killfeed déjà enregistrée (« W5 ») est le logo de grenade : nommée GRENADE, ou de forme compacte."""
+    if str(display_names(folder).get(icon_id, "")).strip().upper() == "GRENADE":
+        return True
+    path = Path(folder) / "previews" / f"{icon_id}.png"
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if path.exists() else None
+    return img is not None and img.shape[0] > 0 and img.shape[1] / img.shape[0] < GRENADE_MAX_ASPECT
+
