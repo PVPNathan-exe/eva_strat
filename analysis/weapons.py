@@ -148,3 +148,14 @@ def is_grenade_icon(icon_id, folder=ICON_DIR):
     img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if path.exists() else None
     return img is not None and img.shape[0] > 0 and img.shape[1] / img.shape[0] < GRENADE_MAX_ASPECT
 
+
+def replace_template(icon_id, icon, tone=None, folder=ICON_DIR):
+    """Remplace le modèle d'une icône existante (même identifiant, même nom) par une forme recalculée, et son aperçu."""
+    ys, xs = np.nonzero(icon)
+    if xs.size < MIN_PIXELS:
+        raise ValueError("Forme trop petite pour servir de modèle")
+    shape = icon[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+    cv2.imwrite(str(Path(folder) / f"{icon_id}.png"), cv2.resize(shape, SIZE, interpolation=cv2.INTER_AREA))
+    _write_preview(folder, icon_id, icon, tone)
+    _cache.pop(str(folder), None)
+

@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { CaptureSeries, CommentTag, Correction, Game, JobEvent, Sample, Video, VideoComment, Weapon, Zones } from '../types/analysis';
+import type { CaptureSeries, CommentTag, IconCandidate, Correction, Game, JobEvent, Sample, Video, VideoComment, Weapon, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -14,7 +14,13 @@ const jsonInit = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-export const weaponIconUrl = (id: string) => `/api/weapons/${id}/icon`;
+// Change quand une icône est recalculée : le navigateur recharge alors l'image au lieu de montrer l'ancienne.
+let iconVersion = 0;
+export const bumpIconVersion = () => {
+  iconVersion += 1;
+};
+export const weaponIconUrl = (id: string) => `/api/weapons/${id}/icon?v=${iconVersion}`;
+export const candidateImageUrl = (id: string, token: string) => `/api/weapons/${id}/candidates/${token}.png`;
 export const streamUrl = (videoId: number) => `/api/videos/${videoId}/stream`;
 
 export const analysisApi = {
@@ -22,6 +28,10 @@ export const analysisApi = {
   games: (videoId: number) => fetch(`/api/games?video=${videoId}`).then(parse<Game[]>),
   weapons: () => fetch('/api/weapons', { cache: 'no-store' }).then(parse<Weapon[]>),
   nameWeapon: (id: string, name: string) => fetch(`/api/weapons/${id}`, jsonInit('PUT', { name })).then(parse<{ ok: true }>),
+  reviewWeapon: (id: string, review: { verdict?: 'ok' | 'bad' | null; reported?: boolean; reason?: string }) =>
+    fetch(`/api/weapons/${id}/review`, jsonInit('POST', review)).then(parse<{ ok: true }>),
+  iconCandidates: (id: string) => fetch(`/api/weapons/${id}/candidates`, { cache: 'no-store' }).then(parse<{ id: string; candidates: IconCandidate[] }>),
+  rebuildIcon: (id: string, token?: string) => fetch(`/api/weapons/${id}/rebuild`, jsonInit('POST', { token })).then(parse<{ id: string; used: string[] }>),
   capture: (gameId: number) => fetch(`/api/capture?game=${gameId}`, { cache: 'no-store' }).then(parse<CaptureSeries>),
   corrections: (gameId: number) => fetch(`/api/corrections?game=${gameId}`, { cache: 'no-store' }).then(parse<Correction[]>),
   swapPlayers: (gameId: number, slotA: number, slotB: number, t0: number, t1: number) =>

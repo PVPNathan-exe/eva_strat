@@ -52,8 +52,26 @@ export interface Weapon {
   /** Nom déduit par le programme (équipement des tueurs), pas saisi. */
   inferred: boolean;
   uses: number;
+  /** Signalée par l'utilisateur (ne représente pas la bonne arme, ou icônes superposées). */
+  reported: boolean;
+  /** Avis de l'utilisateur sur le nom deviné. */
+  verdict: 'ok' | 'bad' | null;
   /** Où l'icône a été vue (vidéo, game, instant, joueur). */
   sources: { videoId: number; gameId: number; video: string; game: number; map: string | null; t: number; player: string | null }[];
+}
+
+/** Image candidate pour recalculer une icône (lue sur un bandeau, autour d'un endroit où l'icône a été vue). */
+export interface IconCandidate {
+  token: string;
+  game: number;
+  slot: number;
+  field: string;
+  t: number;
+  /** Netteté du relief : une icône nette est en noir sur le bandeau. */
+  held: number;
+  sharp: number;
+  /** Image que le recalcul automatique retiendrait. */
+  auto: boolean;
 }
 
 export interface Kill {

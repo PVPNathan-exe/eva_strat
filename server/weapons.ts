@@ -13,6 +13,10 @@ export interface WeaponEntry {
   /** true : le nom a été déduit par le programme (équipement des tueurs), pas saisi. */
   inferred: boolean;
   uses: number;
+  /** L'utilisateur a signalé l'icône (elle ne représente pas la bonne arme, ou plusieurs icônes sont superposées). */
+  reported: boolean;
+  /** Avis de l'utilisateur sur le nom deviné par le programme : bon ou pas bon (null : pas d'avis). */
+  verdict: 'ok' | 'bad' | null;
   /** Où l'icône a été vue (pour la reconnaître : vidéo, game, instant). Au plus MAX_SOURCES, les premières. */
   sources: WeaponSource[];
 }
@@ -50,6 +54,55 @@ export function resolveStuff(weaponName: string | null, killerGadgetName: string
     if (grenade) return grenade;
   }
   return weaponName;
+}
+
+/** Avis de l'utilisateur, rangés dans reviews.json (versionné avec names.json). */
+export interface Review {
+  reported?: boolean;
+  reason?: string;
+  verdict?: 'ok' | 'bad';
+  /** Noms devinés que l'utilisateur a refusés : le programme ne les reproposera pas pour cette icône. */
+  rejected?: string[];
+}
+
+export function readReviews(dir: string): Record<string, Review> {
+  try {
+    const data = JSON.parse(readFileSync(join(dir, 'reviews.json'), 'utf-8')) as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(data).filter(([k, v]) => isWeaponId(k) && typeof v === 'object' && v !== null)) as Record<string, Review>;
+  } catch {
+    return {};
+  }
+}
+
+export interface ReviewPatch {
+  reported?: boolean;
+  reason?: string;
+  verdict?: 'ok' | 'bad' | null;
+  rejectName?: string;
+}
+
+export function setReview(dir: string, id: string, patch: ReviewPatch): void {
+  if (!isWeaponId(id)) throw new Error("Identifiant d'arme invalide");
+  const all = readReviews(dir);
+  const cur: Review = { ...(all[id] ?? {}) };
+  if (patch.reported !== undefined) {
+    if (patch.reported) {
+      cur.reported = true;
+      cur.reason = (patch.reason ?? '').trim().slice(0, 200) || undefined;
+    } else {
+      delete cur.reported;
+      delete cur.reason;
+    }
+  }
+  if (patch.verdict !== undefined) {
+    if (patch.verdict) cur.verdict = patch.verdict;
+    else delete cur.verdict;
+  }
+  if (patch.rejectName) cur.rejected = [...new Set([...(cur.rejected ?? []), patch.rejectName.trim().toUpperCase()])];
+  if (Object.keys(cur).length) all[id] = cur;
+  else delete all[id];
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'reviews.json'), JSON.stringify(all, null, 2) + '\n', 'utf-8');
 }
 
 export const isWeaponId = (id: string) => ID.test(id) && id[0] in KIND;
@@ -101,9 +154,10 @@ export function inferKillfeedNames(db: DatabaseSync, names: Record<string, strin
       if (!names[icon] && aspect !== null && aspect < GRENADE_MAX_ASPECT) out[icon] = 'GRENADE';
     }
   }
-  // 2. Équipement des tueurs pour les autres icônes.
+  // 2. Équipement des tueurs pour les autres icônes du killfeed (W). Les kills portent aussi des armes de bandeaux (B) et des gadgets (G),
+  //    déjà lus tels quels : rien à deviner pour eux.
   for (const [icon, kills] of byIcon) {
-    if (names[icon] || out[icon]) continue;
+    if (!icon.startsWith('W') || names[icon] || out[icon]) continue;
     const named = (id: string | null) => (id ? (names[id] ?? null) : null);
     const sets = kills
       .map((k) => new Set([named(k.w1), named(k.w2)].filter((n): n is string => !!n)))
@@ -116,6 +170,12 @@ export function inferKillfeedNames(db: DatabaseSync, names: Record<string, strin
       }
       const gadgets = kills.map((k) => named(k.gadget));
       if (common.length === 0 && gadgets.every((g) => g !== null && GRENADE_NAMES.some((n) => squash(n) === squash(g)))) out[icon] = 'GRENADE';
+    }
+  }
+  if (dir) {
+    const reviews = readReviews(dir);
+    for (const [icon, name] of Object.entries(out)) {
+      if (reviews[icon]?.rejected?.includes(name.trim().toUpperCase())) delete out[icon];
     }
   }
   return out;
@@ -162,6 +222,7 @@ export function listWeapons(db: DatabaseSync, dir: string): WeaponEntry[] {
   const names = { ...auto, ...manual };
   const uses = new Map<string, number>();
   const sources = sourcesOf(db);
+  const reviews = readReviews(dir);
   const add = (rows: unknown) => {
     for (const r of rows as { id: string | null; n: number }[]) if (r.id) uses.set(r.id, (uses.get(r.id) ?? 0) + r.n);
   };
@@ -172,7 +233,7 @@ export function listWeapons(db: DatabaseSync, dir: string): WeaponEntry[] {
   return readdirSync(dir)
     .filter((f) => f.endsWith('.png') && isWeaponId(f.slice(0, -4)))
     .map((f) => f.slice(0, -4))
-    .map((id) => ({ id, kind: KIND[id[0]], name: names[id] ?? '', inferred: !manual[id] && !!auto[id], uses: uses.get(id) ?? 0, sources: sources.get(id) ?? [] }))
+    .map((id) => ({ id, kind: KIND[id[0]], name: names[id] ?? '', inferred: !manual[id] && !!auto[id], uses: uses.get(id) ?? 0, reported: !!reviews[id]?.reported, verdict: reviews[id]?.verdict ?? null, sources: sources.get(id) ?? [] }))
     // Le logo de grenade du killfeed est le même pour toutes les grenades : rien à nommer, on ne le montre pas.
     .filter((w) => !(w.kind === 'killfeed' && squash(w.name) === 'grenade'))
     // L'arme d'un kill se lit maintenant sur le bandeau du tueur : une icône de killfeed que plus aucun kill n'utilise n'est plus à nommer.

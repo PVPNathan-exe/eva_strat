@@ -6,8 +6,9 @@
 //   GET  /api/weapons             catalogue des icônes d'armes ; PUT /api/weapons/:id nomme une arme ; GET /api/weapons/:id/icon l'image
 //   le reste                      handleApi (games, calibrations, vidéos)
 
+import { execFile } from 'node:child_process';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createReadStream, readFileSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream';
 import type { Plugin } from 'vite';
@@ -17,7 +18,7 @@ import { pickVideoFile } from './filePicker.ts';
 import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
 import { parseRange } from './range.ts';
-import { effectiveNames, iconFile, listWeapons, setWeaponName } from './weapons.ts';
+import { effectiveNames, iconFile, isWeaponId, listWeapons, setReview, setWeaponName, type ReviewPatch } from './weapons.ts';
 
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -78,6 +79,28 @@ export function analysisPlugin(): Plugin {
       const script = join(root, 'analysis', 'analyze.py');
       const python = process.env.EVA_PYTHON ?? 'python';
       const weaponsDir = join(root, 'analysis', 'weapon_icons');
+      const iconFixScript = join(root, 'analysis', 'icon_fix.py');
+      let iconFixQueue: Promise<unknown> = Promise.resolve();
+
+      /** Lance icon_fix.py (images candidates, recalcul d'une icône) : une seule à la fois (les suivantes attendent), résultat JSON sur la dernière ligne. */
+      const runIconFix = (args: string[]) => {
+        const job = iconFixQueue.then(() => runIconFixNow(args));
+        iconFixQueue = job.catch(() => undefined);
+        return job;
+      };
+      const runIconFixNow = (args: string[]) =>
+        new Promise<Record<string, unknown>>((resolve, reject) => {
+          execFile(python, [iconFixScript, ...args, '--db', dbPath], { timeout: 240000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, cwd: root }, (err, stdout, stderr) => {
+            const last = stdout.trim().split('\n').pop() ?? '';
+            try {
+              const json = JSON.parse(last) as Record<string, unknown>;
+              if (typeof json.error === 'string') return reject(new Error(json.error));
+              return resolve(json);
+            } catch {
+              return reject(new Error(err ? `Le recalcul a échoué : ${(stderr || err.message).trim().split('\n').slice(-2).join(' ')}` : 'Réponse illisible du recalcul'));
+            }
+          });
+        });
 
       const ctx: ApiContext = {
         db: openDb(dbPath, join(root, 'analysis', 'schema.sql')),
@@ -141,6 +164,57 @@ export function analysisPlugin(): Plugin {
               return sendJson(res, 400, { error: (err as Error).message });
             }
             return sendJson(res, 200, { ok: true });
+          }
+
+          const review = /^\/api\/weapons\/([A-Z]\d+)\/review$/.exec(url.pathname);
+          if (review && method === 'POST') {
+            const body = (await readJson(req)) as { verdict?: unknown; reported?: unknown; reason?: unknown } | undefined;
+            const patch: ReviewPatch = {};
+            const entry = listWeapons(ctx.db, weaponsDir).find((w) => w.id === review[1]);
+            if (body?.verdict === 'ok' || body?.verdict === 'bad' || body?.verdict === null) {
+              patch.verdict = body.verdict;
+              // « C'est bon » : le nom deviné devient un nom saisi ; « Pas bon » : on ne le reproposera plus pour cette icône.
+              if (body.verdict === 'ok' && entry?.inferred && entry.name) setWeaponName(weaponsDir, review[1], entry.name);
+              if (body.verdict === 'bad' && entry?.inferred && entry.name) patch.rejectName = entry.name;
+            }
+            if (typeof body?.reported === 'boolean') {
+              patch.reported = body.reported;
+              if (typeof body.reason === 'string') patch.reason = body.reason;
+            }
+            try {
+              setReview(weaponsDir, review[1], patch);
+            } catch (err) {
+              return sendJson(res, 400, { error: (err as Error).message });
+            }
+            return sendJson(res, 200, { ok: true });
+          }
+
+          const candidates = /^\/api\/weapons\/([A-Z]\d+)\/candidates$/.exec(url.pathname);
+          if (candidates && method === 'GET') {
+            try {
+              return sendJson(res, 200, await runIconFix(['candidates', `--id=${candidates[1]}`]));
+            } catch (err) {
+              return sendJson(res, 409, { error: (err as Error).message });
+            }
+          }
+          const candidateImage = /^\/api\/weapons\/([A-Z]\d+)\/candidates\/(\d+_\d+_\d+)\.png$/.exec(url.pathname);
+          if (candidateImage && method === 'GET') {
+            const file = join(weaponsDir, 'candidates', candidateImage[1], `${candidateImage[2]}.png`);
+            if (!isWeaponId(candidateImage[1]) || !existsSync(file)) return sendJson(res, 404, { error: 'Image inconnue' });
+            res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
+            return res.end(readFileSync(file));
+          }
+          const rebuild = /^\/api\/weapons\/([A-Z]\d+)\/rebuild$/.exec(url.pathname);
+          if (rebuild && method === 'POST') {
+            const body = (await readJson(req)) as { token?: unknown } | undefined;
+            const token = typeof body?.token === 'string' && /^\d+_\d+_\d+$/.test(body.token) ? body.token : undefined;
+            try {
+              const result = await runIconFix(['rebuild', `--id=${rebuild[1]}`, ...(token ? [`--token=${token}`] : [])]);
+              setReview(weaponsDir, rebuild[1], { reported: false });
+              return sendJson(res, 200, result);
+            } catch (err) {
+              return sendJson(res, 409, { error: (err as Error).message });
+            }
           }
 
           if (url.pathname === '/api/jobs/current' && method === 'GET') {

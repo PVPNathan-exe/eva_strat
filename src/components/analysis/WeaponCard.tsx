@@ -1,10 +1,12 @@
 // Une icône d'arme à nommer : son logo, son usage, et un champ de nom avec les propositions de l'onglet Stratégie.
 
 import { useState } from 'react';
+import { Check, Flag, X } from 'lucide-react';
 import { useAnalysisStore } from '../../store/analysisStore';
-import { weaponIconUrl } from '../../lib/analysisApi';
+import { analysisApi, weaponIconUrl } from '../../lib/analysisApi';
 import { SUGGESTIONS } from '../../lib/weaponCatalog';
 import type { Weapon } from '../../types/analysis';
+import { WeaponReport } from './WeaponReport';
 
 /** Listes de propositions (une par type d'icône) à placer une fois dans la page. */
 export function WeaponSuggestions() {
@@ -26,6 +28,10 @@ const formatTime = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t %
 export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: string, name: string) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const openAt = useAnalysisStore((s) => s.openAt);
+  const loadWeapons = useAnalysisStore((s) => s.loadWeapons);
+  const [reporting, setReporting] = useState(false);
+  // Avis sur le nom deviné : « bon » en fait un nom saisi, « pas bon » ne le fait plus reproposer pour cette icône.
+  const judge = (verdict: 'ok' | 'bad') => void analysisApi.reviewWeapon(weapon.id, { verdict }).then(() => loadWeapons()).catch(() => undefined);
   const commit = () => {
     if (draft !== null && draft.trim() !== weapon.name) onName(weapon.id, draft);
     setDraft(null);
@@ -57,6 +63,17 @@ export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: st
           </ul>
         </details>
       )}
+      {weapon.inferred && weapon.name && (
+        <div className="weapon__judge" title="Le programme a deviné ce nom : dis-lui s'il a juste">
+          <span>Deviné : bon ?</span>
+          <button type="button" onClick={() => judge('ok')} aria-label="Le nom deviné est bon">
+            <Check className="ic" /> Bon
+          </button>
+          <button type="button" onClick={() => judge('bad')} aria-label="Le nom deviné est faux">
+            <X className="ic" /> Pas bon
+          </button>
+        </div>
+      )}
       <input
         list={`weapon-names-${weapon.kind}`}
         placeholder="Nom de l'arme"
@@ -65,6 +82,10 @@ export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: st
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
+      <button type="button" className={`weapon__report${weapon.reported ? ' is-reported' : ''}`} onClick={() => setReporting(true)} title="Cette icône ne représente pas la bonne arme, ou plusieurs icônes sont superposées">
+        <Flag className="ic" /> {weapon.reported ? 'Signalée' : 'Signaler'}
+      </button>
+      {reporting && <WeaponReport weapon={weapon} onClose={() => setReporting(false)} />}
     </div>
   );
 }

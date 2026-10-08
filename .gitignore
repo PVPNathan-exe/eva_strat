@@ -28,3 +28,6 @@ data/
 __pycache__/
 .pytest_cache/
 *.mp4
+
+# Images candidates des icônes d'armes signalées (recréées à la demande)
+analysis/weapon_icons/candidates/

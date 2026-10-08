@@ -170,3 +170,28 @@ test('un logo compact du killfeed est une grenade, même si deux tueurs ont une 
   writeFileSync(join(d, 'names.json'), JSON.stringify({ ...NAMES, W2: 'DX3' }));
   assert.equal(effectiveNames(ctx.db, d).W2, 'DX3'); // un nom saisi passe toujours avant
 });
+
+import { readReviews, setReview } from '../../server/weapons.ts';
+
+test('les avis sur une icône sont rangés dans reviews.json, un nom refusé n’est plus proposé', () => {
+  const d = dir();
+  setReview(d, 'B1', { reported: true, reason: '  superposée ' });
+  assert.deepEqual(readReviews(d), { B1: { reported: true, reason: 'superposée' } });
+  setReview(d, 'B1', { verdict: 'bad', rejectName: 'spectre' });
+  setReview(d, 'B1', { rejectName: 'SPECTRE' });
+  assert.deepEqual(readReviews(d).B1?.rejected, ['SPECTRE']); // pas de doublon, toujours en majuscules
+  setReview(d, 'B1', { reported: false, verdict: null });
+  assert.deepEqual(readReviews(d).B1, { rejected: ['SPECTRE'] });
+  assert.throws(() => setReview(d, '../x', { reported: true }), /invalide/);
+});
+
+test('une icône signalée ou jugée est indiquée dans le catalogue', () => {
+  const ctx = testContext();
+  const d = dir();
+  setReview(d, 'B1', { reported: true });
+  setReview(d, 'G1', { verdict: 'ok' });
+  const list = listWeapons(ctx.db, d);
+  assert.equal(list.find((w) => w.id === 'B1')?.reported, true);
+  assert.equal(list.find((w) => w.id === 'G1')?.verdict, 'ok');
+  assert.equal(list.find((w) => w.id === 'B1')?.verdict, null);
+});
