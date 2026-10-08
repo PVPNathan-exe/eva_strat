@@ -25,7 +25,7 @@ export function IngestBar() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (target && !job.running) void startIngest(target, { preRoll, postRoll });
+    if (target && !job.running) void startIngest(target, { preRoll, postRoll, skipIfOk: true });
   };
 
   const browse = async () => {
@@ -57,7 +57,7 @@ export function IngestBar() {
         <button
           type="submit"
           disabled={job.running || !target}
-          title={source.trim() ? 'Charge et analyse ce fichier ou cette URL' : "Relit toute la vidéo choisie (champ vide) : détection des games et des cartes"}
+          title={source.trim() ? 'Charge et analyse ce fichier ou cette URL' : 'Analyse la vidéo choisie (rien n'est relu si toutes ses games sont déjà vérifiées)'}
         >
           Analyser
         </button>
