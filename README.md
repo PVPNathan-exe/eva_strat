@@ -9,13 +9,13 @@ En tant qu'admin tu peux :
 - gérer plusieurs **étages** (jusqu'à 3 niveaux, reliés par ascenseurs) ;
 - afficher une **vision joueur en cône** qui bute sur les murs *(à venir)* ;
 - déplacer les **joueurs** entre les étages *(à venir)* ;
-- **sauvegarder** la config (murs + étages) par carte — auto dans le navigateur + export/import JSON — pour ne pas tout refaire.
+- **sauvegarder** la config (murs + étages) par carte (auto dans le navigateur + export/import JSON) pour ne pas tout refaire.
 
 ## Stack
 
 - [Vite](https://vite.dev/) + React + TypeScript
-- [Konva](https://konvajs.org/) / `react-konva` — canvas interactif
-- [Zustand](https://github.com/pmndrs/zustand) — état global + persistance `localStorage`
+- [Konva](https://konvajs.org/) / `react-konva` : canvas interactif
+- [Zustand](https://github.com/pmndrs/zustand) : état global + persistance `localStorage`
 
 ## Démarrer
 
@@ -62,13 +62,17 @@ On charge un .mp4 (bouton « Parcourir… » ou chemin collé) ou une URL YouTub
 
 **Cohérence des positions** : les pastilles lues image par image sont reliées dans le temps (`analysis/tracking.py`) : chaque trajectoire reçoit son joueur par vote de tous ses numéros lus, les croix sont rattachées au joueur qui vient de s'arrêter à cet endroit, les disparitions courtes sont comblées et les directions sont lissées (le sens est choisi sur toute la trajectoire, pas image par image). Les positions déjà lues avec un ancien algorithme sont refaites automatiquement.
 
+**Direction des joueurs** : l'axe de la pastille est mesuré sur sa forme (stable) ; le sens (avant ou arrière) vient de l'asymétrie de la goutte, de la silhouette complète pour le joueur observé (blanc plus liseré coloré) et du déplacement : un joueur regarde presque toujours là où il court, ce qui tranche quand la forme est ambiguë. Le sens est choisi sur toute la trajectoire.
+
 **Réglage automatique du suivi** (`analysis/tune.py`) : les réglages du suivi sont dans `analysis/tracking_params.json` (versionné : un `git pull` sur un autre PC les retrouve). Pour les améliorer avec de nouvelles rediffs : charger la vidéo et lancer « Analyser » (les games et leurs cartes doivent être justes), puis `python analysis/tune.py build --video "chemin.mp4" --name ceres-2` (extrait les détections dans `analysis/datasets/`, sans avoir besoin de la vidéo ensuite), `python analysis/tune.py eval` (note actuelle) et `python analysis/tune.py search --minutes 10` (cherche de meilleurs réglages ; ils ne sont sauvegardés que s'ils font mieux, et la recherche repart toujours des meilleurs connus). La note vient d'un test sans vérité manuelle : 70 % des numéros lus sur les pastilles sont cachés, et on regarde si le suivi retrouve le bon joueur. Plusieurs vidéos d'une même carte avec des déplacements différents rendent les réglages plus généraux. L'historique de toutes les sauvegardes est dans `analysis/tracking_params.history.jsonl`.
 
 **Pseudos** : les 8 pseudos de chaque game sont lus sur les bandeaux du haut (reconnaissance de texte intégrée à Windows, sans installation), par vote sur plusieurs images ; un pseudo tronqué par le jeu suffit, il sert seulement à reconnaître le joueur. L'ordre des bandeaux donne le numéro 1 à 8. Ils s'affichent en infobulle dans le replay, et la case « Pseudos » les écrit près des pastilles. Les zones « Équipe gauche/droite » du HUD incluent les numéros, et deux zones « % de capture » (une par équipe) sont calibrables en vue de la lecture des captures.
 
+**Noms déduits** : le nom d'une arme du killfeed est déduit de l'équipement du tueur (l'arme d'un kill est forcément dans son équipement) : si une icône revient chez plusieurs tueurs qui n'ont qu'une arme nommée en commun, c'est elle ; si aucune arme n'est commune mais que tous les tueurs ont une grenade équipée, c'est le logo générique « GRENADE », qui n'est pas affiché dans l'onglet Armes. Un nom déduit est marqué « deviné » ; un nom saisi passe toujours avant. Plus il y a de games analysées, plus le programme en déduit.
+
 **Armes inconnues** : après chaque analyse, si le programme a rencontré des icônes d'armes qu'il ne connaît pas, une fenêtre demande leur nom (propositions tirées de l'onglet Stratégie ; « Plus tard » la ferme jusqu'à la prochaine nouveauté), et l'onglet Armes affiche le nombre d'icônes sans nom. Pour un kill à la grenade, le logo du killfeed est le même pour toutes les grenades : le programme prend alors la grenade équipée par le tueur (DX3 ou STICKY, lue sur son bandeau).
 
-**Onglet Armes** : toutes les icônes vues par l'analyse y sont rangées en trois catalogues — les armes du killfeed (W…), les deux armes de chaque joueur lues sur les bandeaux (B…, l'arme tenue en noir, l'autre en pâle) et les gadgets (G…). On tape le nom sous chaque logo ; il est enregistré dans `analysis/weapon_icons/names.json` (versionné, comme les icônes) et affiché dans la liste des kills. Plusieurs icônes peuvent porter le même nom. Dans le killfeed, la petite cible est le marqueur de headshot (retirée de l'icône de l'arme) ; un kill sans tueur est une mort du décor ou d'un admin ; le même pseudo des deux côtés est un suicide.
+**Onglet Armes** : toutes les icônes vues par l'analyse y sont rangées en trois catalogues : les armes du killfeed (W…), les deux armes de chaque joueur lues sur les bandeaux (B…, l'arme tenue en noir, l'autre en pâle) et les gadgets (G…). On tape le nom sous chaque logo ; il est enregistré dans `analysis/weapon_icons/names.json` (versionné, comme les icônes) et affiché dans la liste des kills. Plusieurs icônes peuvent porter le même nom. Dans le killfeed, la petite cible est le marqueur de headshot (retirée de l'icône de l'arme) ; un kill sans tueur est une mort du décor ou d'un admin ; le même pseudo des deux côtés est un suicide.
 
 **Score de capture** : les pourcentages de chaque équipe (de part et d'autre du chrono, zones « % de capture » calibrables) sont lus chiffre par chiffre à partir de modèles (`analysis/capture_digits.npz`), nettoyés (valeurs aberrantes écartées, petits trous comblés) et tracés sous le replay ; un clic sur la courbe déplace le replay.
 

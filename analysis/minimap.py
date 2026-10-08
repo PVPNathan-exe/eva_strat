@@ -249,12 +249,13 @@ def find_markers(crop, templates=None):
     scale = _scale(crop)
     found = []
 
-    def add(blob, team, alive, spectated):
+    def add(blob, team, alive, spectated, silhouette=None):
         m = cv2.moments(blob, binaryImage=True)
         if not m["m00"]:
             return
         glyph = _glyph(gray, blob)
-        orient = _orientation(blob) if alive else None
+        # Direction mesurée sur la silhouette complète (pour le joueur observé : blanc + liseré coloré, dont la pointe est plus nette).
+        orient = _orientation(silhouette if silhouette is not None else blob) if alive else None
         number = _read_blue_digit(glyph, templates) if team == "B" else _read_digit(glyph, templates)
         found.append(
             {
@@ -288,5 +289,8 @@ def find_markers(crop, templates=None):
         }
         team = max(votes, key=votes.get)
         if votes[team] >= 10 * scale:
-            add(blob, team, alive=True, spectated=True)
+            # Le liseré coloré qui entoure la pastille blanche en dessine la pointe : on l'ajoute pour mesurer la direction.
+            rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)
+            silhouette = cv2.morphologyEx(np.maximum(blob, rim.astype(np.uint8)), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+            add(blob, team, alive=True, spectated=True, silhouette=silhouette)
     return found

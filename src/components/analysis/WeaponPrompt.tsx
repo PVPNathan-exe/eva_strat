@@ -22,7 +22,7 @@ export function WeaponPrompt() {
         </div>
         <p className="weapons__intro">
           Le programme ne connaît pas {unnamed.length > 1 ? 'ces icônes' : 'cette icône'}. Choisis son nom dans la liste (armes de l'onglet
-          Stratégie) ; c'est seulement utile pour l'analyse. Toutes les grenades du killfeed ont le même logo : nomme-le « GRENADE ».
+          Stratégie) ; c'est seulement utile pour l'analyse. Le programme a déjà déduit tout ce qu'il pouvait de l'équipement des joueurs.
         </p>
         <WeaponSuggestions />
         <div className="weapons__grid">

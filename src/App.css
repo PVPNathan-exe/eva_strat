@@ -1171,3 +1171,45 @@
   max-height: 86vh;
   overflow-y: auto;
 }
+
+.weapon.is-inferred {
+  border-style: dashed;
+}
+
+.weapon__meta em {
+  color: #ffb454;
+  font-style: normal;
+  font-size: 0.72rem;
+}
+
+/* --- Icônes (lucide-react) --- */
+.ic {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+button:has(> .ic),
+.replay__dot b:has(> .ic) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.replay__dot .ic {
+  width: 0.9em;
+  height: 0.9em;
+  vertical-align: middle;
+}
+
+.ic--hs {
+  color: #ff6b6b;
+  margin-left: 0.25rem;
+}
+
+.replay__fixrow > .ic {
+  flex: none;
+  color: #9aa3b8;
+}

@@ -163,7 +163,7 @@ export const useMapStore = create<MapState>()(
         })),
 
       // Supprime un étage et renumérote les étages restants pour qu'ils
-      // restent contigus (0, 1, 2…) — le bouton « + étage » se base sur le
+      // restent contigus (0, 1, 2…) : le bouton « + étage » se base sur le
       // nombre d'étages pour le niveau suivant. On garde toujours ≥ 1 étage.
       removeFloor: (mapId, level) =>
         set((state) => {

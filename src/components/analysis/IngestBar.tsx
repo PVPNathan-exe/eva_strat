@@ -2,6 +2,7 @@
 // et choix de la vidéo déjà analysée.
 
 import { useState } from 'react';
+import { Pause, Play, Square } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { useAnalysisStore } from '../../store/analysisStore';
 
@@ -141,9 +142,11 @@ export function IngestBar() {
             <span>Lecture du fichier…</span>
           )}
           <button onClick={() => void controlJob(job.paused ? 'resume' : 'pause')}>
-            {job.paused ? '▶ Reprendre' : '⏸ Pause'}
+            {job.paused ? <Play className="ic" /> : <Pause className="ic" />} {job.paused ? 'Reprendre' : 'Pause'}
           </button>
-          <button onClick={() => void controlJob('stop')}>■ Arrêter</button>
+          <button onClick={() => void controlJob('stop')}>
+            <Square className="ic" /> Arrêter
+          </button>
         </div>
       )}
       {pickError && <span className="ingest__error">{pickError}</span>}

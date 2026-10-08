@@ -35,6 +35,8 @@ export interface Weapon {
   id: string;
   kind: WeaponKind;
   name: string;
+  /** Nom déduit par le programme (équipement des tueurs), pas saisi. */
+  inferred: boolean;
   uses: number;
 }
 

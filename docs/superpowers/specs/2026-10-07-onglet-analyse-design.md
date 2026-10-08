@@ -1,4 +1,4 @@
-# Onglet Analyse — design (chantier 1)
+# Onglet Analyse : design (chantier 1)
 
 Date : 2026-10-07
 Statut : à relire

@@ -43,6 +43,7 @@ BOUNDS = {
     "VOTE_MISMATCH": (0.02, 0.3),
     "SKEW_FULL": (0.05, 1.5),
     "FLIP_COST": (0.5, 8.0),
+    "MOVE_WEIGHT": (0.0, 5.0),
 }
 
 KEEP = ("team", "x", "y", "number", "slot", "angle", "axis", "skew", "alive", "spectated")

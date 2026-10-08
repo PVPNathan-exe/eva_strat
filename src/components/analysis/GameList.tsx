@@ -2,6 +2,7 @@
 // suppression, et pose des marqueurs début puis fin d'une nouvelle game.
 
 import { useState } from 'react';
+import { ArrowLeftToLine, ArrowRight, ArrowRightToLine, Play, Square } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { formatTime } from '../../lib/timeline';
@@ -54,14 +55,14 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
       <div className="game__head" onClick={() => { selectGame(g.id); requestSeek(g.start_s); }}>
         <strong>Game {index + 1}</strong>
         <span className="game__time">
-          {formatTime(g.start_s)} → {formatTime(g.end_s)}
+          {formatTime(g.start_s)} <ArrowRight className="ic" /> {formatTime(g.end_s)}
         </span>
       </div>
       {(g.status === 'detected' || g.doubts.length > 0) && (
         <div className="game__check">
           <span>
             {g.status === 'detected' ? 'Détectée automatiquement' : 'Écart avec la détection automatique'}
-            {g.doubts.length ? ' — à vérifier :' : ''}
+            {g.doubts.length ? ' (à vérifier) :' : ''}
           </span>
           {g.doubts.map((d, i) => (
             <button key={i} className="game__doubt" onClick={() => requestSeek(d.start_s)}>
@@ -82,10 +83,10 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
           ))}
         </select>
         <button title="Début = position actuelle" onClick={() => void act(() => analysisApi.patchGame(g.id, { start_s: currentTime }))}>
-          ⇤ début ici
+          <ArrowLeftToLine className="ic" /> début ici
         </button>
         <button title="Fin = position actuelle" onClick={() => void act(() => analysisApi.patchGame(g.id, { end_s: currentTime }))}>
-          fin ici ⇥
+          fin ici <ArrowRightToLine className="ic" />
         </button>
         <button
           className="game__delete"
@@ -102,10 +103,14 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
       <div className="games__head">
         <h3>Games ({games.length})</h3>
         {pendingStart === null ? (
-          <button onClick={markStart}>▶ Début de game ici</button>
+          <button onClick={markStart}>
+            <Play className="ic" /> Début de game ici
+          </button>
         ) : (
           <div className="games__marking">
-            <button onClick={() => void markEnd()}>■ Fin de game ici</button>
+            <button onClick={() => void markEnd()}>
+              <Square className="ic" /> Fin de game ici
+            </button>
             <button onClick={() => setPendingStart(null)}>Annuler</button>
           </div>
         )}

@@ -3,6 +3,7 @@
 // Les positions sont normalisées sur la minimap du jeu : un cadre réglable (par carte) les ramène sur l'image du plan.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeftRight, ArrowRight, Crosshair, Pause, Play, X } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { formatTime } from '../../lib/timeline';
@@ -292,7 +293,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
               title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.confidence !== null && p.confidence < 1 ? ` · identité ${Math.round(p.confidence * 100)} %` : ''}`}
             >
               {p.alive && p.angle !== null && <i className="replay__dir" style={{ transform: `rotate(${p.angle}deg)` }} />}
-              <b>{p.alive ? numberOfSlot(p.slot) : '✕'}</b>
+              <b>{p.alive ? numberOfSlot(p.slot) : <X className="ic" strokeWidth={3} />}</b>
               {labels && nameOf.get(p.slot) && <em className="replay__name">{nameOf.get(p.slot)}</em>}
             </div>
           );
@@ -302,7 +303,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
 
       <div className="replay__bar">
         <button onClick={togglePlay} title={follow ? 'Rejouer sans la vidéo' : playing ? 'Pause' : 'Lecture'}>
-          {!follow && playing ? '⏸' : '▶'}
+          {!follow && playing ? <Pause className="ic" /> : <Play className="ic" />}
         </button>
         <input
           type="range"
@@ -397,7 +398,9 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
                 ) : (
                   <span style={{ color: TEAM_COLOR[k.killer > 4 ? 'B' : 'A'] }}>{nameOf.get(k.killer) ?? `n° ${numberOfSlot(k.killer)}`}</span>
                 )}
-                <i title={k.weapon ? `${k.stuff ?? k.weaponName ?? 'arme non nommée'} (icône ${k.weapon})` : 'arme inconnue'}>{k.stuff ?? k.weaponName ?? k.weapon ?? '·'}{k.headshot ? ' 🎯' : ''}</i>
+                <i title={k.weapon ? `${k.stuff ?? k.weaponName ?? 'arme non nommée'} (icône ${k.weapon})` : 'arme inconnue'}>{k.stuff ?? k.weaponName ?? k.weapon ?? '·'}
+                  {k.headshot && <Crosshair className="ic ic--hs" aria-label="Headshot" />}
+                </i>
                 <span style={{ color: TEAM_COLOR[k.victim > 4 ? 'B' : 'A'] }}>{nameOf.get(k.victim) ?? `n° ${numberOfSlot(k.victim)}`}</span>
               </li>
             ))}
@@ -509,7 +512,7 @@ function FixForm(props: {
           <option value="">Joueur A…</option>
           {slots.map((s) => <option key={s} value={s}>{label(s)}</option>)}
         </select>
-        <span>↔</span>
+        <ArrowLeftRight className="ic" />
         <select value={pickB ?? ''} disabled={pickA === null} onChange={(e) => props.setPickB(e.target.value ? Number(e.target.value) : null)}>
           <option value="">Joueur B…</option>
           {optionsFor(pickA).map((s) => <option key={s} value={s}>{label(s)}</option>)}
@@ -528,7 +531,7 @@ function FixForm(props: {
           {corrections.map((c) => (
             <li key={c.id}>
               <span>
-                {formatTime(c.t0 - game.start_s)} → {formatTime(c.t1 - game.start_s)} : {nameOf.get(c.slot_a) ?? `n° ${numberOfSlot(c.slot_a)}`} ↔ {nameOf.get(c.slot_b) ?? `n° ${numberOfSlot(c.slot_b)}`}
+                {formatTime(c.t0 - game.start_s)} <ArrowRight className="ic" /> {formatTime(c.t1 - game.start_s)} : {nameOf.get(c.slot_a) ?? `n° ${numberOfSlot(c.slot_a)}`} <ArrowLeftRight className="ic" /> {nameOf.get(c.slot_b) ?? `n° ${numberOfSlot(c.slot_b)}`}
               </span>
               <button disabled={busy} onClick={() => void run(() => analysisApi.undoCorrection(c.id))}>Annuler</button>
             </li>

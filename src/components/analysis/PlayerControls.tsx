@@ -2,6 +2,7 @@
 // L'état lecture/pause vient des événements du <video> ; les déplacements passent par requestSeek.
 
 import { useEffect, useState } from 'react';
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { formatTime } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 
@@ -55,7 +56,7 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
   return (
     <div className="controls">
       <button onClick={togglePlay} title={playing ? 'Pause' : 'Lecture'}>
-        {playing ? '⏸' : '▶'}
+        {playing ? <Pause className="ic" /> : <Play className="ic" />}
       </button>
       <button onClick={() => skip(-5)}>−5 s</button>
       <button onClick={() => skip(5)}>+5 s</button>
@@ -77,7 +78,7 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
         ))}
       </select>
       <button onClick={toggleMute} title={muted ? 'Activer le son' : 'Couper le son'}>
-        {muted ? '🔇' : '🔊'}
+        {muted ? <VolumeX className="ic" /> : <Volume2 className="ic" />}
       </button>
     </div>
   );

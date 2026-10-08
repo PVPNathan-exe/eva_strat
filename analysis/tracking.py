@@ -244,6 +244,9 @@ def _attach_crosses(dead_tracks, alive_tracks, step_s, deaths=None, times=None):
 
 
 SKEW_FULL = 0.25  # asymétrie à partir de laquelle le sens est considéré comme sûr
+MOVE_WEIGHT = 1.5  # poids du critère « le regard suit le déplacement » dans le choix du sens
+MOVE_MIN_SPEED = 0.02  # en dessous, le joueur est à l'arrêt : son regard n'a aucun lien avec un déplacement
+MOVE_SPEED_FULL = 0.08  # vitesse (normalisée, par seconde) à partir de laquelle ce critère a son poids plein
 FLIP_COST = 2.5  # coût d'un retournement de sens entre deux lectures successives
 
 
@@ -251,10 +254,13 @@ def _angdist(a, b):
     return abs((a - b + 180) % 360 - 180)
 
 
-def _choose_directions(obs):
+def _choose_directions(obs, moves=None):
     """obs : {indice: (axe, asymétrie)} -> {indice: angle}. Programmation dynamique sur le sens (axe ou axe + 180) :
     chaque lecture « vote » pour le sens de son asymétrie, proportionnellement à sa netteté, et un retournement d'une
-    lecture à l'autre coûte cher. Un sens isolé et douteux est donc corrigé, un vrai demi-tour soutenu est conservé."""
+    lecture à l'autre coûte cher. Un sens isolé et douteux est donc corrigé, un vrai demi-tour soutenu est conservé.
+
+    moves : {indice: (cap, vitesse)} : un joueur regarde presque toujours dans la direction où il avance, ce qui tranche le sens quand
+    la forme de la pastille est ambiguë (surtout la pastille blanche du joueur observé). Poids proportionnel à la vitesse."""
     keys = sorted(k for k, v in obs.items() if v[0] is not None)
     if not keys:
         return {}
@@ -264,7 +270,14 @@ def _choose_directions(obs):
         axis, skew = obs[k]
         w = min(1.0, abs(skew) / SKEW_FULL)
         prefers = 0 if skew >= 0 else 1
-        return 0.0 if c == prefers else w
+        cost = 0.0 if c == prefers else w
+        move = moves.get(k) if moves else None
+        if move is not None:
+            heading, speed = move
+            weight = MOVE_WEIGHT * min(1.0, speed / MOVE_SPEED_FULL)
+            # 0 si le regard suit le déplacement, 1 s'il lui tourne le dos
+            cost += weight * (1 - math.cos(math.radians(ang[k][c] - heading))) / 2
+        return cost
 
     cost = [[unary(keys[0], 0), unary(keys[0], 1)]]
     back = []
@@ -376,7 +389,17 @@ def solve(frames, step_s, deaths=None):
                     obs[k] = (d["axis"], d.get("skew") or 0.0)
                 elif d.get("angle") is not None:  # détection sans asymétrie connue : on retient le sens donné
                     obs[k] = (d["angle"] % 180, 1.0 if d["angle"] < 180 else -1.0)
-            chosen = _choose_directions(obs)
+            # Cap et vitesse de déplacement (différence centrée sur quelques lectures voisines).
+            moves = {}
+            for j, k in enumerate(idx):
+                a, b = idx[max(0, j - 2)], idx[min(len(idx) - 1, j + 2)]
+                dt = times.get(b, 0.0) - times.get(a, 0.0)
+                if b != a and dt > 0:
+                    dx, dy = t.pts[b]["x"] - t.pts[a]["x"], t.pts[b]["y"] - t.pts[a]["y"]
+                    speed = math.hypot(dx, dy) / dt
+                    if speed >= MOVE_MIN_SPEED:
+                        moves[k] = (math.degrees(math.atan2(dy, dx)) % 360, speed)
+            chosen = _choose_directions(obs, moves)
             smooth = _smooth_angles({k: chosen.get(k) for k in idx}, half)
             for k in idx:
                 d = t.pts[k]
@@ -408,7 +431,7 @@ def solve(frames, step_s, deaths=None):
 PARAMS_PATH = Path(__file__).with_name("tracking_params.json")
 TUNABLE = (
     "GATE_BASE", "GATE_SPEED", "MAX_MISS_S", "ASSIGN_GAP_S", "ASSIGN_GAP_DIST",
-    "X_LINK_S", "X_LINK_DIST", "SMOOTH_S", "VOTE_MISMATCH", "SKEW_FULL", "FLIP_COST",
+    "X_LINK_S", "X_LINK_DIST", "SMOOTH_S", "VOTE_MISMATCH", "SKEW_FULL", "FLIP_COST", "MOVE_WEIGHT",
 )
 
 
@@ -423,7 +446,8 @@ def configure(params):
             globals()[name] = float(value)
 
 
-PARAMS_VERSION = 0  # version des réglages sauvegardés (0 : réglages d'origine)
+ALGO_REVISION = 1  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
 def _load_saved():
@@ -432,7 +456,7 @@ def _load_saved():
         try:
             saved = json.loads(PARAMS_PATH.read_text(encoding="utf-8"))
             configure(saved.get("params", {}))
-            PARAMS_VERSION = int(saved.get("version", 0))
+            PARAMS_VERSION = int(saved.get("version", 0)) + ALGO_REVISION
         except (OSError, ValueError):
             pass  # fichier illisible : réglages d'origine
 

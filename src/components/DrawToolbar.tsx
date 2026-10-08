@@ -1,15 +1,17 @@
 // Barre d'outils de dessin : choix de l'outil, couleur, épaisseur du trait,
 // effacer la forme sélectionnée ou tout l'étage.
 
+import { Circle, MousePointer2, Pencil, RectangleHorizontal, Slash } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useMapStore } from '../store/mapStore';
 import type { Tool } from '../types/map';
 
-const TOOLS: { id: Tool; label: string; title: string }[] = [
-  { id: 'select', label: '⬚ Sélection', title: 'Sélectionner / déplacer (Suppr pour effacer)' },
-  { id: 'line', label: '╱ Ligne', title: 'Tracer une ligne droite' },
-  { id: 'rect', label: '▭ Rectangle', title: 'Dessiner un rectangle' },
-  { id: 'ellipse', label: '◯ Cercle', title: 'Dessiner un cercle / une ellipse' },
-  { id: 'pen', label: '✎ Crayon', title: 'Tracé libre' },
+const TOOLS: { id: Tool; icon: ReactNode; label: string; title: string }[] = [
+  { id: 'select', icon: <MousePointer2 className="ic" />, label: 'Sélection', title: 'Sélectionner / déplacer (Suppr pour effacer)' },
+  { id: 'line', icon: <Slash className="ic" />, label: 'Ligne', title: 'Tracer une ligne droite' },
+  { id: 'rect', icon: <RectangleHorizontal className="ic" />, label: 'Rectangle', title: 'Dessiner un rectangle' },
+  { id: 'ellipse', icon: <Circle className="ic" />, label: 'Cercle', title: 'Dessiner un cercle / une ellipse' },
+  { id: 'pen', icon: <Pencil className="ic" />, label: 'Crayon', title: 'Tracé libre' },
 ];
 
 export function DrawToolbar() {
@@ -37,7 +39,7 @@ export function DrawToolbar() {
             className={t.id === activeTool ? 'is-active' : ''}
             onClick={() => setActiveTool(t.id)}
           >
-            {t.label}
+            {t.icon} {t.label}
           </button>
         ))}
       </div>

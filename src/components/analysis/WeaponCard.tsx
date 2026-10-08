@@ -27,10 +27,11 @@ export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: st
     setDraft(null);
   };
   return (
-    <div className={`weapon${weapon.name ? ' is-named' : ''}`}>
+    <div className={`weapon${weapon.name ? ' is-named' : ''}${weapon.inferred ? ' is-inferred' : ''}`}>
       <img src={weaponIconUrl(weapon.id)} alt={`Icône ${weapon.id}`} />
       <div className="weapon__meta">
         <b>{weapon.id}</b>
+        {weapon.inferred && <em title="Déduit de l'équipement des joueurs qui ont fait ces kills. Modifie-le si c'est faux.">deviné</em>}
         <span title="Nombre de kills ou de joueurs où cette icône a été vue">
           {weapon.uses} {weapon.kind === 'killfeed' ? 'kill' : 'joueur'}
           {weapon.uses > 1 ? 's' : ''}

@@ -114,3 +114,17 @@ def test_cross_means_dead_but_a_clipped_or_ring_shaped_marker_stays_alive():
     assert found[("A", 1)] is False  # x ≈ 100 / 440
     assert found[("B", 3)] is True
     assert found[("A", 2)] is True  # coupée par le bord : jamais prise pour une croix
+
+
+def test_facing_follows_the_movement_when_the_shape_gives_no_reliable_side():
+    # Pastille presque ronde : l'axe est connu (horizontal) mais le sens (asymétrie ~ 0) est ambigu ; le joueur court vers la droite.
+    seq = [[{**det("A", 0.2 + 0.02 * i, 0.5, number=1), "axis": 0.0, "skew": 0.01, "angle": 180.0}] for i in range(30)]
+    rows = by_slot(tracking.solve(frames_of(seq), STEP))
+    angles = [rows[1][i][6] for i in range(5, 25)]
+    assert all(min(a, 360 - a) < 30 for a in angles)  # il regarde vers la droite (0°), pas vers la gauche (180°)
+
+
+def test_a_player_standing_still_keeps_the_side_given_by_the_shape():
+    seq = [[{**det("A", 0.5, 0.5, number=1), "axis": 90.0, "skew": -0.6, "angle": 270.0}] for _ in range(20)]
+    rows = by_slot(tracking.solve(frames_of(seq), STEP))
+    assert all(abs(rows[1][i][6] - 270.0) < 10 for i in range(20))  # à l'arrêt, le déplacement n'impose rien

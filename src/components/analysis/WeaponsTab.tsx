@@ -9,7 +9,7 @@ import { WeaponCard, WeaponSuggestions } from './WeaponCard';
 
 const SECTIONS: { kind: WeaponKind; title: string; hint: string }[] = [
   { kind: 'arme', title: 'Armes des joueurs (bandeaux)', hint: "Les deux armes de chaque joueur, principale et secondaire : l'arme tenue est en noir sur le bandeau, l'autre en pâle." },
-  { kind: 'killfeed', title: 'Armes du killfeed', hint: "L'icône entre le tueur et la victime. La petite cible est le marqueur de headshot : elle n'est pas comptée dans l'arme. Toutes les grenades (DX3, Sticky…) ont le même logo : nomme-le « GRENADE »." },
+  { kind: 'killfeed', title: 'Armes du killfeed', hint: "L'icône entre le tueur et la victime. La petite cible est le marqueur de headshot : elle n'est pas comptée dans l'arme. Le logo de grenade (le même pour toutes les grenades) est reconnu tout seul et n'apparaît pas ici." },
   { kind: 'gadget', title: 'Gadgets (bandeaux)', hint: 'La troisième icône du bandeau.' },
 ];
 
@@ -38,8 +38,9 @@ export function WeaponsTab() {
         </label>
       </header>
       <p className="weapons__intro">
-        Ces noms servent au programme (liste des kills, équipement des joueurs) : il te demande de lui en donner dès qu'une icône est
-        inconnue. Les propositions viennent de l'onglet Stratégie, tu peux aussi écrire un autre nom. Plusieurs icônes peuvent porter le même
+        Ces noms servent au programme (liste des kills, équipement des joueurs). Il déduit tout seul le nom des armes du killfeed à partir de
+        l'équipement des joueurs qui ont fait les kills (marqué « deviné ») et ne te demande que ce qu'il ne trouve pas.
+        Le logo de grenade du killfeed, identique pour toutes les grenades, n'est pas affiché. Les propositions viennent de l'onglet Stratégie, tu peux aussi écrire un autre nom. Plusieurs icônes peuvent porter le même
         nom (une même arme est parfois vue sous des aspects différents).
       </p>
       {error && <p className="games__error">{error}</p>}

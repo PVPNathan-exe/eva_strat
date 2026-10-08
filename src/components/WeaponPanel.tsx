@@ -1,6 +1,7 @@
 // Panneau du module d'armes : choisir une arme/secondaire, voir ses stats,
 // calibrer l'échelle de la carte et poser l'arme pour visualiser sa portée.
 
+import { Ruler, Target } from 'lucide-react';
 import { useMapStore } from '../store/mapStore';
 import { firearms, secondaries, findStuff, bandLabel, falloffColor } from '../lib/stuffs';
 import type { Stuff, DamageProfile } from '../types/stuff';
@@ -29,7 +30,7 @@ export function WeaponPanel() {
             value={selectedStuffName ?? ''}
             onChange={(e) => selectStuff(e.target.value || null)}
           >
-            <option value="">— aucune —</option>
+            <option value="">Aucune</option>
             <optgroup label="Armes">
               {firearms.map((w) => (
                 <option key={w.name} value={w.name}>
@@ -55,7 +56,7 @@ export function WeaponPanel() {
           title="Tracer une ligne d'une distance connue pour fixer l'échelle"
           onClick={() => setActiveTool('calibrate')}
         >
-          📏 Calibrer
+          <Ruler className="ic" /> Calibrer
         </button>
         <button
           className={activeTool === 'weapon' ? 'is-active' : ''}
@@ -63,7 +64,7 @@ export function WeaponPanel() {
           title={!ppm ? "Calibre d'abord l'échelle" : 'Cliquer sur la carte pour poser (plusieurs possibles)'}
           onClick={() => setActiveTool('weapon')}
         >
-          🎯 Poser
+          <Target className="ic" /> Poser
         </button>
         {placedStuffs.length > 0 && (
           <button onClick={clearPlacedStuff}>Tout retirer</button>

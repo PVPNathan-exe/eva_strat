@@ -62,7 +62,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   loadWeapons: async (promptIfNew = false) => {
     const list = await analysisApi.weapons();
     // Les noms déjà saisis qui correspondent à une arme de l'onglet Stratégie sont remis à son écriture (« spectre » -> « SPECTRE »).
-    const fixes = list.filter((w) => w.name && canonicalName(w.name) !== w.name);
+    const fixes = list.filter((w) => w.name && !w.inferred && canonicalName(w.name) !== w.name);
     await Promise.all(fixes.map((w) => analysisApi.nameWeapon(w.id, canonicalName(w.name))));
     const weapons = list.map((w) => (w.name ? { ...w, name: canonicalName(w.name) } : w));
     const ask = promptIfNew && weapons.some((w) => !w.name && !dismissedWeapons.has(w.id));
