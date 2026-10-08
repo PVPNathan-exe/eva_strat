@@ -3,50 +3,74 @@ import numpy as np
 
 import db
 import minimap
-import positions
+import tracking
+
+STEP = 0.2
 
 
-def marker(team, x, y, number=None, alive=True):
-    slot = minimap.slot_of(number) if number else None
-    return {"team": team, "x": x, "y": y, "number": number, "slot": slot, "angle": 0.0, "alive": alive, "spectated": False}
+def det(team, x, y, number=None, angle=0.0, alive=True):
+    return {"team": team, "x": x, "y": y, "number": number, "slot": minimap.slot_of(number) if number else None,
+            "angle": angle if alive else None, "alive": alive, "spectated": False}
 
 
-def test_number_read_gives_the_slot_and_full_confidence():
-    out = positions.Tracker().assign([marker("A", 0.2, 0.3, 3), marker("B", 0.8, 0.5, 9)])
-    assert sorted((slot, conf) for slot, _, conf in out) == [(3, 1.0), (8, 1.0)]
+def frames_of(per_frame):
+    return [(i, round(i * STEP, 2), dets) for i, dets in enumerate(per_frame)]
 
 
-def test_unreadable_marker_follows_the_nearest_known_player():
-    tr = positions.Tracker()
-    tr.assign([marker("A", 0.20, 0.30, 1), marker("A", 0.60, 0.60, 2)])
-    out = tr.assign([marker("A", 0.22, 0.31), marker("A", 0.58, 0.62)])
-    assert sorted((slot, conf) for slot, _, conf in out) == [(1, 0.6), (2, 0.6)]
-    assert {slot: m["x"] for slot, m, _ in out} == {1: 0.22, 2: 0.58}
+def by_slot(rows):
+    out = {}
+    for r in rows:
+        out.setdefault(r[2], {})[r[0]] = r
+    return out
 
 
-def test_far_unreadable_marker_is_not_attached_by_distance():
-    tr = positions.Tracker()
-    tr.assign([marker("A", 0.05, 0.05, 1), marker("A", 0.1, 0.1, 2), marker("A", 0.2, 0.1, 3)])
-    out = tr.assign([marker("A", 0.9, 0.9)])  # trop loin de tout le monde ; trois joueurs libres : pas d'élimination
-    assert out == []
+def test_number_read_now_and_then_names_the_whole_trajectory():
+    seq = []
+    for i in range(30):
+        seq.append([det("A", 0.1 + 0.01 * i, 0.5, number=3 if i % 7 == 0 else None)])
+    rows = by_slot(tracking.solve(frames_of(seq), STEP))
+    assert set(rows) == {3}
+    assert len(rows[3]) == 30  # aucune lecture perdue, même sans numéro
 
 
-def test_elimination_when_one_player_and_one_marker_remain():
-    tr = positions.Tracker()
-    out = tr.assign([marker("A", 0.1, 0.1, 1), marker("A", 0.2, 0.2, 2), marker("A", 0.3, 0.3, 3), marker("A", 0.9, 0.9)])
-    assert (4, 0.4) in [(slot, conf) for slot, _, conf in out]
+def test_two_players_crossing_do_not_swap_identities():
+    seq = []
+    for i in range(40):
+        a = (0.2 + 0.015 * i, 0.4 + 0.004 * i)  # va vers la droite
+        b = (0.8 - 0.015 * i, 0.4 + 0.004 * i)  # va vers la gauche : ils se croisent vers i = 20
+        seq.append([det("A", *a, number=1 if i < 5 else None), det("A", *b, number=2 if i < 5 else None)])
+    rows = by_slot(tracking.solve(frames_of(seq), STEP))
+    assert rows[1][39][4] > 0.5 and rows[2][39][4] < 0.5  # chacun a gardé sa route
 
 
-def test_duplicate_numbers_in_one_reading_are_treated_as_unreliable():
-    out = positions.Tracker().assign([marker("A", 0.1, 0.1, 2), marker("A", 0.8, 0.8, 2)])
-    assert all(conf < 1.0 for _, _, conf in out)
+def test_dead_marker_goes_to_the_player_who_just_disappeared_there():
+    seq = [[det("B", 0.7, 0.3, number=7), det("B", 0.2, 0.8, number=8)] for _ in range(10)]
+    seq += [[det("B", 0.2, 0.8, number=8), det("B", 0.7, 0.3, alive=False)] for _ in range(6)]
+    rows = by_slot(tracking.solve(frames_of(seq), STEP))
+    assert [rows[6][i][7] for i in range(10, 16)] == [0] * 6  # le joueur 7 (slot 6) est mort
+    assert all(rows[7][i][7] == 1 for i in range(16))  # le joueur 8 (slot 7) reste vivant
 
 
-def test_dead_marker_keeps_the_players_slot():
-    tr = positions.Tracker()
-    tr.assign([marker("B", 0.5, 0.5, 7)])
-    out = tr.assign([marker("B", 0.5, 0.52, alive=False)])
-    assert [(slot, m["alive"]) for slot, m, _ in out] == [(6, False)]
+def test_short_hidden_gap_is_interpolated():
+    seq = []
+    for i in range(30):
+        seq.append([] if 10 <= i < 13 else [det("A", 0.1 + 0.01 * i, 0.5, number=4)])
+    rows = by_slot(tracking.solve(frames_of(seq), STEP))
+    assert len(rows[4]) == 30
+    assert rows[4][11][8] == tracking.CONF_FILL  # point comblé, confiance réduite
+
+
+def test_isolated_wrong_direction_is_smoothed_away():
+    seq = [[det("A", 0.3 + 0.002 * i, 0.5, number=1, angle=90.0 if i != 10 else 270.0)] for i in range(20)]
+    rows = by_slot(tracking.solve(frames_of(seq), STEP))
+    assert abs(rows[1][10][6] - 90.0) < 5
+
+
+def test_two_trajectories_never_share_a_player_at_the_same_time():
+    seq = [[det("A", 0.2, 0.2, number=1), det("A", 0.7, 0.7, number=1)] for _ in range(12)]  # deux « 1 » : une erreur de lecture
+    rows = tracking.solve(frames_of(seq), STEP)
+    assert rows  # au moins l'une des deux est gardée
+    assert all(len({r[2] for r in rows if r[0] == i}) == len([r for r in rows if r[0] == i]) for i in range(12))
 
 
 def test_find_markers_on_a_synthetic_minimap():

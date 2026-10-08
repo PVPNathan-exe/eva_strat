@@ -72,24 +72,34 @@ def _blobs(mask, scale, min_area=None):
     return out
 
 
-def _tip_angle(blob):
-    """Angle (degrés, 0 = droite, sens horaire à l'écran) de la pointe de la pastille, ou None si le contour est rond."""
+def _orientation(blob):
+    """Direction de la pastille : (angle, axe, asymétrie) ou None.
+
+    L'axe (degrés, 0-180, 0 = horizontal) est l'axe principal de la forme pleine : très stable. Le sens vers la pointe vient
+    de l'asymétrie (la pointe fait une queue de ce côté) : moins fiable, surtout pour une pastille presque ronde. On garde
+    donc l'asymétrie (positive = pointe du côté de l'axe, négative = côté opposé) pour que le suivi choisisse le sens
+    sur toute la trajectoire. angle = axe si asymétrie ≥ 0, sinon axe + 180."""
     cnts, _ = cv2.findContours(blob, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not cnts:
         return None
-    c = max(cnts, key=cv2.contourArea)
-    pts = c.reshape(-1, 2).astype(np.float32)
-    # Le numéro fait un trou dans la pastille : on remplit avant de chercher le centre du corps rond.
     solid = np.zeros_like(blob)
-    cv2.drawContours(solid, [c], -1, 1, cv2.FILLED)
-    dist = cv2.distanceTransform(solid, cv2.DIST_L2, 3)
-    _, rmax, _, loc = cv2.minMaxLoc(dist)
-    bx, by = loc
-    d = np.hypot(pts[:, 0] - bx, pts[:, 1] - by)
-    k = int(np.argmax(d))
-    if d[k] - rmax < 0.18 * rmax:
+    cv2.drawContours(solid, [max(cnts, key=cv2.contourArea)], -1, 1, cv2.FILLED)
+    ys, xs = np.nonzero(solid)
+    if xs.size < 30:
         return None
-    return math.degrees(math.atan2(pts[k, 1] - by, pts[k, 0] - bx)) % 360
+    x, y = xs - xs.mean(), ys - ys.mean()
+    vals, vecs = np.linalg.eigh(np.cov(np.vstack([x, y])))
+    u = vecs[:, 1]
+    p = x * u[0] + y * u[1]
+    sigma = max(float(np.sqrt(vals[1])), 1e-6)
+    skew = float((p**3).mean() / sigma**3)
+    axis = math.degrees(math.atan2(u[1], u[0])) % 180
+    angle = axis if skew >= 0 else (axis + 180) % 360
+    # u pointe dans le sens (axis) ou (axis + 180) selon la convention de eigh : on ramène l'asymétrie à l'axe.
+    if abs(math.degrees(math.atan2(u[1], u[0])) % 360 - axis) > 1:
+        skew = -skew
+        angle = axis if skew >= 0 else (axis + 180) % 360
+    return angle, axis, skew
 
 
 def _solidity(blob):
@@ -244,6 +254,7 @@ def find_markers(crop, templates=None):
         if not m["m00"]:
             return
         glyph = _glyph(gray, blob)
+        orient = _orientation(blob) if alive else None
         number = _read_blue_digit(glyph, templates) if team == "B" else _read_digit(glyph, templates)
         found.append(
             {
@@ -252,7 +263,9 @@ def find_markers(crop, templates=None):
                 "y": m["m01"] / m["m00"] / h,
                 "number": number,
                 "slot": slot_of(number) if number else None,
-                "angle": _tip_angle(blob) if alive else None,
+                "angle": orient[0] if orient else None,
+                "axis": orient[1] if orient else None,
+                "skew": orient[2] if orient else None,
                 "alive": alive,
                 "spectated": spectated,
                 "glyph": glyph,
