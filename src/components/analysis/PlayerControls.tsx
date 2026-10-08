@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
-import { formatTime } from '../../lib/timeline';
+import { formatTime, parseTime } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 
 const RATES = [0.5, 1, 1.5, 2, 4];
@@ -14,6 +14,8 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [rate, setRate] = useState(1);
+  const [goto, setGoto] = useState('');
+  const [gotoInvalid, setGotoInvalid] = useState(false);
 
   useEffect(() => {
     const el = video.current;
@@ -36,6 +38,15 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
   };
 
   const skip = (delta: number) => requestSeek(Math.min(duration, Math.max(0, currentTime + delta)));
+
+  const jump = () => {
+    if (goto.trim() === '') return;
+    const t = parseTime(goto);
+    setGotoInvalid(t === null);
+    if (t === null) return;
+    requestSeek(Math.min(duration, t));
+    setGoto('');
+  };
 
   const changeRate = (value: number) => {
     setRate(value);
@@ -68,6 +79,20 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
         step={0.1}
         value={Math.min(currentTime, duration)}
         onChange={(e) => requestSeek(Number(e.target.value))}
+      />
+      <input
+        className={`controls__goto${gotoInvalid ? ' is-invalid' : ''}`}
+        type="text"
+        inputMode="numeric"
+        placeholder="aller à"
+        title="Aller à un instant : 1:23, 1:02:03 ou 83 (secondes), puis Entrée"
+        value={goto}
+        onChange={(e) => {
+          setGoto(e.target.value);
+          setGotoInvalid(false);
+        }}
+        onKeyDown={(e) => e.key === 'Enter' && jump()}
+        onBlur={jump}
       />
       <span className="controls__time">
         {formatTime(currentTime)} / {formatTime(duration)}

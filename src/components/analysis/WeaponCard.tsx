@@ -1,6 +1,7 @@
 // Une icône d'arme à nommer : son logo, son usage, et un champ de nom avec les propositions de l'onglet Stratégie.
 
 import { useState } from 'react';
+import { useAnalysisStore } from '../../store/analysisStore';
 import { weaponIconUrl } from '../../lib/analysisApi';
 import { SUGGESTIONS } from '../../lib/weaponCatalog';
 import type { Weapon } from '../../types/analysis';
@@ -24,6 +25,7 @@ const formatTime = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t %
 
 export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: string, name: string) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const openAt = useAnalysisStore((s) => s.openAt);
   const commit = () => {
     if (draft !== null && draft.trim() !== weapon.name) onName(weapon.id, draft);
     setDraft(null);
@@ -45,9 +47,11 @@ export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: st
           <ul>
             {weapon.sources.map((s) => (
               <li key={s.gameId}>
-                {s.video}, game {s.game}
-                {s.map ? ` (${s.map})` : ''}, à {formatTime(s.t)}
-                {s.player ? `, ${s.player}` : ''}
+                <button type="button" title="Ouvrir la vidéo à cet instant" onClick={() => void openAt(s.videoId, s.gameId, s.t)}>
+                  {s.video}, game {s.game}
+                  {s.map ? ` (${s.map})` : ''}, à {formatTime(s.t)}
+                  {s.player ? `, ${s.player}` : ''}
+                </button>
               </li>
             ))}
           </ul>

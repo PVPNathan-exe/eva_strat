@@ -18,6 +18,7 @@ export interface WeaponEntry {
 }
 
 export interface WeaponSource {
+  videoId: number;
   gameId: number;
   video: string;
   /** Rang de la game dans sa vidéo (1 = première). */
@@ -129,11 +130,11 @@ export function effectiveNames(db: DatabaseSync, dir: string): Record<string, st
 function sourcesOf(db: DatabaseSync): Map<string, WeaponSource[]> {
   const games = db
     .prepare(
-      `SELECT g.id, g.start_s, g.map, v.path,
+      `SELECT g.id, g.video_id, g.start_s, g.map, v.path,
               (SELECT COUNT(*) FROM games o WHERE o.video_id = g.video_id AND o.start_s < g.start_s) + 1 AS rank
        FROM games g JOIN videos v ON v.id = g.video_id`,
     )
-    .all() as { id: number; start_s: number; map: string | null; path: string; rank: number }[];
+    .all() as { id: number; video_id: number; start_s: number; map: string | null; path: string; rank: number }[];
   const info = new Map(games.map((g) => [g.id, g]));
   const pseudo = (gameId: number, slot: number | null) =>
     slot === null ? null : ((db.prepare('SELECT name FROM players WHERE game_id = ? AND slot = ?').get(gameId, slot) as { name: string } | undefined)?.name ?? null);
@@ -143,7 +144,7 @@ function sourcesOf(db: DatabaseSync): Map<string, WeaponSource[]> {
     if (!icon || !g) return;
     const list = out.get(icon) ?? [];
     if (list.length >= MAX_SOURCES || list.some((s) => s.gameId === gameId)) return;
-    out.set(icon, [...list, { gameId, video: g.path.split(/[\\/]/).pop() ?? g.path, game: g.rank, map: g.map, t, player: pseudo(gameId, slot) }]);
+    out.set(icon, [...list, { videoId: g.video_id, gameId, video: g.path.split(/[\\/]/).pop() ?? g.path, game: g.rank, map: g.map, t, player: pseudo(gameId, slot) }]);
   };
   for (const k of db.prepare('SELECT game_id, t, weapon, killer_slot FROM kills WHERE weapon IS NOT NULL ORDER BY t').all() as { game_id: number; t: number; weapon: string; killer_slot: number | null }[])
     push(k.weapon, k.game_id, k.t, k.killer_slot);

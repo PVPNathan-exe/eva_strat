@@ -45,6 +45,9 @@ interface AnalysisState {
   setCurrentTime: (t: number) => void;
   setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
+  /** Ouvre l'onglet Analyse sur une vidéo, une game et un instant (depuis l'onglet Armes). */
+  openAt: (videoId: number, gameId: number, t: number) => Promise<void>;
+  viewRequest: { view: 'analyse'; nonce: number } | null;
   controlJob: (action: 'pause' | 'resume' | 'stop') => Promise<void>;
   resumeJob: () => Promise<void>;
   startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean; withPositions?: boolean; posEvery?: number }) => Promise<void>;
@@ -156,6 +159,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
   setCurrentTime: (t) => set({ currentTime: t }),
   setPendingStart: (t) => set({ pendingStart: t }),
   requestSeek: (t) => set({ seekRequest: { t, nonce: Date.now() } }),
+  viewRequest: null,
+  openAt: async (videoId, gameId, t) => {
+    if (get().videoId !== videoId) await get().selectVideo(videoId);
+    set({ selectedGameId: gameId, viewRequest: { view: 'analyse', nonce: Date.now() } });
+    get().requestSeek(t);
+  },
 
   controlJob: async (action) => {
     const { jobId, running } = get().job;

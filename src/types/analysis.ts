@@ -53,7 +53,7 @@ export interface Weapon {
   inferred: boolean;
   uses: number;
   /** Où l'icône a été vue (vidéo, game, instant, joueur). */
-  sources: { gameId: number; video: string; game: number; map: string | null; t: number; player: string | null }[];
+  sources: { videoId: number; gameId: number; video: string; game: number; map: string | null; t: number; player: string | null }[];
 }
 
 export interface Kill {

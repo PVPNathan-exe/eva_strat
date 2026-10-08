@@ -17,7 +17,15 @@ export default function App() {
   const weapons = useAnalysisStore((s) => s.weapons);
   const loadWeapons = useAnalysisStore((s) => s.loadWeapons);
   const resumeJob = useAnalysisStore((s) => s.resumeJob);
+  const viewRequest = useAnalysisStore((s) => s.viewRequest);
   const unnamed = (weapons ?? []).filter((w) => !w.name).length;
+
+  // Un lien venu d'un autre onglet (ex. « Vu dans » des armes) ouvre l'onglet Analyse.
+  const [seenRequest, setSeenRequest] = useState(viewRequest);
+  if (viewRequest !== seenRequest) {
+    setSeenRequest(viewRequest);
+    if (viewRequest) setView(viewRequest.view);
+  }
 
   // Compteur d'icônes sans nom sur l'onglet Armes (si le serveur d'analyse n'est pas joignable, il n'y en a simplement pas).
   useEffect(() => {

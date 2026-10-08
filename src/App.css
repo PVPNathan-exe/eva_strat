@@ -504,6 +504,20 @@
   min-width: 80px;
 }
 
+.controls__goto {
+  width: 5.2em;
+  padding: 0.2rem 0.4rem;
+  background: #0e1117;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.controls__goto.is-invalid {
+  border-color: #d9534f;
+}
+
 .controls__time {
   font-variant-numeric: tabular-nums;
   font-size: 0.85rem;
@@ -1082,6 +1096,16 @@
 
 .weapon__sources summary {
   cursor: pointer;
+}
+
+.weapon__sources li button {
+  all: unset;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.weapon__sources li button:hover {
+  color: #e6e8ee;
 }
 
 .weapon__sources ul {
