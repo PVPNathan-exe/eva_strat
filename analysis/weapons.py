@@ -55,8 +55,32 @@ def _score(a, b):
     return float(a @ b / d)
 
 
-def identify(icon, folder=ICON_DIR, create=True, prefix="W"):
+def _write_preview(folder, name, icon, tone):
+    """Aperçu agrandi pour reconnaître le logo à l'écran de nommage. Avec le relief (niveaux de gris, moyenné sur plusieurs images),
+    il est net et lisible ; sans, c'est la forme binaire agrandie sans lissage."""
+    ys, xs = np.nonzero(icon)
+    box = (slice(ys.min(), ys.max() + 1), slice(xs.min(), xs.max() + 1))
+    (Path(folder) / "previews").mkdir(exist_ok=True)
+    if tone is not None and tone.shape == icon.shape:
+        near = cv2.dilate((icon > 0).astype(np.uint8), np.ones((3, 3), np.uint8))  # le décor autour de l'icône n'entre pas dans l'aperçu
+        piece = (tone * near)[box].astype(np.float32)
+        piece = np.clip(piece * (255.0 / max(piece.max(), 1.0)), 0, 255).astype(np.uint8)
+        piece = cv2.copyMakeBorder(piece, 2, 2, 2, 2, cv2.BORDER_CONSTANT, value=0)
+        big = cv2.resize(piece, None, fx=8, fy=8, interpolation=cv2.INTER_CUBIC)
+    else:
+        big = cv2.resize(icon[box], None, fx=4, fy=4, interpolation=cv2.INTER_NEAREST)
+    cv2.imwrite(str(Path(folder) / "previews" / f"{name}.png"), big)
+
+
+def _is_binary_preview(folder, name):
+    path = Path(folder) / "previews" / f"{name}.png"
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if path.exists() else None
+    return img is None or bool(np.isin(img, (0, 255)).all())
+
+
+def identify(icon, folder=ICON_DIR, create=True, prefix="W", tone=None):
     """Identifiant (« W3 ») d'une icône binaire, ou None si elle est vide. Crée un modèle si elle est inconnue.
+    tone : relief de l'icône (même taille), pour un aperçu plus net ; il remplace aussi un ancien aperçu binaire.
 
     Le préfixe sépare les catalogues : W killfeed, B armes des bandeaux, G gadgets des bandeaux."""
     if icon is None:
@@ -67,6 +91,8 @@ def identify(icon, folder=ICON_DIR, create=True, prefix="W"):
     templates = _templates(folder)
     best = max(((_score(v, t), name) for name, t in templates.items() if name.startswith(prefix)), default=(-1.0, None))
     if best[0] >= MATCH_SCORE:
+        if tone is not None and create and _is_binary_preview(folder, best[1]):
+            _write_preview(folder, best[1], icon, tone)
         return best[1]
     if not create:
         return None
@@ -78,9 +104,7 @@ def identify(icon, folder=ICON_DIR, create=True, prefix="W"):
     ys, xs = np.nonzero(icon)
     shape = icon[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
     cv2.imwrite(str(Path(folder) / f"{name}.png"), cv2.resize(shape, SIZE, interpolation=cv2.INTER_AREA))
-    # Aperçu agrandi (net, sans lissage) pour reconnaître le logo à l'écran de nommage de l'application.
-    (Path(folder) / "previews").mkdir(exist_ok=True)
-    cv2.imwrite(str(Path(folder) / "previews" / f"{name}.png"), cv2.resize(shape, None, fx=4, fy=4, interpolation=cv2.INTER_NEAREST))
+    _write_preview(folder, name, icon, tone)
     templates[name] = _vec(icon)
     return name
 

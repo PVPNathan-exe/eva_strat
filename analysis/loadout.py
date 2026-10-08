@@ -17,19 +17,25 @@ KEEP_SHARE = 0.5  # un pixel fait partie de la forme s'il l'est sur au moins la 
 MIN_AREA = 30
 
 
+def _dark(piece):
+    """Relief de l'icône : de combien chaque pixel est plus sombre que le fond du bandeau (niveau le plus fréquent)."""
+    gray = cv2.cvtColor(piece, cv2.COLOR_BGR2GRAY).astype(np.int16)
+    bg = np.bincount(gray.ravel().clip(0, 255)).argmax()
+    return np.clip(bg - gray, 0, 255).astype(np.uint8)
+
+
 def _shape(piece):
     """Masque binaire de l'icône (plus sombre que le fond du bandeau), seuil d'Otsu propre à la boîte."""
-    gray = cv2.cvtColor(piece, cv2.COLOR_BGR2GRAY).astype(np.int16)
-    bg = np.bincount(gray.ravel().clip(0, 255)).argmax()  # niveau le plus fréquent : le fond
-    dark = np.clip(bg - gray, 0, 255).astype(np.uint8)
+    dark = _dark(piece)
     if dark.max() < 14:
         return np.zeros(dark.shape, np.uint8)
     thr, _ = cv2.threshold(dark, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return (dark > max(thr * 0.7, 10)).astype(np.uint8)
 
 
-def icons_of_banners(region, n=4):
-    """region : recadrage de la zone d'une équipe (4 bandeaux). Renvoie [{nom d'icône: masque}] par bandeau."""
+def icons_of_banners(region, n=4, tones=False):
+    """region : recadrage de la zone d'une équipe (4 bandeaux). Renvoie [{nom d'icône: masque}] par bandeau.
+    Avec tones=True, chaque valeur est (masque, relief en niveaux de gris) : le relief sert à l'aperçu lisible de l'icône."""
     h, w = region.shape[:2]
     bw = w / n
     out = []
@@ -37,7 +43,8 @@ def icons_of_banners(region, n=4):
         banner = region[:, int(i * bw) : int((i + 1) * bw)]
         row = {}
         for name, (a, b, c, d) in BOXES.items():
-            row[name] = _shape(banner[int(c * h) : int(d * h), int(a * bw) : int(b * bw)])
+            piece = banner[int(c * h) : int(d * h), int(a * bw) : int(b * bw)]
+            row[name] = (_shape(piece), _dark(piece)) if tones else _shape(piece)
         out.append(row)
     return out
 
@@ -58,9 +65,9 @@ def merge_masks(masks):
     return keep * 255 if keep.sum() else None
 
 
-def identify(shape, kind, folder=weapons.ICON_DIR, create=True):
+def identify(shape, kind, folder=weapons.ICON_DIR, create=True, tone=None):
     """Identifiant d'une icône d'équipement (« B3 » pour une arme, « G1 » pour un gadget)."""
-    return weapons.identify(shape, folder=folder, create=create, prefix=PREFIX[kind])
+    return weapons.identify(shape, folder=folder, create=create, prefix=PREFIX[kind], tone=tone)
 
 
 def read_loadouts(video, game, team_zones, width, height, frames=8):
@@ -77,12 +84,13 @@ def read_loadouts(video, game, team_zones, width, height, frames=8):
             crop = names._grab(video, t, zone, width, height)
             if crop is None:
                 continue
-            for i, row in enumerate(icons_of_banners(crop)):
-                for kind, mask in row.items():
-                    acc.setdefault((slots[i], kind), []).append(mask)
+            for i, row in enumerate(icons_of_banners(crop, tones=True)):
+                for kind, (mask, tone) in row.items():
+                    acc.setdefault((slots[i], kind), []).append((mask, tone))
     out = {}
-    for (slot, kind), masks in acc.items():
-        shape = merge_masks(masks)
+    for (slot, kind), reads in acc.items():
+        shape = merge_masks([m for m, _ in reads])
         if shape is not None:
-            out.setdefault(slot, {})[kind] = identify(shape, kind)
+            tone = np.mean([t.astype(np.float32) for _, t in reads], axis=0).astype(np.uint8)
+            out.setdefault(slot, {})[kind] = identify(shape, kind, tone=tone)
     return out

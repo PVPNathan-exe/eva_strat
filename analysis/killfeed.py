@@ -138,7 +138,47 @@ def _icon_image(crop, row):
         return None
     piece = crop[max(y0 - 2, 0) : y1 + 2, x0:x1]
     gray = cv2.cvtColor(piece, cv2.COLOR_BGR2GRAY)
-    return (gray > 170).astype(np.uint8) * 255
+    return (gray > 170).astype(np.uint8) * 255, np.clip(gray.astype(np.int16) - int(np.median(gray)), 0, 255).astype(np.uint8)
+
+
+MIN_ICON_PIXELS = 40  # une arme fait au moins cela de pixels clairs une fois nettoyée
+MIN_ICON_FILL = 0.12  # part de la boîte occupée par l'icône : en dessous, ce sont des fragments épars (décor clair, ligne qui s'efface)
+
+
+def clean_icon(mask):
+    """Retire les pixels isolés (décor clair, bord d'une autre ligne) : on garde les amas d'au moins 10 % du plus gros."""
+    n, lab, stats, _ = cv2.connectedComponentsWithStats((mask > 0).astype(np.uint8))
+    if n <= 1:
+        return np.zeros_like(mask)
+    biggest = stats[1:, cv2.CC_STAT_AREA].max()
+    keep = [i for i in range(1, n) if stats[i, cv2.CC_STAT_AREA] >= max(6, 0.1 * biggest)]
+    return (np.isin(lab, keep).astype(np.uint8)) * 255
+
+
+def icon_is_reliable(mask):
+    """Vrai si la forme ressemble à une arme (assez grosse, assez pleine) et non à des fragments."""
+    ys, xs = np.nonzero(mask)
+    if xs.size < MIN_ICON_PIXELS:
+        return False
+    box = (xs.max() - xs.min() + 1) * (ys.max() - ys.min() + 1)
+    return xs.size / box >= MIN_ICON_FILL
+
+
+def consensus_icon(reads):
+    """Icône d'un kill à partir de toutes ses lectures [(masque, relief)] : on garde les lectures de la taille la plus fréquente (la
+    même entrée reste affichée plusieurs secondes, ses pixels tombent aux mêmes endroits) et on vote pixel par pixel. Renvoie
+    (masque nettoyé, relief moyen, nombre de lectures retenues) ou (None, None, 0)."""
+    reads = [r for r in reads if r is not None]
+    if not reads:
+        return None, None, 0
+    sizes = {}
+    for mask, _ in reads:
+        sizes[mask.shape] = sizes.get(mask.shape, 0) + 1
+    shape = max(sizes, key=sizes.get)
+    kept = [r for r in reads if r[0].shape == shape]
+    vote = np.mean([(m > 0).astype(np.float32) for m, _ in kept], axis=0)
+    tone = np.mean([t.astype(np.float32) for _, t in kept], axis=0).astype(np.uint8)
+    return clean_icon((vote >= 0.5).astype(np.uint8) * 255), tone, len(kept)
 
 
 def _grab(video, t, width, height):
@@ -271,12 +311,24 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
         known = [k for k in ev["killers"] if k is not None]
         killer = max(set(known), key=known.count) if known else None
         icons = [i for i in ev["icons"] if i is not None]
-        weapon, heads = None, []
-        for icon in icons[len(icons) // 2 :] + icons[: len(icons) // 2]:  # on part de l'icône du milieu de l'affichage, la plus nette
-            shape, headshot = split_icon(icon)
-            heads.append(headshot)
-            if weapon is None:
-                weapon = weapons.identify(shape)
+        heads = [split_icon(mask)[1] for mask, _ in icons]
+        weapon = None
+        # 1. Comme avant : on cherche d'abord un modèle connu, en partant de l'image du milieu de l'affichage (la plus nette).
+        #    Les identifiants déjà en place ne changent donc pas.
+        for mask, _ in icons[len(icons) // 2 :] + icons[: len(icons) // 2]:
+            shape, _ = split_icon(mask)
+            if weapon is None and shape is not None:
+                weapon = weapons.identify(shape, create=False)
+        # 2. Icône inconnue : toutes les lectures du kill (images voisines) votent ensemble, et on ne crée un modèle que si la forme
+        #    est fiable. Une image sale ou un morceau de ligne ne fait plus une fausse arme.
+        if weapon is None:
+            mask, tone, _ = consensus_icon(icons)
+            if mask is not None:
+                shape, _ = split_icon(mask)
+                if shape is not None:
+                    shape = clean_icon(shape)
+                    if icon_is_reliable(shape):
+                        weapon = weapons.identify(shape, tone=tone)
         kind = "environment" if ev["alone"] else ("unknown" if killer is None else ("suicide" if killer == ev["victim"] else "kill"))
         out.append({"t": ev["t"], "kind": kind, "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": weapon, "headshot": sum(heads) * 2 > len(heads) if heads else False})
     return out

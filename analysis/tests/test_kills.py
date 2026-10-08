@@ -232,3 +232,36 @@ def test_corrections_are_reapplied_after_the_positions_are_read_again(tmp_path):
     db.apply_corrections(conn, gid)  # ce que fait analyze après chaque relecture
     row = conn.execute("SELECT x FROM samples WHERE game_id = ? AND slot = 1 AND t = 16.0", (gid,)).fetchone()
     assert row["x"] == 0.9
+
+
+def _weapon_read(noise=0, seed=0):
+    mask = np.zeros((14, 60), np.uint8)
+    mask[4:10, 5:55] = 255
+    tone = (mask // 2).astype(np.uint8)
+    if noise:
+        rng = np.random.default_rng(seed)
+        ys, xs = rng.integers(0, 14, noise), rng.integers(0, 60, noise)
+        mask[ys, xs] = 255
+    return mask, tone
+
+
+def test_noisy_reads_are_voted_into_a_clean_icon():
+    reads = [_weapon_read(noise=6, seed=s) for s in range(5)]
+    mask, tone, n = killfeed.consensus_icon(reads)
+    assert n == 5
+    assert (mask[4:10, 5:55] == 255).all() and mask[:3].sum() == 0 and mask[11:].sum() == 0  # le bruit des lectures isolées disparaît
+
+
+def test_scattered_fragments_are_not_a_reliable_weapon():
+    frag = np.zeros((14, 200), np.uint8)
+    frag[1, 3] = frag[12, 190] = frag[5, 90] = 255
+    frag[3:5, 40:60] = 255
+    assert not killfeed.icon_is_reliable(frag)
+    assert killfeed.icon_is_reliable(_weapon_read()[0])
+
+
+def test_stray_pixels_are_removed_but_the_weapon_stays():
+    mask = _weapon_read()[0]
+    mask[0, 0] = mask[13, 59] = 255
+    cleaned = killfeed.clean_icon(mask)
+    assert cleaned[0, 0] == 0 and cleaned[13, 59] == 0 and cleaned[6, 30] == 255
