@@ -1075,6 +1075,20 @@
   color: #9aa3b8;
 }
 
+.weapon__sources {
+  font-size: 0.75rem;
+  color: #9aa3b8;
+}
+
+.weapon__sources summary {
+  cursor: pointer;
+}
+
+.weapon__sources ul {
+  margin: 4px 0 0;
+  padding-left: 14px;
+}
+
 .weapon input {
   padding: 0.3rem 0.5rem;
   background: #0e1117;

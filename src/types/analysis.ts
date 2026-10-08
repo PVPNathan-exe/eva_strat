@@ -52,6 +52,8 @@ export interface Weapon {
   /** Nom déduit par le programme (équipement des tueurs), pas saisi. */
   inferred: boolean;
   uses: number;
+  /** Où l'icône a été vue (vidéo, game, instant, joueur). */
+  sources: { gameId: number; video: string; game: number; map: string | null; t: number; player: string | null }[];
 }
 
 export interface Kill {

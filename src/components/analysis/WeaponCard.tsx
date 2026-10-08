@@ -20,6 +20,8 @@ export function WeaponSuggestions() {
   );
 }
 
+const formatTime = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+
 export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: string, name: string) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const commit = () => {
@@ -37,6 +39,20 @@ export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: st
           {weapon.uses > 1 ? 's' : ''}
         </span>
       </div>
+      {weapon.sources.length > 0 && (
+        <details className="weapon__sources">
+          <summary>Vue dans</summary>
+          <ul>
+            {weapon.sources.map((s) => (
+              <li key={s.gameId}>
+                {s.video}, game {s.game}
+                {s.map ? ` (${s.map})` : ''}, à {formatTime(s.t)}
+                {s.player ? `, ${s.player}` : ''}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <input
         list={`weapon-names-${weapon.kind}`}
         placeholder="Nom de l'arme"

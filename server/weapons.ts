@@ -13,7 +13,23 @@ export interface WeaponEntry {
   /** true : le nom a été déduit par le programme (équipement des tueurs), pas saisi. */
   inferred: boolean;
   uses: number;
+  /** Où l'icône a été vue (pour la reconnaître : vidéo, game, instant). Au plus MAX_SOURCES, les premières. */
+  sources: WeaponSource[];
 }
+
+export interface WeaponSource {
+  gameId: number;
+  video: string;
+  /** Rang de la game dans sa vidéo (1 = première). */
+  game: number;
+  map: string | null;
+  /** Instant de la vidéo (secondes) du premier endroit où on la voit. */
+  t: number;
+  /** Joueur concerné (tueur ou porteur), si connu. */
+  player: string | null;
+}
+
+const MAX_SOURCES = 4;
 
 const ID = /^[A-Z]\d{1,4}$/;
 const KIND: Record<string, WeaponKind> = { W: 'killfeed', B: 'arme', G: 'gadget' };
@@ -110,12 +126,41 @@ export function effectiveNames(db: DatabaseSync, dir: string): Record<string, st
   return { ...inferKillfeedNames(db, manual, dir), ...manual };
 }
 
+function sourcesOf(db: DatabaseSync): Map<string, WeaponSource[]> {
+  const games = db
+    .prepare(
+      `SELECT g.id, g.start_s, g.map, v.path,
+              (SELECT COUNT(*) FROM games o WHERE o.video_id = g.video_id AND o.start_s < g.start_s) + 1 AS rank
+       FROM games g JOIN videos v ON v.id = g.video_id`,
+    )
+    .all() as { id: number; start_s: number; map: string | null; path: string; rank: number }[];
+  const info = new Map(games.map((g) => [g.id, g]));
+  const pseudo = (gameId: number, slot: number | null) =>
+    slot === null ? null : ((db.prepare('SELECT name FROM players WHERE game_id = ? AND slot = ?').get(gameId, slot) as { name: string } | undefined)?.name ?? null);
+  const out = new Map<string, WeaponSource[]>();
+  const push = (icon: string | null, gameId: number, t: number, slot: number | null) => {
+    const g = info.get(gameId);
+    if (!icon || !g) return;
+    const list = out.get(icon) ?? [];
+    if (list.length >= MAX_SOURCES || list.some((s) => s.gameId === gameId)) return;
+    out.set(icon, [...list, { gameId, video: g.path.split(/[\/]/).pop() ?? g.path, game: g.rank, map: g.map, t, player: pseudo(gameId, slot) }]);
+  };
+  for (const k of db.prepare('SELECT game_id, t, weapon, killer_slot FROM kills WHERE weapon IS NOT NULL ORDER BY t').all() as { game_id: number; t: number; weapon: string; killer_slot: number | null }[])
+    push(k.weapon, k.game_id, k.t, k.killer_slot);
+  for (const l of db.prepare('SELECT game_id, slot, weapon1, weapon2, gadget FROM loadouts').all() as { game_id: number; slot: number; weapon1: string | null; weapon2: string | null; gadget: string | null }[]) {
+    const start = info.get(l.game_id)?.start_s ?? 0;
+    for (const icon of [l.weapon1, l.weapon2, l.gadget]) push(icon, l.game_id, start, l.slot);
+  }
+  return out;
+}
+
 export function listWeapons(db: DatabaseSync, dir: string): WeaponEntry[] {
   if (!existsSync(dir)) return [];
   const manual = readNames(dir);
   const auto = inferKillfeedNames(db, manual, dir);
   const names = { ...auto, ...manual };
   const uses = new Map<string, number>();
+  const sources = sourcesOf(db);
   const add = (rows: unknown) => {
     for (const r of rows as { id: string | null; n: number }[]) if (r.id) uses.set(r.id, (uses.get(r.id) ?? 0) + r.n);
   };
@@ -126,7 +171,7 @@ export function listWeapons(db: DatabaseSync, dir: string): WeaponEntry[] {
   return readdirSync(dir)
     .filter((f) => f.endsWith('.png') && isWeaponId(f.slice(0, -4)))
     .map((f) => f.slice(0, -4))
-    .map((id) => ({ id, kind: KIND[id[0]], name: names[id] ?? '', inferred: !manual[id] && !!auto[id], uses: uses.get(id) ?? 0 }))
+    .map((id) => ({ id, kind: KIND[id[0]], name: names[id] ?? '', inferred: !manual[id] && !!auto[id], uses: uses.get(id) ?? 0, sources: sources.get(id) ?? [] }))
     // Le logo de grenade du killfeed est le même pour toutes les grenades : rien à nommer, on ne le montre pas.
     .filter((w) => !(w.kind === 'killfeed' && squash(w.name) === 'grenade'))
     .sort((a, b) => a.kind.localeCompare(b.kind) || Number(a.id.slice(1)) - Number(b.id.slice(1)));
