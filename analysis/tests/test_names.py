@@ -30,3 +30,10 @@ def test_closest_finds_the_player_from_a_noisy_or_truncated_text():
     assert names.closest("ORXKALIMERO", team) == 7
     assert names.closest("TOTALEMENTAUTRE", team) is None
     assert names.closest("NCTX", team, "A") is None  # trop court / ambigu entre trois joueurs
+
+
+def test_frequent_letter_confusions_still_find_the_player():
+    team = {1: "SHADYJ4Y", 2: "NCTXSPIRIT", 3: "NCTX7TAKAA", 4: "NCTXVEX", 5: "ORXPAPY", 6: "ORXBENOU", 7: "ORXKALIME", 8: "ORXPHYSIO"}
+    assert names.closest("nCTHUEH", team, "A") == 4  # NCTxVEX lu « nCTHUEH »
+    assert names.closest("ShadvJUv", team, "A") == 1
+    assert names.closest("NCTHUEH", team, "B") is None  # la bonne équipe est exigée

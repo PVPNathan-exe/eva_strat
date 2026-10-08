@@ -1,6 +1,6 @@
 """Armes du killfeed : l'icône entre le tueur et la victime est comparée à des modèles rangés dans weapon_icons/.
 
-Une icône jamais vue devient un nouveau modèle « W1 », « W2 »… (image enregistrée dans weapon_icons/). Pour donner un vrai nom,
+Une icône jamais vue devient un nouveau modèle « W1 », « W2 »… (« B1 » pour une arme de bandeau, « G1 » pour un gadget) (image enregistrée dans weapon_icons/). Pour donner un vrai nom,
 il suffit de l'écrire dans weapon_icons/names.json : {"W1": "Blaster", "W2": "Grenade"}. Rien d'autre à refaire : les kills déjà
 enregistrés affichent le nom à l'écran, ils gardent l'identifiant.
 """
@@ -38,7 +38,7 @@ def _templates(folder):
     key = str(folder)
     if key not in _cache:
         found = {}
-        for path in sorted(Path(folder).glob("W*.png")):
+        for path in sorted(Path(folder).glob("[A-Z]*.png")):
             img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
             if img is not None:
                 found[path.stem] = _blur(img)
@@ -47,32 +47,40 @@ def _templates(folder):
 
 
 def _score(a, b):
+    same = bool(np.allclose(a, b, atol=1e-3))
     a, b = a - a.mean(), b - b.mean()
     d = np.linalg.norm(a) * np.linalg.norm(b)
-    return float(a @ b / d) if d else -1.0
+    if not d:  # image unie (aucun relief) : la corrélation n'est pas définie, on compare les images elles-mêmes
+        return 1.0 if same else -1.0
+    return float(a @ b / d)
 
 
-def identify(icon, folder=ICON_DIR, create=True):
-    """Identifiant de l'arme (« W3 ») pour une icône binaire, ou None si l'icône est vide. Crée un modèle si elle est inconnue."""
+def identify(icon, folder=ICON_DIR, create=True, prefix="W"):
+    """Identifiant (« W3 ») d'une icône binaire, ou None si elle est vide. Crée un modèle si elle est inconnue.
+
+    Le préfixe sépare les catalogues : W killfeed, B armes des bandeaux, G gadgets des bandeaux."""
     if icon is None:
         return None
     v = _vec(icon)
     if v is None:
         return None
     templates = _templates(folder)
-    best = max(((_score(v, t), name) for name, t in templates.items()), default=(-1.0, None))
+    best = max(((_score(v, t), name) for name, t in templates.items() if name.startswith(prefix)), default=(-1.0, None))
     if best[0] >= MATCH_SCORE:
         return best[1]
     if not create:
         return None
     Path(folder).mkdir(parents=True, exist_ok=True)
     n = 1
-    while f"W{n}" in templates:
+    while f"{prefix}{n}" in templates:
         n += 1
-    name = f"W{n}"
+    name = f"{prefix}{n}"
     ys, xs = np.nonzero(icon)
     shape = icon[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
     cv2.imwrite(str(Path(folder) / f"{name}.png"), cv2.resize(shape, SIZE, interpolation=cv2.INTER_AREA))
+    # Aperçu agrandi (net, sans lissage) pour reconnaître le logo à l'écran de nommage de l'application.
+    (Path(folder) / "previews").mkdir(exist_ok=True)
+    cv2.imwrite(str(Path(folder) / "previews" / f"{name}.png"), cv2.resize(shape, None, fx=4, fy=4, interpolation=cv2.INTER_NEAREST))
     templates[name] = _vec(icon)
     return name
 

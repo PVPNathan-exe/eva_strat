@@ -48,9 +48,9 @@ def test_kills_are_stored_and_the_game_is_marked_as_read(tmp_path):
     assert db.games_without_kills(conn, vid) == []  # sans pseudos, le killfeed ne peut pas être lu
     db.replace_players(conn, gid, {1: "SHADYJ4Y", 5: "ORXPAPY"})
     assert [g["id"] for g in db.games_without_kills(conn, vid)] == [gid]
-    db.replace_kills(conn, gid, [{"t": 42.5, "killer": 1, "victim": 5, "weapon": "W1"}])
+    db.replace_kills(conn, gid, [{"t": 42.5, "killer": 1, "victim": 5, "weapon": "W1", "headshot": True}])
     assert db.games_without_kills(conn, vid) == []
-    assert db.kills_of(conn, gid) == [{"t": 42.5, "killer_slot": 1, "victim_slot": 5, "weapon": "W1"}]
+    assert db.kills_of(conn, gid) == [{"t": 42.5, "killer_slot": 1, "victim_slot": 5, "weapon": "W1", "headshot": 1}]
     db.replace_kills(conn, gid, [])  # aucun kill : la game reste « lue »
     assert db.games_without_kills(conn, vid) == []
 
@@ -97,3 +97,53 @@ def test_find_rows_splits_a_killfeed_line_into_killer_icon_victim():
     assert len(rows) == 1
     teams = [s["team"] for s in rows[0]["segments"]]
     assert teams[0] == "A" and teams[-1] == "B"
+
+
+def test_headshot_marker_is_split_from_the_weapon_icon():
+    icon = np.zeros((18, 84), np.uint8)
+    cv2.rectangle(icon, (7, 5), (52, 12), 255, -1)  # arme : ligne fine
+    cv2.circle(icon, (68, 9), 7, 255, 2)  # petite cible (anneau)
+    cv2.circle(icon, (68, 9), 1, 255, -1)
+    weapon, headshot = killfeed.split_icon(icon)
+    assert headshot is True
+    assert weapon[:, 60:].sum() == 0 and weapon[:, :55].sum() > 0  # la cible a disparu de l'icône de l'arme
+
+
+def test_a_round_grenade_icon_is_not_mistaken_for_a_headshot():
+    icon = np.zeros((18, 40), np.uint8)
+    cv2.rectangle(icon, (8, 3), (30, 15), 255, -1)  # grenade : une seule forme, plus large que haute
+    weapon, headshot = killfeed.split_icon(icon)
+    assert headshot is False and weapon.sum() == icon.sum()
+
+
+def test_loadouts_are_stored_per_game(tmp_path):
+    conn = db.connect(tmp_path / "eva.db")
+    vid = db.upsert_video(conn, "/v.mp4", None, 600.0, 30.0, 1920, 1080)
+    conn.execute("INSERT INTO games (video_id, start_s, end_s) VALUES (?, 10, 200)", (vid,))
+    gid = conn.execute("SELECT id FROM games").fetchone()["id"]
+    assert [g["id"] for g in db.games_without_loadouts(conn, vid)] == [gid]
+    db.replace_loadouts(conn, gid, {1: {"arme1": "B1", "arme2": "B2", "gadget": "G1"}, 5: {"arme2": "B3"}})
+    assert db.games_without_loadouts(conn, vid) == []
+    row = conn.execute("SELECT weapon1, weapon2, gadget FROM loadouts WHERE game_id = ? AND slot = 5", (gid,)).fetchone()
+    assert (row["weapon1"], row["weapon2"], row["gadget"]) == (None, "B3", None)
+
+
+def test_loadout_shape_is_stable_after_merging_noisy_frames():
+    import loadout
+
+    clean = np.zeros((20, 40), np.uint8)
+    cv2.rectangle(clean, (4, 8), (34, 12), 1, -1)
+    noisy = [clean.copy() for _ in range(5)]
+    noisy[0][2, 2] = 1  # parasite sur une seule image : disparaît au vote
+    noisy[1][15, 30] = 1
+    merged = loadout.merge_masks(noisy)
+    assert merged is not None and merged[2, 2] == 0 and merged[15, 30] == 0 and merged[10, 10] == 255
+
+
+def test_icon_catalogues_are_separate_by_prefix(tmp_path):
+    shape = np.zeros((14, 40), np.uint8)
+    cv2.rectangle(shape, (2, 5), (36, 9), 255, -1)
+    assert weapons.identify(shape, folder=tmp_path, prefix="W") == "W1"
+    assert weapons.identify(shape, folder=tmp_path, prefix="B") == "B1"  # même forme, autre catalogue
+    assert weapons.identify(shape, folder=tmp_path, prefix="B") == "B1"
+    assert (tmp_path / "previews" / "B1.png").exists()

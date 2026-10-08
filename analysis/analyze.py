@@ -15,6 +15,7 @@ from pathlib import Path
 import db
 import ingest
 import killfeed
+import loadout
 import mapname
 import names
 import ocr
@@ -111,6 +112,19 @@ def extract_names(conn, video_id, path, meta, emit, control=None):
     return done, None
 
 
+def extract_loadouts(conn, video_id, path, meta, emit, control=None):
+    """Équipement (armes et gadget) des joueurs des games qui n'en ont pas encore, lu sur les bandeaux."""
+    todo = db.games_without_loadouts(conn, video_id)
+    for i, g in enumerate(todo):
+        wait_if_paused(control)
+        emit({"event": "progress", "stage": "loadout", "pct": round(100 * i / len(todo), 1)})
+        zones = {key: db.zone_for(conn, g["map"], key) for key in ("team_a_bar", "team_b_bar")}
+        found = loadout.read_loadouts(path, g, zones, meta["width"], meta["height"])
+        if found:
+            db.replace_loadouts(conn, g["id"], found)
+    return len(todo)
+
+
 def extract_kills(conn, video_id, path, meta, emit, control=None):
     """Killfeed des games qui ont leurs pseudos et pas encore de kills lus. Renvoie le nombre de games lues, ou (n, erreur)."""
     todo = db.games_without_kills(conn, video_id)
@@ -184,6 +198,7 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
         n_names, names_error = extract_names(conn, video_id, path, meta, emit, control)
         if names_error:
             message = f"{message} · pseudos non lus ({names_error})" if message else f"Pseudos non lus ({names_error})"
+        extract_loadouts(conn, video_id, path, meta, emit, control)
         n_kills, kills_error = extract_kills(conn, video_id, path, meta, emit, control)
         if kills_error:
             message = f"{message} · killfeed non lu ({kills_error})" if message else f"Killfeed non lu ({kills_error})"

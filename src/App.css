@@ -995,3 +995,91 @@
 .replay-modal {
   width: min(1100px, 94vw);
 }
+
+/* --- Onglet Armes --- */
+.weapons {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 1rem 2rem;
+}
+
+.weapons__head {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.weapons__head h2 {
+  margin: 0;
+}
+
+.weapons__intro,
+.weapons__hint {
+  margin: 0.4rem 0;
+  color: #9aa3b8;
+  font-size: 0.88rem;
+  max-width: 70ch;
+}
+
+.weapons__section h3 {
+  margin: 1.2rem 0 0;
+}
+
+.weapons__section h3 small {
+  color: #9aa3b8;
+  font-weight: 400;
+}
+
+.weapons__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.weapon {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  background: #1b1f2a;
+  border: 1px solid #2c3242;
+  border-radius: 8px;
+}
+
+.weapon.is-named {
+  border-color: #2f6f4d;
+}
+
+.weapon img {
+  width: 100%;
+  height: 72px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  background: #0e1117;
+  border-radius: 6px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.weapon__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #9aa3b8;
+}
+
+.weapon input {
+  padding: 0.3rem 0.5rem;
+  background: #0e1117;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+}
+
+.kill__env {
+  color: #9aa3b8;
+  font-style: italic;
+}

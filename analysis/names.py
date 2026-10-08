@@ -37,6 +37,25 @@ def levenshtein(a, b):
     return prev[-1]
 
 
+# Lettres que la reconnaissance de texte confond souvent sur cette police : les compter comme une demi-erreur
+CONFUSABLE = {frozenset(p) for p in ("XH", "VU", "YV", "IL", "I1", "L1", "O0", "OQ", "S5", "B8", "T7", "Z2", "G6", "DO", "NH", "MN", "CG", "EF", "RK", "JU", "AR")}
+CONFUSION_COST = 0.35
+
+
+def soft_distance(a, b):
+    """Distance d'édition où une confusion fréquente (X lu H, V lu U…) coûte moins qu'une vraie différence."""
+    if a == b:
+        return 0.0
+    prev = [float(j) for j in range(len(b) + 1)]
+    for i, ca in enumerate(a, 1):
+        cur = [float(i)]
+        for j, cb in enumerate(b, 1):
+            sub = 0.0 if ca == cb else (CONFUSION_COST if frozenset((ca, cb)) in CONFUSABLE else 1.0)
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + sub))
+        prev = cur
+    return prev[-1]
+
+
 def similar(a, b):
     """Même pseudo à une lettre mal lue près, ou l'un est le début tronqué de l'autre."""
     if not a or not b:
@@ -90,7 +109,7 @@ def closest(text, names, team=None):
         if team and slot not in TEAM_SLOTS["team_a_bar" if team == "A" else "team_b_bar"]:
             continue
         n = normalize(name)
-        d = min(levenshtein(q, n), levenshtein(q[: len(n)], n), levenshtein(q, n[: len(q)]) + 1)
+        d = min(soft_distance(q, n), soft_distance(q[: len(n)], n), soft_distance(q, n[: len(q)]) + 1)
         scored.append((d / max(len(n), len(q), 1), slot))
     scored.sort()
     if not scored or scored[0][0] > 0.34:

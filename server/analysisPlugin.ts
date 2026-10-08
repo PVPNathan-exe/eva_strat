@@ -3,6 +3,7 @@
 //   POST /api/ingest              lance analyze.py, renvoie { jobId }
 //   POST /api/pick-file           ouvre le sélecteur de fichier Windows, renvoie { path } (null si annulé)
 //   GET  /api/jobs/:id/events     progression en SSE
+//   GET  /api/weapons             catalogue des icônes d'armes ; PUT /api/weapons/:id nomme une arme ; GET /api/weapons/:id/icon l'image
 //   le reste                      handleApi (games, calibrations, vidéos)
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -16,6 +17,7 @@ import { pickVideoFile } from './filePicker.ts';
 import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
 import { parseRange } from './range.ts';
+import { iconFile, listWeapons, setWeaponName } from './weapons.ts';
 
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -75,6 +77,7 @@ export function analysisPlugin(): Plugin {
       const cacheDir = join(root, 'data', 'cache');
       const script = join(root, 'analysis', 'analyze.py');
       const python = process.env.EVA_PYTHON ?? 'python';
+      const weaponsDir = join(root, 'analysis', 'weapon_icons');
 
       const ctx: ApiContext = {
         db: openDb(dbPath, join(root, 'analysis', 'schema.sql')),
@@ -118,6 +121,25 @@ export function analysisPlugin(): Plugin {
             } catch (err) {
               return sendJson(res, 409, { error: (err as Error).message });
             }
+          }
+
+          if (url.pathname === '/api/weapons' && method === 'GET') return sendJson(res, 200, listWeapons(ctx.db, weaponsDir));
+          const weapon = /^\/api\/weapons\/([A-Z]\d+)(\/icon)?$/.exec(url.pathname);
+          if (weapon && weapon[2] && method === 'GET') {
+            const png = iconFile(weaponsDir, weapon[1]);
+            if (!png) return sendJson(res, 404, { error: 'Icône inconnue' });
+            res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
+            return res.end(png);
+          }
+          if (weapon && !weapon[2] && method === 'PUT') {
+            const body = (await readJson(req)) as { name?: unknown } | undefined;
+            if (typeof body?.name !== 'string') return sendJson(res, 400, { error: 'Nom manquant' });
+            try {
+              setWeaponName(weaponsDir, weapon[1], body.name);
+            } catch (err) {
+              return sendJson(res, 400, { error: (err as Error).message });
+            }
+            return sendJson(res, 200, { ok: true });
           }
 
           const control = /^\/api\/jobs\/([\w-]+)\/(pause|resume|stop)$/.exec(url.pathname);

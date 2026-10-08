@@ -58,6 +58,16 @@ CREATE TABLE IF NOT EXISTS players (
   PRIMARY KEY (game_id, slot)
 );
 
+-- Équipement des joueurs (icônes des bandeaux, identifiants voir weapons.py : B = arme, G = gadget).
+CREATE TABLE IF NOT EXISTS loadouts (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  weapon1 TEXT,
+  weapon2 TEXT,
+  gadget TEXT,
+  PRIMARY KEY (game_id, slot)
+);
+
 -- Kills lus dans le killfeed. kills_meta : la game a été examinée (même s'il n'y a eu aucun kill).
 CREATE TABLE IF NOT EXISTS kills (
   game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
@@ -65,6 +75,7 @@ CREATE TABLE IF NOT EXISTS kills (
   killer_slot INTEGER CHECK (killer_slot BETWEEN 1 AND 8),
   victim_slot INTEGER NOT NULL CHECK (victim_slot BETWEEN 1 AND 8),
   weapon TEXT,
+  headshot INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (game_id, t, victim_slot)
 );
 CREATE TABLE IF NOT EXISTS kills_meta (

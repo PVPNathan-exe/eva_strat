@@ -102,6 +102,27 @@ def _segment_image(crop, row, seg):
     return cv2.copyMakeBorder(big, 20, 20, 20, 20, cv2.BORDER_REPLICATE)
 
 
+def split_icon(icon):
+    """Icône binaire du milieu de la ligne -> (arme, headshot).
+
+    Un tir à la tête ajoute une petite cible (anneau d'environ 16 x 16 px) à droite de l'arme. Elle est retirée de l'icône pour ne pas
+    fausser la reconnaissance de l'arme. Les icônes rondes (grenade) n'ont pas cette forme et ne sont pas confondues avec elle."""
+    if icon is None:
+        return None, False
+    n, labels, stats, _ = cv2.connectedComponentsWithStats((icon > 0).astype(np.uint8))
+    comps = [(stats[i, 0], stats[i, 1], stats[i, 2], stats[i, 3], stats[i, 4], i) for i in range(1, n) if stats[i, 4] >= 6]
+    if len(comps) < 2:
+        return icon, False
+    comps.sort()
+    x, y, w, h, area, idx = max(comps, key=lambda c: c[0] + c[2])  # composante la plus à droite
+    others = [c for c in comps if c[5] != idx and c[0] + c[2] <= x + 2 and c[4] >= 40]
+    if 12 <= w <= 20 and 12 <= h <= 20 and abs(w - h) <= 3 and others:
+        weapon = icon.copy()
+        weapon[:, max(x - 1, 0):] = 0  # retire la cible et son point central
+        return weapon, True
+    return icon, False
+
+
 def _icon_image(crop, row):
     a, b = row["segments"][0], row["segments"][-1]
     y0, y1 = row["y0"], row["y1"]
@@ -157,7 +178,7 @@ def _fingerprint(img):
 
 
 def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=None, emit=None):
-    """Kills d'une game : [{"t", "killer", "victim", "killer_team", "victim_team", "weapon"}]. players : {slot: pseudo}.
+    """Kills d'une game : [{"t", "killer", "victim", "killer_team", "victim_team", "weapon", "headshot"}]. players : {slot: pseudo}.
 
     weapon : identifiant de l'icône d'arme (« W1 »…, voir weapons.py), ou None."""
     observations = []  # (t, ligne, signature d'image du segment tueur, du segment victime)
@@ -236,10 +257,11 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
         known = [k for k in ev["killers"] if k is not None]
         killer = max(set(known), key=known.count) if known else None
         icons = [i for i in ev["icons"] if i is not None]
-        weapon = None
+        weapon, heads = None, []
         for icon in icons[len(icons) // 2 :] + icons[: len(icons) // 2]:  # on part de l'icône du milieu de l'affichage, la plus nette
-            weapon = weapons.identify(icon)
-            if weapon:
-                break
-        out.append({"t": ev["t"], "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": weapon})
+            shape, headshot = split_icon(icon)
+            heads.append(headshot)
+            if weapon is None:
+                weapon = weapons.identify(shape)
+        out.append({"t": ev["t"], "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": weapon, "headshot": sum(heads) * 2 > len(heads) if heads else False})
     return out

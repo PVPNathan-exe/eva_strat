@@ -5,9 +5,10 @@ import { DrawToolbar } from './components/DrawToolbar';
 import { WeaponPanel } from './components/WeaponPanel';
 import { MapCanvas } from './components/MapCanvas';
 import { AnalysisTab } from './components/analysis/AnalysisTab';
+import { WeaponsTab } from './components/analysis/WeaponsTab';
 import './App.css';
 
-type View = 'strategie' | 'analyse';
+type View = 'strategie' | 'analyse' | 'armes';
 
 export default function App() {
   const [view, setView] = useState<View>('strategie');
@@ -21,6 +22,9 @@ export default function App() {
         <button className={view === 'analyse' ? 'is-active' : ''} onClick={() => setView('analyse')}>
           Analyse
         </button>
+        <button className={view === 'armes' ? 'is-active' : ''} onClick={() => setView('armes')}>
+          Armes
+        </button>
       </nav>
       {view === 'strategie' ? (
         <>
@@ -32,6 +36,8 @@ export default function App() {
             <MapCanvas />
           </main>
         </>
+      ) : view === 'armes' ? (
+        <WeaponsTab />
       ) : (
         <AnalysisTab />
       )}

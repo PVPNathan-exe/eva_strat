@@ -51,17 +51,22 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const rows = ctx.db
     .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples FROM games WHERE video_id = ? ORDER BY start_s')
     .all(videoId) as Row[];
-  const kills = new Map<number, { t: number; killer: number | null; victim: number; weapon: string | null }[]>();
+  const kills = new Map<number, { t: number; killer: number | null; victim: number; weapon: string | null; headshot: boolean }[]>();
   for (const k of ctx.db
-    .prepare('SELECT game_id, t, killer_slot, victim_slot, weapon FROM kills WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY t')
-    .all(videoId) as { game_id: number; t: number; killer_slot: number | null; victim_slot: number; weapon: string | null }[]) {
-    kills.set(k.game_id, [...(kills.get(k.game_id) ?? []), { t: k.t, killer: k.killer_slot, victim: k.victim_slot, weapon: k.weapon }]);
+    .prepare('SELECT game_id, t, killer_slot, victim_slot, weapon, headshot FROM kills WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY t')
+    .all(videoId) as { game_id: number; t: number; killer_slot: number | null; victim_slot: number; weapon: string | null; headshot: number }[]) {
+    kills.set(k.game_id, [...(kills.get(k.game_id) ?? []), { t: k.t, killer: k.killer_slot, victim: k.victim_slot, weapon: k.weapon, headshot: !!k.headshot }]);
   }
-  const players = new Map<number, { slot: number; name: string }[]>();
+  type PlayerRow = { game_id: number; slot: number; name: string; weapon1: string | null; weapon2: string | null; gadget: string | null };
+  const players = new Map<number, Omit<PlayerRow, 'game_id'>[]>();
   for (const p of ctx.db
-    .prepare('SELECT game_id, slot, name FROM players WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY slot')
-    .all(videoId) as { game_id: number; slot: number; name: string }[]) {
-    players.set(p.game_id, [...(players.get(p.game_id) ?? []), { slot: p.slot, name: p.name }]);
+    .prepare(
+      `SELECT p.game_id, p.slot, p.name, l.weapon1, l.weapon2, l.gadget FROM players p
+       LEFT JOIN loadouts l ON l.game_id = p.game_id AND l.slot = p.slot
+       WHERE p.game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY p.slot`,
+    )
+    .all(videoId) as PlayerRow[]) {
+    players.set(p.game_id, [...(players.get(p.game_id) ?? []), { slot: p.slot, name: p.name, weapon1: p.weapon1, weapon2: p.weapon2, gadget: p.gadget }]);
   }
   return reply(
     200,

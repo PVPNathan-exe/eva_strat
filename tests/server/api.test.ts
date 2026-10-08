@@ -155,3 +155,21 @@ test('les positions sont comptées par game et effacées quand on déplace une b
   handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { end_s: 710 });
   assert.equal(samples(), 0);
 });
+
+test('la liste des games porte les pseudos, l’équipement et les kills (avec headshot)', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  const id = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 700, 'confirmed')").run(videoId).lastInsertRowid);
+  ctx.db.prepare("INSERT INTO players (game_id, slot, name) VALUES (?, 1, 'SHADYJ4Y'), (?, 5, 'ORXPAPY')").run(id, id);
+  ctx.db.prepare("INSERT INTO loadouts (game_id, slot, weapon1, weapon2, gadget) VALUES (?, 1, 'B1', 'B2', 'G1')").run(id);
+  ctx.db.prepare("INSERT INTO kills (game_id, t, killer_slot, victim_slot, weapon, headshot) VALUES (?, 150, 1, 5, 'W3', 1), (?, 160, NULL, 5, NULL, 0)").run(id, id);
+  const game = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as Record<string, unknown>[])[0];
+  assert.deepEqual(game.players, [
+    { slot: 1, name: 'SHADYJ4Y', weapon1: 'B1', weapon2: 'B2', gadget: 'G1' },
+    { slot: 5, name: 'ORXPAPY', weapon1: null, weapon2: null, gadget: null },
+  ]);
+  assert.deepEqual(game.kills, [
+    { t: 150, killer: 1, victim: 5, weapon: 'W3', headshot: true },
+    { t: 160, killer: null, victim: 5, weapon: null, headshot: false },
+  ]);
+});

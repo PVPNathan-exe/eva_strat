@@ -106,6 +106,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
   const [trails, setTrails] = useState(false);
+  const [weaponNames, setWeaponNames] = useState<Record<string, string>>({});
   const [labels, setLabels] = useState(large); // pseudos affichés d'emblée dans la vue agrandie
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [inset, setInset] = useState<Inset>(() => loadInset(game.map ?? ''));
@@ -117,6 +118,13 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const nameOf = useMemo(() => new Map(game.players.map((p) => [p.slot, p.name])), [game.players]);
   const plan = useMemo(() => builtinMaps.find((m) => m.name === game.map), [game.map]);
   const frames = useMemo(() => (samples ? groupFrames(samples) : []), [samples]);
+
+  useEffect(() => {
+    analysisApi
+      .weapons()
+      .then((list) => setWeaponNames(Object.fromEntries(list.filter((w) => w.name).map((w) => [w.id, w.name]))))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -326,8 +334,14 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
                 <button onClick={() => { setFollow(true); setPlaying(false); requestSeek(Math.max(game.start_s, k.t - 2)); }} title="Aller à ce kill dans la vidéo">
                   {formatTime(k.t - game.start_s)}
                 </button>
-                <span style={{ color: TEAM_COLOR[k.killer && k.killer > 4 ? 'B' : 'A'] }}>{k.killer ? (nameOf.get(k.killer) ?? `n° ${numberOfSlot(k.killer)}`) : '?'}</span>
-                <i title={k.weapon ?? 'arme inconnue'}>{k.weapon ?? '·'}</i>
+                {k.killer === null ? (
+                  <span className="kill__env" title="Aucun tueur dans le killfeed : mort du décor ou action d'un admin">décor</span>
+                ) : k.killer === k.victim ? (
+                  <span className="kill__env" title="Même pseudo des deux côtés">suicide</span>
+                ) : (
+                  <span style={{ color: TEAM_COLOR[k.killer > 4 ? 'B' : 'A'] }}>{nameOf.get(k.killer) ?? `n° ${numberOfSlot(k.killer)}`}</span>
+                )}
+                <i title={weaponNames[k.weapon ?? ''] ?? k.weapon ?? 'arme inconnue'}>{k.weapon ? (weaponNames[k.weapon] ?? k.weapon) : '·'}{k.headshot ? ' 🎯' : ''}</i>
                 <span style={{ color: TEAM_COLOR[k.victim > 4 ? 'B' : 'A'] }}>{nameOf.get(k.victim) ?? `n° ${numberOfSlot(k.victim)}`}</span>
               </li>
             ))}
