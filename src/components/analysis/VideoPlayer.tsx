@@ -13,17 +13,8 @@ export function VideoPlayer({ videoId, duration }: { videoId: number; duration: 
   const setCurrentTime = useAnalysisStore((s) => s.setCurrentTime);
 
   useEffect(() => {
-    const el = ref.current;
-    setVideoElement(el);
-    return () => {
-      setVideoElement(null);
-      // On libère le flux : seule la vidéo active doit rester chargée.
-      if (el) {
-        el.pause();
-        el.removeAttribute('src');
-        el.load();
-      }
-    };
+    setVideoElement(ref.current);
+    return () => setVideoElement(null);
   }, [videoId]);
 
   useEffect(() => {
