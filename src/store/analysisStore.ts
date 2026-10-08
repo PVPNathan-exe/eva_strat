@@ -7,7 +7,7 @@ import type { Game, JobEvent, Video } from '../types/analysis';
 
 export interface JobState {
   running: boolean;
-  stage: 'download' | null;
+  stage: 'download' | 'detect' | null;
   pct: number;
   error: string | null;
   message: string | null;
@@ -29,7 +29,7 @@ interface AnalysisState {
   setCurrentTime: (t: number) => void;
   setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
-  startIngest: (source: string, singleGame?: boolean) => Promise<void>;
+  startIngest: (source: string, options?: { singleGame?: boolean; preRoll?: number }) => Promise<void>;
   createWholeGame: () => Promise<void>;
 }
 
@@ -79,10 +79,10 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     if (get().videoId === videoId) set({ selectedGameId: id });
   },
 
-  startIngest: async (source, singleGame = false) => {
+  startIngest: async (source, { singleGame = false, preRoll } = {}) => {
     set({ job: { ...idleJob, running: true } });
     try {
-      const { jobId } = await analysisApi.ingest(source);
+      const { jobId } = await analysisApi.ingest(source, { detect: !singleGame, preRoll });
       subscribeJob(jobId, (e: JobEvent) => {
         if (e.event === 'progress') {
           set({ job: { running: true, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });

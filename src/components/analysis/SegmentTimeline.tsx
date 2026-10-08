@@ -1,4 +1,4 @@
-// Barre de temps : games en vert, lobby en gris, début en attente en jaune.
+// Barre de temps : games en vert, lobby en gris, début en attente en jaune, zones à vérifier hachurées en orange.
 // Un clic déplace la lecture.
 
 import { formatTime, pctToTime, timeToPct } from '../../lib/timeline';
@@ -36,6 +36,24 @@ export function SegmentTimeline({ duration }: { duration: number }) {
             }}
           />
         ))}
+        {games
+          .filter((g) => g.id === selectedGameId || g.status === 'detected')
+          .flatMap((g) => g.doubts.map((d, i) => ({ ...d, key: `${g.id}-${i}` })))
+          .map((d) => (
+            <div
+              key={d.key}
+              className="timeline__doubt"
+              style={{
+                left: `${timeToPct(d.start_s, duration)}%`,
+                width: `${Math.max(0.4, timeToPct(d.end_s, duration) - timeToPct(d.start_s, duration))}%`,
+              }}
+              title={`À vérifier : ${d.label}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                requestSeek(d.start_s);
+              }}
+            />
+          ))}
         {pendingStart !== null && <div className="timeline__pending" style={{ left: `${timeToPct(pendingStart, duration)}%` }} />}
         <div className="timeline__cursor" style={{ left: `${timeToPct(currentTime, duration)}%` }} />
       </div>

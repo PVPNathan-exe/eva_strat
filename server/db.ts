@@ -11,5 +11,8 @@ export function openDb(path: string, schemaPath: string): DatabaseSync {
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
   db.exec(readFileSync(schemaPath, 'utf-8'));
+  // Bases créées avant l'ajout de la colonne doubts.
+  const columns = db.prepare('PRAGMA table_info(games)').all() as { name: string }[];
+  if (!columns.some((c) => c.name === 'doubts')) db.exec('ALTER TABLE games ADD COLUMN doubts TEXT');
   return db;
 }

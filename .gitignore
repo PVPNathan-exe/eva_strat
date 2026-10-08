@@ -27,3 +27,4 @@ dist-ssr
 data/
 __pycache__/
 .pytest_cache/
+*.mp4

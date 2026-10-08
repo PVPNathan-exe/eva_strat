@@ -49,9 +49,12 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const videoId = Number(query.get('video'));
   if (!Number.isInteger(videoId)) return fail('Paramètre video manquant');
   const rows = ctx.db
-    .prepare('SELECT id, video_id, start_s, end_s, map, status, winner FROM games WHERE video_id = ? ORDER BY start_s')
-    .all(videoId);
-  return reply(200, rows);
+    .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, doubts FROM games WHERE video_id = ? ORDER BY start_s')
+    .all(videoId) as Row[];
+  return reply(
+    200,
+    rows.map((r) => ({ ...r, doubts: typeof r.doubts === 'string' ? JSON.parse(r.doubts) : [] })),
+  );
 }
 
 function createGame(ctx: ApiContext, body: Row): ApiResult {

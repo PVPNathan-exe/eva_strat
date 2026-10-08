@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS games (
   map TEXT,
   status TEXT NOT NULL DEFAULT 'detected' CHECK (status IN ('detected', 'confirmed')),
   winner TEXT,
+  doubts TEXT,  -- JSON : zones à vérifier [{start_s, end_s, label}] posées par la détection automatique
   CHECK (end_s > start_s)
 );
 CREATE INDEX IF NOT EXISTS idx_games_video ON games(video_id);

@@ -1,7 +1,7 @@
-"""CLI d'analyse : lit (ou télécharge) une vidéo et l'enregistre dans SQLite (les games sont posées à la main).
+"""CLI d'analyse : lit (ou télécharge) une vidéo, détecte les games par le chrono et enregistre le tout dans SQLite.
 
 Les événements sont écrits sur stdout, un objet JSON par ligne :
-  {"event": "progress", "stage": "download", "pct": 0-100}
+  {"event": "progress", "stage": "download" | "detect", "pct": 0-100}
   {"event": "done", "video_id": N}
   {"event": "error", "message": "..."}
 """
@@ -13,13 +13,31 @@ from pathlib import Path
 
 import db
 import ingest
+import segments
+import timer
+
+ZONES_PATH = Path(__file__).with_name("default_zones.json")
 
 
 def print_event(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
-def run(source, db_path, cache_dir, emit=print_event):
+def detect(path, meta, emit, pre_roll):
+    """Lit le chrono toutes les secondes (zone par défaut) et en déduit les games."""
+    zone = json.loads(ZONES_PATH.read_text(encoding="utf-8"))["timer"]
+    templates = timer.load_templates()
+    samples, last_pct = [], -1
+    for t, crop in timer.iter_crops(path, zone, meta["width"], meta["height"]):
+        samples.append((t, timer.read_timer(crop, templates)))
+        pct = int(100 * t / max(meta["duration_s"], 1))
+        if pct != last_pct:
+            last_pct = pct
+            emit({"event": "progress", "stage": "detect", "pct": pct})
+    return segments.detect_games(samples, meta["duration_s"], pre_roll=pre_roll)
+
+
+def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S):
     conn = db.connect(db_path)
     source_url = None
 
@@ -38,6 +56,10 @@ def run(source, db_path, cache_dir, emit=print_event):
     meta = ingest.probe(path)
     video_id = db.upsert_video(conn, str(path.resolve()), source_url, **meta)
 
+    if do_detect:
+        emit({"event": "progress", "stage": "detect", "pct": 0})
+        db.replace_detected_games(conn, video_id, detect(path, meta, emit, pre_roll))
+
     emit({"event": "done", "video_id": video_id})
 
 
@@ -46,9 +68,11 @@ def main(argv=None, emit=print_event):
     parser.add_argument("--source", required=True, help="Chemin d'un .mp4 ou URL YouTube")
     parser.add_argument("--db", default="data/eva.db")
     parser.add_argument("--cache", default="data/cache")
+    parser.add_argument("--no-detect", action="store_true", help="Ne pas chercher les games (vidéo d'une seule game)")
+    parser.add_argument("--pre-roll", type=float, default=segments.PRE_ROLL_S, help="Secondes gardées avant le départ du chrono")
     args = parser.parse_args(argv)
     try:
-        run(args.source, args.db, args.cache, emit)
+        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll)
     except Exception as exc:  # noqa: BLE001 - tout échec doit être signalé à l'UI
         emit({"event": "error", "message": str(exc)})
         return 1

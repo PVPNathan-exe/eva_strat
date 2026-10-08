@@ -28,7 +28,8 @@ export const analysisApi = {
     fetch(`/api/calibrations?map=${encodeURIComponent(map)}`).then(parse<{ map: string; zones: Zones; isDefault: boolean }>),
   saveCalibration: (map: string, zones: Zones) =>
     fetch('/api/calibrations', jsonInit('PUT', { map, zones })).then(parse<{ ok: true }>),
-  ingest: (source: string) => fetch('/api/ingest', jsonInit('POST', { source })).then(parse<{ jobId: string }>),
+  ingest: (source: string, options: { detect?: boolean; preRoll?: number } = {}) =>
+    fetch('/api/ingest', jsonInit('POST', { source, ...options })).then(parse<{ jobId: string }>),
   pickFile: () => fetch('/api/pick-file', jsonInit('POST', {})).then(parse<{ path: string | null }>),
 };
 

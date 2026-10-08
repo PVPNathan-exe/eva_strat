@@ -392,6 +392,15 @@
   color: #c7ccda;
 }
 
+.ingest__preroll {
+  width: 3.5rem;
+  padding: 0.25rem 0.3rem;
+  background: #0e1117;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+}
+
 .ingest__input {
   flex: 1;
   padding: 0.4rem 0.6rem;
@@ -508,6 +517,16 @@
   outline-offset: -2px;
 }
 
+.timeline__doubt {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(45deg, #ff9f1c 0 4px, rgba(0, 0, 0, 0.55) 4px 8px);
+  border-radius: 2px;
+  cursor: pointer;
+  z-index: 2;
+}
+
 .timeline__pending {
   position: absolute;
   top: 0;
@@ -577,6 +596,21 @@
 .games__error {
   color: #ff6b6b;
   font-size: 0.9rem;
+}
+
+.game__check {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.4rem 0;
+  font-size: 0.8rem;
+  color: #ffb454;
+}
+
+.game__doubt {
+  text-align: left;
+  color: #ffb454;
+  border-color: #6b4a1c;
 }
 
 .game {

@@ -10,6 +10,12 @@ export interface Video {
 
 export type GameStatus = 'detected' | 'confirmed';
 
+export interface Doubt {
+  start_s: number;
+  end_s: number;
+  label: string;
+}
+
 export interface Game {
   id: number;
   video_id: number;
@@ -18,6 +24,7 @@ export interface Game {
   map: string | null;
   status: GameStatus;
   winner: string | null;
+  doubts: Doubt[];
 }
 
 export const ZONE_NAMES = ['minimap', 'capture_points', 'team_a_bar', 'team_b_bar', 'timer'] as const;
@@ -41,7 +48,7 @@ export const ZONE_LABELS: Record<ZoneName, string> = {
 
 export interface JobEvent {
   event: 'progress' | 'done' | 'error';
-  stage?: 'download';
+  stage?: 'download' | 'detect';
   pct?: number;
   video_id?: number;
   message?: string;
