@@ -26,9 +26,11 @@
   "G8": "DX3",
   "G15": "CLONE",
   "G9": "DX3",
-  "G16": "CLONE",
   "B9": "FURY",
   "B7": "NEEDLE",
   "B11": "ATLAS",
-  "B14": "SOCOM"
+  "B14": "SOCOM",
+  "B19": "T1 GAUSS",
+  "B17": "STRIKER",
+  "B16": "Ak"
 }

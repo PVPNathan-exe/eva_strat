@@ -83,10 +83,39 @@ export function analysisPlugin(): Plugin {
       let iconFixQueue: Promise<unknown> = Promise.resolve();
 
       /** Lance icon_fix.py (images candidates, recalcul d'une icône) : une seule à la fois (les suivantes attendent), résultat JSON sur la dernière ligne. */
-      const runIconFix = (args: string[]) => {
-        const job = iconFixQueue.then(() => runIconFixNow(args));
+      const runIconFix = (args: string[], onStart?: () => void) => {
+        const job = iconFixQueue.then(() => {
+          onStart?.();
+          return runIconFixNow(args);
+        });
         iconFixQueue = job.catch(() => undefined);
         return job;
+      };
+      // Le calcul prend une vingtaine de secondes : il tourne en tâche de fond et la page consulte l'avancement par de courtes requêtes.
+      // Une longue requête en attente bloquerait les autres (le navigateur n'ouvre que 6 connexions vers le serveur) : plus aucun clic n'aboutirait.
+      type IconWork = { action: 'candidates' | 'rebuild'; state: 'queued' | 'running' | 'done' | 'error'; result?: Record<string, unknown>; error?: string };
+      const iconWork = new Map<string, IconWork>();
+      const startIconWork = (id: string, action: 'candidates' | 'rebuild', token?: string): IconWork => {
+        const current = iconWork.get(id);
+        if (current?.state === 'running' || current?.state === 'queued') return current; // déjà demandé pour cette icône : on ne relance pas
+        const work: IconWork = { action, state: 'queued' };
+        iconWork.set(id, work);
+        runIconFix(
+          action === 'candidates' ? ['candidates', `--id=${id}`] : ['rebuild', `--id=${id}`, ...(token ? [`--token=${token}`] : [])],
+          () => {
+            work.state = 'running';
+          },
+        )
+          .then((result) => {
+            work.result = result;
+            work.state = 'done';
+            if (action === 'rebuild') setReview(weaponsDir, id, { reported: false });
+          })
+          .catch((err: Error) => {
+            work.error = err.message;
+            work.state = 'error';
+          });
+        return work;
       };
       const runIconFixNow = (args: string[]) =>
         new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -189,13 +218,14 @@ export function analysisPlugin(): Plugin {
             return sendJson(res, 200, { ok: true });
           }
 
-          const candidates = /^\/api\/weapons\/([A-Z]\d+)\/candidates$/.exec(url.pathname);
-          if (candidates && method === 'GET') {
-            try {
-              return sendJson(res, 200, await runIconFix(['candidates', `--id=${candidates[1]}`]));
-            } catch (err) {
-              return sendJson(res, 409, { error: (err as Error).message });
-            }
+          if (url.pathname === '/api/weapons/work' && method === 'GET') return sendJson(res, 200, Object.fromEntries(iconWork));
+          const work = /^\/api\/weapons\/([A-Z]\d+)\/work$/.exec(url.pathname);
+          if (work && method === 'GET') return sendJson(res, 200, iconWork.get(work[1]) ?? { state: 'none' });
+          if (work && method === 'POST') {
+            const body = (await readJson(req)) as { action?: unknown; token?: unknown } | undefined;
+            if (body?.action !== 'candidates' && body?.action !== 'rebuild') return sendJson(res, 400, { error: 'Action inconnue' });
+            const token = typeof body.token === 'string' && /^\d+_\d+_\d+$/.test(body.token) ? body.token : undefined;
+            return sendJson(res, 202, startIconWork(work[1], body.action, token));
           }
           const candidateImage = /^\/api\/weapons\/([A-Z]\d+)\/candidates\/(\d+_\d+_\d+)\.png$/.exec(url.pathname);
           if (candidateImage && method === 'GET') {
@@ -204,19 +234,6 @@ export function analysisPlugin(): Plugin {
             res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
             return res.end(readFileSync(file));
           }
-          const rebuild = /^\/api\/weapons\/([A-Z]\d+)\/rebuild$/.exec(url.pathname);
-          if (rebuild && method === 'POST') {
-            const body = (await readJson(req)) as { token?: unknown } | undefined;
-            const token = typeof body?.token === 'string' && /^\d+_\d+_\d+$/.test(body.token) ? body.token : undefined;
-            try {
-              const result = await runIconFix(['rebuild', `--id=${rebuild[1]}`, ...(token ? [`--token=${token}`] : [])]);
-              setReview(weaponsDir, rebuild[1], { reported: false });
-              return sendJson(res, 200, result);
-            } catch (err) {
-              return sendJson(res, 409, { error: (err as Error).message });
-            }
-          }
-
           if (url.pathname === '/api/jobs/current' && method === 'GET') {
             const job = jobs.running();
             return sendJson(res, 200, { jobId: job?.id ?? null, paused: job?.paused ?? false });

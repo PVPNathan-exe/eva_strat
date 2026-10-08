@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { CaptureSeries, CommentTag, IconCandidate, Correction, Game, JobEvent, Sample, Video, VideoComment, Weapon, Zones } from '../types/analysis';
+import type { CaptureSeries, CommentTag, IconWork, Correction, Game, JobEvent, Sample, Video, VideoComment, Weapon, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -30,8 +30,11 @@ export const analysisApi = {
   nameWeapon: (id: string, name: string) => fetch(`/api/weapons/${id}`, jsonInit('PUT', { name })).then(parse<{ ok: true }>),
   reviewWeapon: (id: string, review: { verdict?: 'ok' | 'bad' | null; reported?: boolean; reason?: string }) =>
     fetch(`/api/weapons/${id}/review`, jsonInit('POST', review)).then(parse<{ ok: true }>),
-  iconCandidates: (id: string) => fetch(`/api/weapons/${id}/candidates`, { cache: 'no-store' }).then(parse<{ id: string; candidates: IconCandidate[] }>),
-  rebuildIcon: (id: string, token?: string) => fetch(`/api/weapons/${id}/rebuild`, jsonInit('POST', { token })).then(parse<{ id: string; used: string[] }>),
+  // Travail de fond sur une icône (images candidates, recalcul) : on le lance, puis on consulte son avancement par de courtes requêtes.
+  startIconWork: (id: string, action: 'candidates' | 'rebuild', token?: string) =>
+    fetch(`/api/weapons/${id}/work`, jsonInit('POST', { action, token })).then(parse<IconWork>),
+  allIconWork: () => fetch('/api/weapons/work', { cache: 'no-store' }).then(parse<Record<string, IconWork>>),
+  iconWork: (id: string) => fetch(`/api/weapons/${id}/work`, { cache: 'no-store' }).then(parse<IconWork>),
   capture: (gameId: number) => fetch(`/api/capture?game=${gameId}`, { cache: 'no-store' }).then(parse<CaptureSeries>),
   corrections: (gameId: number) => fetch(`/api/corrections?game=${gameId}`, { cache: 'no-store' }).then(parse<Correction[]>),
   swapPlayers: (gameId: number, slotA: number, slotB: number, t0: number, t1: number) =>

@@ -2,7 +2,7 @@
 // Le programme relit les bandeaux autour des endroits où l'icône a été vue et propose des images ; il peut recalculer l'icône seul
 // (meilleures images moyennées) ou à partir de l'image que tu désignes comme modèle.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Flag, Loader2, Wand2, X } from 'lucide-react';
 import { analysisApi, bumpIconVersion, candidateImageUrl, weaponIconUrl } from '../../lib/analysisApi';
 import { useAnalysisStore } from '../../store/analysisStore';
@@ -18,30 +18,50 @@ export function WeaponReport({ weapon, onClose }: { weapon: Weapon; onClose: () 
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Lance un travail de fond puis le consulte toutes les 1,5 s (de courtes requêtes : rien ne reste en attente côté navigateur).
+  const follow = useRef(0);
+  const run = async (action: 'candidates' | 'rebuild', token?: string) => {
+    const mine = ++follow.current;
+    let work = await analysisApi.startIconWork(weapon.id, action, token);
+    while ((work.state === 'running' || work.state === 'queued') && follow.current === mine) {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (follow.current !== mine) return null;
+      work = await analysisApi.iconWork(weapon.id);
+    }
+    return follow.current === mine ? work : null;
+  };
+
   // Le signalement est enregistré dès l'ouverture ; les images sont cherchées une fois.
   useEffect(() => {
-    let cancelled = false;
     void analysisApi.reviewWeapon(weapon.id, { reported: true }).then(() => loadWeapons()).catch(() => undefined);
     if (!canRebuild) return;
-    analysisApi
-      .iconCandidates(weapon.id)
-      .then((r) => !cancelled && setCandidates(r.candidates))
-      .catch((e: Error) => !cancelled && setError(e.message))
-      .finally(() => !cancelled && setBusy(null));
+    let alive = true;
+    run('candidates')
+      .then((work) => {
+        if (!alive || !work) return;
+        if (work.state === 'error') setError(work.error ?? 'La recherche des images a échoué');
+        else setCandidates(work.result?.candidates ?? []);
+      })
+      .catch((e: Error) => alive && setError(e.message))
+      .finally(() => alive && setBusy(null));
     return () => {
-      cancelled = true;
+      alive = false;
+      follow.current += 1; // arrête la consultation quand la fenêtre se ferme
     };
-  }, [weapon.id, canRebuild, loadWeapons]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weapon.id, canRebuild]);
 
   const rebuild = async (token?: string) => {
     setBusy('rebuild');
-    setError(null);
     setMessage(null);
+    setError(null);
     try {
-      const r = await analysisApi.rebuildIcon(weapon.id, token);
+      const work = await run('rebuild', token);
+      if (!work) return;
+      if (work.state === 'error') throw new Error(work.error ?? 'Le recalcul a échoué');
       bumpIconVersion();
       await loadWeapons();
-      setMessage(token ? "Modèle remplacé par l'image choisie." : `Icône recalculée à partir de ${r.used.length} images.`);
+      setMessage(token ? "Modèle remplacé par l'image choisie." : `Icône recalculée à partir de ${work.result?.used?.length ?? 0} images.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -53,10 +73,10 @@ export function WeaponReport({ weapon, onClose }: { weapon: Weapon; onClose: () 
     if (reason.trim()) await analysisApi.reviewWeapon(weapon.id, { reported: true, reason }).catch(() => undefined);
   };
 
-  const withdraw = async () => {
-    await analysisApi.reviewWeapon(weapon.id, { reported: false }).catch(() => undefined);
-    await loadWeapons();
+  // La fenêtre se ferme tout de suite : l'enregistrement se fait en arrière-plan.
+  const withdraw = () => {
     onClose();
+    void analysisApi.reviewWeapon(weapon.id, { reported: false }).then(() => loadWeapons()).catch(() => undefined);
   };
 
   return (
@@ -121,7 +141,7 @@ export function WeaponReport({ weapon, onClose }: { weapon: Weapon; onClose: () 
           {error && <p className="games__error">{error}</p>}
         </div>
         <footer className="report__foot">
-          <button onClick={() => void withdraw()}>Retirer le signalement</button>
+          <button onClick={withdraw}>Retirer le signalement</button>
           <button onClick={onClose}>Fermer</button>
         </footer>
       </div>

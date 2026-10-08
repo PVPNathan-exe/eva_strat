@@ -25,7 +25,18 @@ export function WeaponSuggestions() {
 
 const formatTime = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
-export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: string, name: string) => void }) {
+export function WeaponCard({
+  weapon,
+  onName,
+  selected,
+  onSelect,
+}: {
+  weapon: Weapon;
+  onName: (id: string, name: string) => void;
+  /** Sélection pour un recalcul par lots (armes et gadgets des bandeaux seulement). */
+  selected?: boolean;
+  onSelect?: (id: string) => void;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
   const openAt = useAnalysisStore((s) => s.openAt);
   const loadWeapons = useAnalysisStore((s) => s.loadWeapons);
@@ -40,6 +51,9 @@ export function WeaponCard({ weapon, onName }: { weapon: Weapon; onName: (id: st
     <div className={`weapon${weapon.name ? ' is-named' : ''}${weapon.inferred ? ' is-inferred' : ''}`}>
       <img src={weaponIconUrl(weapon.id)} alt={`Icône ${weapon.id}`} />
       <div className="weapon__meta">
+        {onSelect && (
+          <input type="checkbox" className="weapon__select" checked={!!selected} onChange={() => onSelect(weapon.id)} aria-label={`Sélectionner ${weapon.id} pour le recalcul`} title="Sélectionner pour le recalcul par lots" />
+        )}
         <b>{weapon.id}</b>
         {weapon.inferred && <em title="Déduit de l'équipement des joueurs qui ont fait ces kills. Modifie-le si c'est faux.">deviné</em>}
         <span title="Nombre de kills ou de joueurs où cette icône a été vue">

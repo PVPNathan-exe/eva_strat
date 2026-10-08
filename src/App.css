@@ -1229,6 +1229,28 @@
   padding-left: 14px;
 }
 
+.weapons__batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  margin: 0.6rem 0;
+  padding: 0.5rem 0.8rem;
+  background: #151a24;
+  border: 1px solid #2a3142;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.weapons__batch-go {
+  background: #1f6f43;
+  border-color: #35e07a;
+}
+
+.weapon__select {
+  margin-right: 0.35rem;
+}
+
 .weapon__judge {
   display: flex;
   align-items: center;

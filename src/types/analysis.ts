@@ -60,6 +60,14 @@ export interface Weapon {
   sources: { videoId: number; gameId: number; video: string; game: number; map: string | null; t: number; player: string | null }[];
 }
 
+/** Avancement d'un travail de fond sur une icône (recherche d'images candidates, recalcul). */
+export interface IconWork {
+  action?: 'candidates' | 'rebuild';
+  state: 'none' | 'queued' | 'running' | 'done' | 'error';
+  result?: { candidates?: IconCandidate[]; used?: string[] };
+  error?: string;
+}
+
 /** Image candidate pour recalculer une icône (lue sur un bandeau, autour d'un endroit où l'icône a été vue). */
 export interface IconCandidate {
   token: string;
