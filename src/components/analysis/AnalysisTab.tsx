@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { CalibrationEditor } from './CalibrationEditor';
 import { GameList } from './GameList';
+import { CommentsPanel } from './CommentsPanel';
 import { IngestBar } from './IngestBar';
 import { ReplayPanel } from './ReplayPanel';
 import { SegmentTimeline } from './SegmentTimeline';
@@ -31,6 +32,7 @@ export function AnalysisTab() {
             <>
               <VideoPlayer key={videoId} videoId={videoId} duration={video.duration_s} />
               <SegmentTimeline duration={video.duration_s} />
+              <CommentsPanel videoName={video.path.split(/[\\/]/).pop() ?? ''} />
               <button className="analysis__calibrate" onClick={() => setCalibrating(true)}>
                 Calibrer les zones du HUD
               </button>

@@ -3,7 +3,7 @@
 
 import { create } from 'zustand';
 import { analysisApi, subscribeJob } from '../lib/analysisApi';
-import type { Game, JobEvent, Video, Weapon } from '../types/analysis';
+import type { CommentTag, Game, JobEvent, Video, VideoComment, Weapon } from '../types/analysis';
 import { canonicalName } from '../lib/weaponCatalog';
 
 // Icônes pour lesquelles l'invite de nom a déjà été fermée (« Plus tard ») : on ne redemande pas avant la prochaine analyse qui en trouve de nouvelles.
@@ -28,6 +28,11 @@ interface AnalysisState {
   pendingStart: number | null;
   seekRequest: { t: number; nonce: number } | null;
   job: JobState;
+  comments: VideoComment[];
+  loadComments: () => Promise<void>;
+  addComment: (t: number, text: string, tag: CommentTag, slots: number[]) => Promise<void>;
+  updateComment: (id: number, patch: Partial<{ text: string; tag: CommentTag; resolved: boolean; slots: number[] }>) => Promise<void>;
+  removeComment: (id: number) => Promise<void>;
   weapons: Weapon[] | null;
   weaponPromptOpen: boolean;
   loadWeapons: (promptIfNew?: boolean) => Promise<void>;
@@ -57,6 +62,31 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   job: idleJob,
   weapons: null,
   weaponPromptOpen: false,
+  comments: [],
+
+  loadComments: async () => {
+    const requested = get().videoId;
+    if (requested === null) return set({ comments: [] });
+    const comments = await analysisApi.comments(requested);
+    if (get().videoId === requested) set({ comments });
+  },
+
+  addComment: async (t, text, tag, slots) => {
+    const videoId = get().videoId;
+    if (videoId === null) return;
+    await analysisApi.addComment(videoId, t, text, tag, slots);
+    await get().loadComments();
+  },
+
+  updateComment: async (id, patch) => {
+    await analysisApi.patchComment(id, patch);
+    await get().loadComments();
+  },
+
+  removeComment: async (id) => {
+    await analysisApi.deleteComment(id);
+    await get().loadComments();
+  },
 
   // Liste des icônes d'armes. Après une analyse (promptIfNew), une fenêtre demande le nom de celles que le programme ne connaît pas.
   loadWeapons: async (promptIfNew = false) => {
@@ -89,8 +119,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   selectVideo: async (id) => {
-    set({ videoId: id, games: [], selectedGameId: null, currentTime: 0, pendingStart: null });
-    if (id !== null) await get().refreshGames();
+    set({ videoId: id, games: [], comments: [], selectedGameId: null, currentTime: 0, pendingStart: null });
+    if (id !== null) {
+      await get().refreshGames();
+      void get().loadComments().catch(() => undefined);
+    }
   },
 
   refreshGames: async () => {

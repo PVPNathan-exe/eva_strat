@@ -29,6 +29,20 @@ export interface Correction {
   slot_b: number;
 }
 
+export type CommentTag = 'suivi' | 'equipe' | 'note';
+
+export interface VideoComment {
+  id: number;
+  video_id: number;
+  game_id: number | null;
+  t: number;
+  tag: CommentTag;
+  text: string;
+  slots: number[];
+  resolved: boolean;
+  created_at: string;
+}
+
 export type WeaponKind = 'killfeed' | 'arme' | 'gadget';
 
 export interface Weapon {

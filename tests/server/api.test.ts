@@ -233,3 +233,39 @@ test('les kills portent le nom de l’arme, et pour une grenade celle équipée 
     [null, null], // icône jamais nommée
   ]);
 });
+
+test('les commentaires sont liés à un instant, rattachés à leur game, filtrés par vidéo et modifiables', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx, 900);
+  const gameId = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 400, 'confirmed')").run(videoId).lastInsertRowid);
+  const post = (body: object) => handleApi(ctx, 'POST', '/api/comments', q(), { video_id: videoId, ...body });
+  assert.equal(post({ t: 150.5, text: '  Le joueur 2 est mal suivi  ', tag: 'suivi', slots: [5, 2, 2] }).status, 201);
+  assert.equal(post({ t: 600, text: 'Rotation trop lente', tag: 'equipe' }).status, 201); // hors game
+  const list = handleApi(ctx, 'GET', '/api/comments', q(`video=${videoId}`), undefined).json as Record<string, unknown>[];
+  assert.deepEqual(list.map((c) => [c.t, c.tag, c.text, c.game_id, c.slots, c.resolved]), [
+    [150.5, 'suivi', 'Le joueur 2 est mal suivi', gameId, [2, 5], false],
+    [600, 'equipe', 'Rotation trop lente', null, [], false],
+  ]);
+  const id = list[0].id as number;
+  assert.equal(handleApi(ctx, 'PATCH', `/api/comments/${id}`, q(), { resolved: true }).status, 200);
+  assert.equal(handleApi(ctx, 'PATCH', `/api/comments/${id}`, q(), { text: 'Corrigé', tag: 'note', slots: [1] }).status, 200);
+  const after = (handleApi(ctx, 'GET', '/api/comments', q(`video=${videoId}`), undefined).json as Record<string, unknown>[])[0];
+  assert.deepEqual([after.text, after.tag, after.slots, after.resolved], ['Corrigé', 'note', [1], true]);
+  assert.equal(handleApi(ctx, 'DELETE', `/api/comments/${id}`, q(), undefined).status, 200);
+  assert.equal(handleApi(ctx, 'DELETE', `/api/comments/${id}`, q(), undefined).status, 404);
+  assert.equal((handleApi(ctx, 'GET', '/api/comments', q(`video=${videoId}`), undefined).json as unknown[]).length, 1);
+});
+
+test('un commentaire invalide est refusé : texte vide, catégorie inconnue, instant hors vidéo, joueurs invalides', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx, 900);
+  const post = (body: object) => handleApi(ctx, 'POST', '/api/comments', q(), { video_id: videoId, t: 10, text: 'ok', ...body }).status;
+  assert.equal(post({ text: '   ' }), 400);
+  assert.equal(post({ tag: 'autre' }), 400);
+  assert.equal(post({ t: 5000 }), 400);
+  assert.equal(post({ t: -1 }), 400);
+  assert.equal(post({ slots: [9] }), 400);
+  assert.equal(post({ slots: 'x' }), 400);
+  assert.equal(handleApi(ctx, 'POST', '/api/comments', q(), { video_id: 999, t: 1, text: 'ok' }).status, 404);
+  assert.equal(handleApi(ctx, 'GET', '/api/comments', q(), undefined).status, 400);
+});

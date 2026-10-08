@@ -11,6 +11,7 @@ export function SegmentTimeline({ duration }: { duration: number }) {
   const pendingStart = useAnalysisStore((s) => s.pendingStart);
   const requestSeek = useAnalysisStore((s) => s.requestSeek);
   const selectGame = useAnalysisStore((s) => s.selectGame);
+  const comments = useAnalysisStore((s) => s.comments);
 
   const onBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -50,6 +51,20 @@ export function SegmentTimeline({ duration }: { duration: number }) {
               onClick={(e) => {
                 e.stopPropagation();
                 requestSeek(d.start_s);
+              }}
+            />
+          ))}
+        {comments
+          .filter((c) => !c.resolved)
+          .map((c) => (
+            <button
+              key={c.id}
+              className={`timeline__comment timeline__comment--${c.tag}`}
+              style={{ left: `${timeToPct(c.t, duration)}%` }}
+              title={`${formatTime(c.t)} : ${c.text}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                requestSeek(Math.max(0, c.t - 2));
               }}
             />
           ))}

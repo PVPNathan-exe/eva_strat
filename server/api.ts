@@ -252,6 +252,62 @@ function deleteCorrection(ctx: ApiContext, id: number): ApiResult {
   return reply(200, { ok: true });
 }
 
+const COMMENT_TAGS = ['suivi', 'equipe', 'note'];
+
+function commentRow(r: Row) {
+  const slots = typeof r.slots === 'string' && r.slots ? r.slots.split(',').map(Number).filter((n) => n >= 1 && n <= 8) : [];
+  return { ...r, slots, resolved: !!r.resolved };
+}
+
+function parseSlots(v: unknown): string | null | false {
+  if (v === undefined || v === null) return null;
+  if (!Array.isArray(v) || !v.every((n) => validSlot(n))) return false;
+  return [...new Set(v as number[])].sort((a, b) => a - b).join(',') || null;
+}
+
+function listComments(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const videoId = Number(query.get('video'));
+  if (query.get('video') === null || !Number.isInteger(videoId)) return fail('Paramètre video manquant');
+  const rows = ctx.db
+    .prepare('SELECT id, video_id, game_id, t, tag, text, slots, resolved, created_at FROM comments WHERE video_id = ? ORDER BY t, id')
+    .all(videoId) as Row[];
+  return reply(200, rows.map(commentRow));
+}
+
+function createComment(ctx: ApiContext, body: Row): ApiResult {
+  const videoId = num(body.video_id);
+  const t = num(body.t);
+  const text = typeof body.text === 'string' ? body.text.trim() : '';
+  const tag = typeof body.tag === 'string' ? body.tag : 'suivi';
+  const slots = parseSlots(body.slots);
+  if (videoId === null || t === null || t < 0) return fail('Vidéo ou instant invalide');
+  if (!text || text.length > 2000) return fail('Le commentaire doit faire entre 1 et 2000 caractères');
+  if (!COMMENT_TAGS.includes(tag)) return fail('Catégorie inconnue');
+  if (slots === false) return fail('Joueurs invalides');
+  const video = ctx.db.prepare('SELECT duration_s FROM videos WHERE id = ?').get(videoId) as Row | undefined;
+  if (!video) return fail('Vidéo inconnue', 404);
+  if (t > (video.duration_s as number) + 0.5) return fail("L'instant dépasse la durée de la vidéo");
+  const game = ctx.db.prepare('SELECT id FROM games WHERE video_id = ? AND start_s <= ? AND end_s >= ? ORDER BY start_s LIMIT 1').get(videoId, t, t) as Row | undefined;
+  const result = ctx.db
+    .prepare('INSERT INTO comments (video_id, game_id, t, tag, text, slots) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(videoId, (game?.id as number | undefined) ?? null, t, tag, text, slots);
+  return reply(201, { id: Number(result.lastInsertRowid) });
+}
+
+function patchComment(ctx: ApiContext, id: number, body: Row): ApiResult {
+  const current = ctx.db.prepare('SELECT * FROM comments WHERE id = ?').get(id) as Row | undefined;
+  if (!current) return fail('Commentaire introuvable', 404);
+  const text = 'text' in body ? (typeof body.text === 'string' ? body.text.trim() : '') : (current.text as string);
+  const tag = 'tag' in body ? body.tag : current.tag;
+  const resolved = 'resolved' in body ? (body.resolved ? 1 : 0) : (current.resolved as number);
+  const slots = 'slots' in body ? parseSlots(body.slots) : (current.slots as string | null);
+  if (!text || text.length > 2000) return fail('Le commentaire doit faire entre 1 et 2000 caractères');
+  if (typeof tag !== 'string' || !COMMENT_TAGS.includes(tag)) return fail('Catégorie inconnue');
+  if (slots === false) return fail('Joueurs invalides');
+  ctx.db.prepare('UPDATE comments SET text = ?, tag = ?, resolved = ?, slots = ? WHERE id = ?').run(text, tag, resolved, slots, id);
+  return reply(200, { ok: true });
+}
+
 export function handleApi(
   ctx: ApiContext,
   method: string,
@@ -270,6 +326,19 @@ export function handleApi(
   }
   if (method === 'GET' && pathname === '/api/samples') return listSamples(ctx, query);
   if (method === 'GET' && pathname === '/api/capture') return getCapture(ctx, query);
+  if (pathname === '/api/comments') {
+    if (method === 'GET') return listComments(ctx, query);
+    if (method === 'POST') return createComment(ctx, payload);
+  }
+  const commentMatch = /^\/api\/comments\/(\d+)$/.exec(pathname);
+  if (commentMatch) {
+    const cid = Number(commentMatch[1]);
+    if (method === 'PATCH') return patchComment(ctx, cid, payload);
+    if (method === 'DELETE') {
+      const r = ctx.db.prepare('DELETE FROM comments WHERE id = ?').run(cid);
+      return r.changes ? reply(200, { ok: true }) : fail('Commentaire introuvable', 404);
+    }
+  }
   if (pathname === '/api/corrections') {
     if (method === 'GET') return listCorrections(ctx, query);
     if (method === 'POST') return createCorrection(ctx, payload);

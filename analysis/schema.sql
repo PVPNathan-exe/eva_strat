@@ -58,6 +58,20 @@ CREATE TABLE IF NOT EXISTS players (
   PRIMARY KEY (game_id, slot)
 );
 
+-- Commentaires liés à un instant de la vidéo : problèmes de suivi à signaler, points à revoir en replay d'équipe.
+CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  game_id INTEGER REFERENCES games(id) ON DELETE SET NULL,
+  t REAL NOT NULL,
+  tag TEXT NOT NULL DEFAULT 'suivi' CHECK (tag IN ('suivi', 'equipe', 'note')),
+  text TEXT NOT NULL,
+  slots TEXT,  -- joueurs concernés, ex. '2,5'
+  resolved INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_comments_video ON comments(video_id, t);
+
 -- Corrections manuelles du suivi : entre t0 et t1, les deux joueurs (de la même équipe) sont échangés. Réappliquées si les positions sont relues.
 CREATE TABLE IF NOT EXISTS corrections (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -1213,3 +1213,190 @@ button:has(> .ic),
   flex: none;
   color: #9aa3b8;
 }
+
+/* --- Commentaires sous la vidéo --- */
+.comments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #1b1f2a;
+  border: 1px solid #2c3242;
+  border-radius: 8px;
+}
+
+.comments__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.comments__head h3 {
+  margin: 0;
+  margin-right: auto;
+}
+
+.comments__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+  color: #9aa3b8;
+}
+
+.comments__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.comments__form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 0.45rem 0.6rem;
+  background: #0e1117;
+  color: #e6e8ee;
+  border: 1px solid #3a4256;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.comments__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.comments__at {
+  font-size: 0.82rem;
+  color: #9aa3b8;
+  margin-right: auto;
+}
+
+.comments__players {
+  display: flex;
+  gap: 0.25rem;
+  margin-right: auto;
+}
+
+.comments__players button {
+  width: 1.7rem;
+  padding: 0.15rem 0;
+  border-color: var(--c);
+  color: var(--c);
+  font-weight: 700;
+}
+
+.comments__players button.is-on {
+  background: var(--c);
+  color: #111;
+}
+
+.comments__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.comment {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.4rem 0.5rem;
+  background: #141822;
+  border-left: 3px solid #5a6378;
+  border-radius: 6px;
+}
+
+.comment--suivi {
+  border-left-color: #ff9f1c;
+}
+
+.comment--equipe {
+  border-left-color: #3d8bff;
+}
+
+.comment.is-now {
+  background: #232838;
+}
+
+.comment.is-resolved {
+  opacity: 0.55;
+}
+
+.comment__time {
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.comment__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.74rem;
+  color: #9aa3b8;
+}
+
+.comment__tag {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.comment__slot {
+  display: inline-grid;
+  place-items: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  background: var(--c);
+  color: #111;
+  font-weight: 700;
+}
+
+.comment__body p {
+  margin: 0.15rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment__actions {
+  display: flex;
+  gap: 0.25rem;
+  flex: none;
+}
+
+.analysis button.timeline__comment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  min-width: 0;
+  margin-left: -3px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: #ffd60a;
+  z-index: 3;
+  cursor: pointer;
+}
+
+.analysis button.timeline__comment--suivi {
+  background: #ff9f1c;
+}
+
+.analysis button.timeline__comment--equipe {
+  background: #3d8bff;
+}
