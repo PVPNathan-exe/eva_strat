@@ -323,6 +323,7 @@ def _smooth_angles(series, half):
     return out
 
 
+DEATH_NEAR_DIST = 0.06  # une lecture vivante à moins de cette distance de la mort est une erreur de lecture (le joueur ne peut pas y être)
 DEATH_SHOWN_S = 2.0  # durée pendant laquelle la croix d'un joueur mort est affichée
 
 
@@ -344,9 +345,23 @@ def _add_known_deaths(rows, deaths, times, step_s, put):
             continue  # on ne sait pas où il était
         last = before[-1]
         for k in window:
-            if (k, slot) in rows and rows[(k, slot)][7] and k > fi + 1:
-                break  # il est déjà revenu en vie
+            cur = rows.get((k, slot))
+            if cur and cur[7] and math.hypot(cur[4] - last[4], cur[5] - last[5]) > DEATH_NEAR_DIST:
+                break  # il est déjà revenu en vie, ailleurs
             put(k, slot, last[3], last[4], last[5], None, False, CONF_VOTE * 0.9)
+
+
+def _between_angle(smooth, idx, k):
+    """Direction d'une ligne comblée : interpolation (par le plus court arc) entre les deux lectures voisines qui en ont une."""
+    before = [j for j in idx if j < k and smooth.get(j) is not None]
+    after = [j for j in idx if j > k and smooth.get(j) is not None]
+    if not before and not after:
+        return None
+    if not before or not after:
+        return smooth[(after or before)[0 if after else -1]]
+    a, b = before[-1], after[0]
+    da = ((smooth[b] - smooth[a] + 180) % 360) - 180
+    return (smooth[a] + da * (k - a) / (b - a)) % 360
 
 
 def solve(frames, step_s, deaths=None):
@@ -406,17 +421,22 @@ def solve(frames, step_s, deaths=None):
                 conf = t.how if d.get("slot") != t.slot else CONF_VOTE
                 put(k, slot, t.team, d["x"], d["y"], smooth[k], True, conf)
             for k, (x, y) in filled.items():
-                put(k, slot, t.team, x, y, None, True, CONF_FILL)
+                put(k, slot, t.team, x, y, _between_angle(smooth, idx, k), True, CONF_FILL)
         # trous entre deux trajectoires du même joueur (disparition plus longue, même sans réapparition lointaine)
         for a, b in zip(tracks, tracks[1:]):
             if _gap_cost(a, b, step_s, FILL_MAX_S, FILL_MAX_DIST) is None:
                 continue
             ia, ib = a.last, b.first
             pa, pb = a.pts[ia], b.pts[ib]
+            ang_a, ang_b = rows[(ia, slot)][6], rows[(ib, slot)][6]
             for k in range(ia + 1, ib):
                 r = (k - ia) / (ib - ia)
                 if (k, slot) not in rows:
-                    put(k, slot, a.team, pa["x"] + (pb["x"] - pa["x"]) * r, pa["y"] + (pb["y"] - pa["y"]) * r, None, True, CONF_FILL)
+                    if ang_a is not None and ang_b is not None:
+                        ang = (ang_a + (((ang_b - ang_a + 180) % 360) - 180) * r) % 360
+                    else:
+                        ang = ang_a if ang_a is not None else ang_b
+                    put(k, slot, a.team, pa["x"] + (pb["x"] - pa["x"]) * r, pa["y"] + (pb["y"] - pa["y"]) * r, ang, True, CONF_FILL)
     for x in crosses:
         for k, d in x.pts.items():
             if (k, x.slot) not in rows:
@@ -446,7 +466,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 1  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 3  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

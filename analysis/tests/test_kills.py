@@ -30,7 +30,7 @@ def test_kill_without_a_cross_on_the_minimap_still_marks_the_victim_dead():
 def test_death_does_not_overwrite_a_player_who_is_clearly_alive():
     seq = [[det("B", 0.8, 0.3, number=8)] for _ in range(30)]
     rows = tracking.solve(frames_of(seq), STEP, deaths=[(15 * STEP, 7)])  # lecture erronée : il continue à courir
-    assert all(r[7] == 1 for r in rows if r[2] == 7 and r[0] > 20)
+    assert all(r[7] == 1 for r in rows if r[2] == 7 and r[0] > 27)  # la mort du killfeed prime le temps de la croix, pas au-delà
 
 
 def test_cross_goes_to_the_victim_named_by_the_killfeed():
