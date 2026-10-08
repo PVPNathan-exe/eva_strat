@@ -78,3 +78,15 @@ def test_zone_for_prefers_the_maps_calibration(tmp_path):
     conn.execute("INSERT INTO calibrations (map, zone, x, y, w, h) VALUES ('Silva', 'minimap', 0.1, 0.2, 0.3, 0.4)")
     assert db.zone_for(conn, "Silva", "minimap") == {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
     assert db.zone_for(conn, "Ceres", "minimap") == default
+
+
+def test_cross_means_dead_but_a_clipped_or_ring_shaped_marker_stays_alive():
+    img = np.full((225, 440, 3), 53, np.uint8)
+    cv2.line(img, (93, 73), (107, 87), (0, 130, 255), 5)  # croix orange (BGR)
+    cv2.line(img, (107, 73), (93, 87), (0, 130, 255), 5)
+    cv2.circle(img, (300, 150), 11, (230, 150, 70), -1)  # pastille bleue ronde
+    cv2.circle(img, (200, 3), 11, (0, 130, 255), -1)  # pastille orange coupée par le bord haut
+    found = {(m["team"], round(m["x"] * 440 / 100)): m["alive"] for m in minimap.find_markers(img, {})}
+    assert found[("A", 1)] is False  # x ≈ 100 / 440
+    assert found[("B", 3)] is True
+    assert found[("A", 2)] is True  # coupée par le bord : jamais prise pour une croix

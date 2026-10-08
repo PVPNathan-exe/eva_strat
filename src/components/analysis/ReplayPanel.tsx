@@ -12,7 +12,8 @@ import type { Game, Sample } from '../../types/analysis';
 const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
 const RATES = [0.5, 1, 2, 4, 8];
 const TRAIL_S = 12;
-const MAX_JUMP = 0.3; // au-delà, pas d'interpolation (réapparition)
+const MAX_JUMP = 0.3; // au-delà, pas d'interpolation ni de trait (réapparition)
+const MAX_GAP_S = 2.5; // trou entre deux lectures au-delà duquel on ne relie plus les points
 
 // Cadre de la minimap dans l'image du plan (fractions des bords). Réglable, mémorisé par carte.
 type Inset = { l: number; t: number; r: number; b: number };
@@ -78,7 +79,7 @@ function shownAt(frames: Frame[], t: number): Shown[] {
   for (const [slot, s] of a.bySlot) {
     let { x, y } = s;
     const n = b?.bySlot.get(slot);
-    if (n && s.alive && n.alive && Math.hypot(n.x - s.x, n.y - s.y) < MAX_JUMP) {
+    if (n && s.alive && n.alive && n.t - s.t <= MAX_GAP_S && Math.hypot(n.x - s.x, n.y - s.y) < MAX_JUMP) {
       x = s.x + (n.x - s.x) * k;
       y = s.y + (n.y - s.y) * k;
     }
@@ -140,17 +141,37 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
 
   const trailPaths = useMemo(() => {
     if (!trails || frames.length === 0) return [];
+    // Une traînée s'interrompt à une mort, une disparition (combat, pastille cachée) ou une réapparition :
+    // on ne relie jamais deux points séparés, sinon le trait traverserait les murs.
     const i = frameIndexAt(frames, time);
-    const bySlot = new Map<number, { team: 'A' | 'B'; pts: string[] }>();
-    for (let j = i; j >= 0 && frames[j].t >= time - TRAIL_S; j--) {
-      for (const [slot, s] of frames[j].bySlot) {
-        if (hidden.has(slot) || !s.alive) continue;
-        const e = bySlot.get(slot) ?? { team: s.team, pts: [] };
-        e.pts.unshift(`${pos(inset, s.x, s.y).x},${pos(inset, s.x, s.y).y}`);
-        bySlot.set(slot, e);
+    const out: { key: string; team: 'A' | 'B'; points: string }[] = [];
+    const slots = new Set<number>();
+    for (let j = i; j >= 0 && frames[j].t >= time - TRAIL_S; j--) for (const s of frames[j].bySlot.keys()) slots.add(s);
+    for (const slot of slots) {
+      let run: string[] = [];
+      let prev: Sample | null = null;
+      let team: 'A' | 'B' = slot <= 4 ? 'A' : 'B';
+      let n = 0;
+      const flush = () => {
+        if (run.length > 1) out.push({ key: `${slot}-${n++}`, team, points: run.join(' ') });
+        run = [];
+      };
+      for (let j = Math.max(0, frameIndexAt(frames, time - TRAIL_S)); j <= i; j++) {
+        const s = frames[j].bySlot.get(slot);
+        if (!s || !s.alive || hidden.has(slot)) {
+          flush();
+          prev = null;
+          continue;
+        }
+        if (prev && (s.t - prev.t > MAX_GAP_S || Math.hypot(s.x - prev.x, s.y - prev.y) > MAX_JUMP)) flush();
+        team = s.team;
+        const p = pos(inset, s.x, s.y);
+        run.push(`${p.x},${p.y}`);
+        prev = s;
       }
+      flush();
     }
-    return [...bySlot.entries()].map(([slot, e]) => ({ slot, team: e.team, points: e.pts.join(' ') }));
+    return out;
   }, [trails, frames, time, hidden, inset]);
 
   const slotsPresent = useMemo(() => {
@@ -197,7 +218,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
         {trails && (
           <svg className="replay__trails" viewBox="0 0 100 100" preserveAspectRatio="none">
             {trailPaths.map((p) => (
-              <polyline key={p.slot} points={p.points} fill="none" stroke={TEAM_COLOR[p.team]} strokeWidth={2} vectorEffect="non-scaling-stroke" opacity={0.7} />
+              <polyline key={p.key} points={p.points} fill="none" stroke={TEAM_COLOR[p.team]} strokeWidth={2} vectorEffect="non-scaling-stroke" opacity={0.7} />
             ))}
           </svg>
         )}

@@ -17,7 +17,9 @@ MARKER_AREA = (140, 900)  # surface d'une pastille à l'échelle de référence
 SPAWN_MIN_AREA = 1500  # une zone d'apparition colorée est bien plus grande qu'une pastille
 GLYPH_SIZE = (20, 20)
 DIGIT_TEMPLATES_PATH = Path(__file__).with_name("minimap_digits.npz")
-DEAD_SOLIDITY = 0.82  # en dessous : croix de joueur mort
+DEAD_SOLIDITY = 0.82  # en dessous : forme suspecte, confirmée ou non par la ressemblance avec la croix
+CROSS_PATH = Path(__file__).with_name("minimap_cross.npz")
+MIN_CROSS_SCORE = 0.75
 MIN_DIGIT_SCORE = 0.65
 MIN_DIGIT_MARGIN = 0.03
 
@@ -97,6 +99,49 @@ def _solidity(blob):
         return 1.0
     c = max(cnts, key=cv2.contourArea)
     return cv2.contourArea(c) / max(cv2.contourArea(cv2.convexHull(c)), 1.0)
+
+
+def _touches_border(blob):
+    """Pastille coupée par le bord de la minimap : sa forme est tronquée, elle ne peut pas être prise pour une croix."""
+    h, w = blob.shape
+    return bool(blob[0, :].any() or blob[-1, :].any() or blob[:, 0].any() or blob[:, -1].any())
+
+
+_CROSS = []
+
+
+def _cross_templates():
+    if not _CROSS and CROSS_PATH.exists():
+        data = np.load(CROSS_PATH)
+        _CROSS.extend(data[k].astype(np.float32).ravel() / 255.0 for k in data.files)
+    return _CROSS
+
+
+def _centered_window(blob, size=32):
+    """Masque de la pastille dans une fenêtre size x size centrée sur son centre de gravité."""
+    m = cv2.moments(blob, binaryImage=True)
+    cx, cy = int(m["m10"] / m["m00"]), int(m["m01"] / m["m00"])
+    h, w = blob.shape
+    out = np.zeros((size, size), np.float32)
+    y0, x0 = cy - size // 2, cx - size // 2
+    ys, xs = max(y0, 0), max(x0, 0)
+    ye, xe = min(y0 + size, h), min(x0 + size, w)
+    out[ys - y0 : ye - y0, xs - x0 : xe - x0] = blob[ys:ye, xs:xe]
+    return out.ravel()
+
+
+def _is_cross(blob):
+    """Vrai si la forme est la croix d'un joueur mort (comparée à des croix réelles de la vidéo)."""
+    templates = _cross_templates()
+    if not templates:
+        return _solidity(blob) < DEAD_SOLIDITY
+    v = _centered_window(blob)
+    best = -1.0
+    for tpl in templates:
+        a, b = v - v.mean(), tpl - tpl.mean()
+        d = np.linalg.norm(a) * np.linalg.norm(b)
+        best = max(best, float(a @ b / d) if d else -1.0)
+    return best >= MIN_CROSS_SCORE
 
 
 def _glyph(crop_gray, blob):
@@ -217,7 +262,7 @@ def find_markers(crop, templates=None):
 
     for team, bounds in (("A", ORANGE), ("B", BLUE)):
         for blob, split in _blobs(_color_mask(hsv, bounds), scale):
-            add(blob, team, alive=split or _solidity(blob) >= DEAD_SOLIDITY, spectated=False)
+            add(blob, team, alive=split or _touches_border(blob) or _solidity(blob) >= DEAD_SOLIDITY or not _is_cross(blob), spectated=False)
 
     # Joueur observé : pastille blanche, cerclée de la couleur de son équipe.
     white = cv2.inRange(hsv, np.array((0, 0, 205)), np.array((180, 70, 255)))
