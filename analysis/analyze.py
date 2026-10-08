@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import db
+import capture
 import ingest
 import killfeed
 import loadout
@@ -112,6 +113,19 @@ def extract_names(conn, video_id, path, meta, emit, control=None):
     return done, None
 
 
+def extract_capture(conn, video_id, path, meta, emit, control=None):
+    """Score de capture (% de chaque équipe) des games qui n'en ont pas encore, lu de part et d'autre du chrono."""
+    todo = db.games_without_capture(conn, video_id)
+    for i, g in enumerate(todo):
+        def progress(pct, i=i):
+            emit({"event": "progress", "stage": "capture", "pct": round((i + pct / 100) / len(todo) * 100, 1)})
+
+        zones = {"A": db.zone_for(conn, g["map"], "capture_pct_a"), "B": db.zone_for(conn, g["map"], "capture_pct_b")}
+        series = capture.read_game(path, g, zones, meta["width"], meta["height"], wait=lambda: wait_if_paused(control), emit=progress)
+        db.replace_capture(conn, g["id"], series)
+    return len(todo)
+
+
 def extract_loadouts(conn, video_id, path, meta, emit, control=None):
     """Équipement (armes et gadget) des joueurs des games qui n'en ont pas encore, lu sur les bandeaux."""
     todo = db.games_without_loadouts(conn, video_id)
@@ -199,6 +213,7 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
         if names_error:
             message = f"{message} · pseudos non lus ({names_error})" if message else f"Pseudos non lus ({names_error})"
         extract_loadouts(conn, video_id, path, meta, emit, control)
+        extract_capture(conn, video_id, path, meta, emit, control)
         n_kills, kills_error = extract_kills(conn, video_id, path, meta, emit, control)
         if kills_error:
             message = f"{message} · killfeed non lu ({kills_error})" if message else f"Killfeed non lu ({kills_error})"

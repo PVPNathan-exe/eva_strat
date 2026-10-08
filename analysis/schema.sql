@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS kills (
   victim_slot INTEGER NOT NULL CHECK (victim_slot BETWEEN 1 AND 8),
   weapon TEXT,
   headshot INTEGER NOT NULL DEFAULT 0,
+  kind TEXT,  -- kill, suicide, environment (aucun tueur sur la ligne : décor ou admin), unknown (tueur illisible)
   PRIMARY KEY (game_id, t, victim_slot)
 );
 CREATE TABLE IF NOT EXISTS kills_meta (

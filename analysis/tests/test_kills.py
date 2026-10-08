@@ -48,9 +48,9 @@ def test_kills_are_stored_and_the_game_is_marked_as_read(tmp_path):
     assert db.games_without_kills(conn, vid) == []  # sans pseudos, le killfeed ne peut pas être lu
     db.replace_players(conn, gid, {1: "SHADYJ4Y", 5: "ORXPAPY"})
     assert [g["id"] for g in db.games_without_kills(conn, vid)] == [gid]
-    db.replace_kills(conn, gid, [{"t": 42.5, "killer": 1, "victim": 5, "weapon": "W1", "headshot": True}])
+    db.replace_kills(conn, gid, [{"t": 42.5, "killer": 1, "victim": 5, "weapon": "W1", "headshot": True, "kind": "kill"}])
     assert db.games_without_kills(conn, vid) == []
-    assert db.kills_of(conn, gid) == [{"t": 42.5, "killer_slot": 1, "victim_slot": 5, "weapon": "W1", "headshot": 1}]
+    assert db.kills_of(conn, gid) == [{"t": 42.5, "killer_slot": 1, "victim_slot": 5, "weapon": "W1", "headshot": 1, "kind": "kill"}]
     db.replace_kills(conn, gid, [])  # aucun kill : la game reste « lue »
     assert db.games_without_kills(conn, vid) == []
 
@@ -91,8 +91,8 @@ def test_find_rows_splits_a_killfeed_line_into_killer_icon_victim():
     img = np.zeros((120, 340, 3), np.uint8)
     img[20:34, 40:130] = (110, 110, 110)  # pastille grise du tueur
     cv2.putText(img, "ORANGE", (45, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (30, 150, 255), 2)  # texte orange (BGR)
-    cv2.rectangle(img, (150, 22), (185, 32), (230, 230, 230), -1)  # icône d'arme blanche
-    cv2.putText(img, "BLEUX", (205, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (235, 140, 60), 2)  # texte bleu
+    cv2.rectangle(img, (170, 22), (205, 32), (230, 230, 230), -1)  # icône d'arme blanche
+    cv2.putText(img, "BLEUX", (255, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (235, 140, 60), 2)  # texte bleu
     rows = killfeed.find_rows(img)
     assert len(rows) == 1
     teams = [s["team"] for s in rows[0]["segments"]]
@@ -147,3 +147,53 @@ def test_icon_catalogues_are_separate_by_prefix(tmp_path):
     assert weapons.identify(shape, folder=tmp_path, prefix="B") == "B1"  # même forme, autre catalogue
     assert weapons.identify(shape, folder=tmp_path, prefix="B") == "B1"
     assert (tmp_path / "previews" / "B1.png").exists()
+
+
+def test_capture_series_are_cleaned_and_stored(tmp_path):
+    import capture
+
+    raw = [(float(i), v) for i, v in enumerate([0, 0, 5, 9, None, None, 20, 99, 25, 30, 34])]  # 99 : lecture aberrante
+    cleaned = dict(capture.clean_series(raw, 1.0))
+    assert cleaned[7] != 99 and 20 <= cleaned[7] <= 30  # écartée puis comblée
+    assert cleaned[4] is not None and 9 <= cleaned[4] <= 20  # trou de 2 s comblé par interpolation
+    conn = db.connect(tmp_path / "eva.db")
+    vid = db.upsert_video(conn, "/v.mp4", None, 600.0, 30.0, 1920, 1080)
+    conn.execute("INSERT INTO games (video_id, start_s, end_s) VALUES (?, 10, 200)", (vid,))
+    gid = conn.execute("SELECT id FROM games").fetchone()["id"]
+    assert [g["id"] for g in db.games_without_capture(conn, vid)] == [gid]
+    db.replace_capture(conn, gid, {"A": [(10.0, 0.0), (11.0, 3.0)], "B": [(10.0, 0.0), (11.0, None)]})
+    assert db.games_without_capture(conn, vid) == []
+    assert db.capture_of(conn, gid) == {"A": [(10.0, 0.0), (11.0, 3.0)], "B": [(10.0, 0.0)]}
+
+
+def test_capture_digits_are_read_from_a_rendered_percentage():
+    import capture
+
+    templates = capture.load_templates()
+    assert templates, "les modèles de chiffres doivent être livrés avec le projet"
+    # Rendu synthétique avec la police d'écran : non reproductible fidèlement, on vérifie seulement qu'une zone vide ou sans couleur ne donne rien.
+    empty = np.zeros((36, 90, 3), np.uint8)
+    assert capture.read_value(empty, "A", templates) is None
+
+
+def test_a_line_with_only_a_victim_is_an_environment_death():
+    img = np.zeros((120, 340, 3), np.uint8)
+    cv2.putText(img, "BLEUX", (282, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (235, 140, 60), 2)  # un seul pseudo, aligné à droite
+    rows = killfeed.find_rows(img)
+    assert len(rows) == 1 and len(rows[0]["segments"]) == 1 and rows[0]["segments"][0]["team"] == "B"
+    stray = np.zeros((120, 340, 3), np.uint8)
+    cv2.putText(stray, "ORANGE", (20, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (30, 150, 255), 2)  # texte isolé à gauche : pas une ligne du killfeed
+    assert killfeed.find_rows(stray) == []
+
+
+def test_killfeed_rows_must_end_on_the_right_edge_and_extra_text_is_ignored():
+    img = np.zeros((120, 340, 3), np.uint8)
+    cv2.putText(img, "FLOTTANT", (10, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (30, 150, 255), 2)  # pseudo orange flottant dans le décor, à gauche
+    cv2.putText(img, "ORANGE", (90, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (30, 150, 255), 2)
+    cv2.rectangle(img, (180, 22), (215, 32), (230, 230, 230), -1)
+    cv2.putText(img, "BLEUX", (275, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (235, 140, 60), 2)
+    rows = killfeed.find_rows(img)
+    assert len(rows) == 1 and [s["team"] for s in rows[0]["segments"]] == ["A", "B"]  # le texte en trop à gauche est écarté
+    nowhere = np.zeros((120, 340, 3), np.uint8)
+    cv2.putText(nowhere, "DECOR", (120, 31), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (235, 140, 60), 2)  # texte bleu au milieu
+    assert killfeed.find_rows(nowhere) == []

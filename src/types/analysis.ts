@@ -16,6 +16,11 @@ export interface Doubt {
   label: string;
 }
 
+export interface CaptureSeries {
+  A: { t: number; v: number }[];
+  B: { t: number; v: number }[];
+}
+
 export type WeaponKind = 'killfeed' | 'arme' | 'gadget';
 
 export interface Weapon {
@@ -31,6 +36,7 @@ export interface Kill {
   victim: number;
   weapon: string | null;
   headshot: boolean;
+  kind: 'kill' | 'suicide' | 'environment' | 'unknown' | null;
 }
 
 export interface Game {
@@ -82,7 +88,7 @@ export const ZONE_LABELS: Record<ZoneName, string> = {
 
 export interface JobEvent {
   event: 'progress' | 'done' | 'error';
-  stage?: 'download' | 'detect' | 'maps' | 'names' | 'loadout' | 'kills' | 'positions';
+  stage?: 'download' | 'detect' | 'maps' | 'names' | 'loadout' | 'capture' | 'kills' | 'positions';
   pct?: number;
   video_id?: number;
   message?: string;

@@ -98,12 +98,17 @@ def assign_lines(lines, width_px, n=4):
 
 
 def closest(text, names, team=None):
-    """Pseudo de la game le plus proche d'un texte lu (killfeed, bandeau). names : {slot: pseudo}. Renvoie le slot ou None.
+    """Pseudo de la game le plus proche d'un texte lu (killfeed, bandeau). names : {slot: pseudo}. Renvoie le slot ou None."""
+    return closest_scored(text, names, team)[0]
+
+
+def closest_scored(text, names, team=None):
+    """Comme closest, avec la distance relative de la lecture (0 = identique) : (slot, distance) ou (None, None).
 
     On compare aussi sur le début (un pseudo tronqué) et on refuse une lecture ambiguë entre deux joueurs."""
     q = normalize(text)
     if len(q) < MIN_LETTERS:
-        return None
+        return None, None
     scored = []
     for slot, name in names.items():
         if team and slot not in TEAM_SLOTS["team_a_bar" if team == "A" else "team_b_bar"]:
@@ -113,10 +118,10 @@ def closest(text, names, team=None):
         scored.append((d / max(len(n), len(q), 1), slot))
     scored.sort()
     if not scored or scored[0][0] > 0.34:
-        return None
+        return None, None
     if len(scored) > 1 and scored[1][0] - scored[0][0] < 0.08:
-        return None
-    return scored[0][1]
+        return None, None
+    return scored[0][1], scored[0][0]
 
 
 def _grab(video, t, zone, width, height):

@@ -21,11 +21,14 @@ import ocr
 import weapons
 
 REGION = {"x": 0.78, "y": 0.19, "w": 0.22, "h": 0.30}  # zone du killfeed (relative à l'image)
+RIGHT_EDGE = 0.88  # part de la largeur de la zone à partir de laquelle une ligne du killfeed se termine
 SCAN_STEP_S = 0.5  # une lecture toutes les 0,5 s (une entrée reste affichée plusieurs secondes)
 ORANGE = ((4, 110, 140), (22, 255, 255))
 BLUE = ((98, 80, 130), (116, 255, 255))
 MIN_ROW_PIXELS = 25  # pixels colorés minimum pour qu'une ligne existe
 NAME_GAP_PX = 16  # trou horizontal qui sépare deux segments de texte (le trou de l'icône est plus large)
+MIN_OBSERVATIONS = 2  # une entrée reste affichée plusieurs secondes : vue sur une seule image, elle doit être lue très nettement
+CLEAR_READ = 0.22  # distance relative maximale du pseudo de la victime pour accepter une entrée vue une seule fois
 ENTRY_GAP_S = 1.6  # deux observations de la même victime séparées de moins que cela sont la même entrée du killfeed
 
 
@@ -70,8 +73,12 @@ def find_rows(crop):
                 a = masks["A"][y0:y1, x0:x1].sum()
                 b = masks["B"][y0:y1, x0:x1].sum()
                 segments.append({"x0": x0, "x1": x1, "team": "A" if a >= b else "B"})
-        if len(segments) >= 2:
-            out.append({"y0": y0, "y1": y1, "segments": segments})
+        # Les lignes du killfeed finissent toutes au bord droit : un texte coloré ailleurs (pseudo flottant dans le décor) n'en est pas une.
+        if not segments or segments[-1]["x1"] < RIGHT_EDGE * len(cols):
+            continue
+        # Une ligne sans tueur (mort du décor, action d'un admin) n'a qu'un seul pseudo. S'il y a du texte en trop à gauche, seuls les
+        # deux derniers segments (tueur, victime) comptent.
+        out.append({"y0": y0, "y1": y1, "segments": segments[-2:]})
     return out
 
 
@@ -178,7 +185,7 @@ def _fingerprint(img):
 
 
 def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=None, emit=None):
-    """Kills d'une game : [{"t", "killer", "victim", "killer_team", "victim_team", "weapon", "headshot"}]. players : {slot: pseudo}.
+    """Kills d'une game : [{"t", "killer", "victim", "killer_team", "victim_team", "weapon", "headshot", "kind"}]. players : {slot: pseudo}.
 
     weapon : identifiant de l'icône d'arme (« W1 »…, voir weapons.py), ou None."""
     observations = []  # (t, ligne, signature d'image du segment tueur, du segment victime)
@@ -191,13 +198,14 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
             emit(min(100.0, 100 * (t - game["start_s"]) / max(game["end_s"] - game["start_s"], 1)))
         for row in find_rows(crop):
             a, b = row["segments"][0], row["segments"][-1]
+            alone = len(row["segments"]) == 1  # ligne sans pastille de tueur
             ka, kb = _segment_image(crop, row, a), _segment_image(crop, row, b)
             sa, sb = _fingerprint(ka), _fingerprint(kb)
             images.setdefault(sa, ka)
             images.setdefault(sb, kb)
             pieces.setdefault(sa, _segment_piece(crop, row, a))
             pieces.setdefault(sb, _segment_piece(crop, row, b))
-            observations.append({"t": t, "killer_sig": sa, "victim_sig": sb, "killer_team": a["team"], "victim_team": b["team"], "icon": _icon_image(crop, row)})
+            observations.append({"t": t, "killer_sig": None if alone else sa, "victim_sig": sb, "killer_team": None if alone else a["team"], "victim_team": b["team"], "icon": None if alone else _icon_image(crop, row), "alone": alone})
     if not observations:
         return []
     with tempfile.TemporaryDirectory() as tmp:
@@ -212,9 +220,12 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
     # 1. lecture de chaque observation ; un pseudo non reconnu est relu avec d'autres préparations de l'image
     team_of = {}
     for o in observations:
-        team_of[o["killer_sig"]] = o["killer_team"]
+        if o["killer_sig"]:
+            team_of[o["killer_sig"]] = o["killer_team"]
         team_of[o["victim_sig"]] = o["victim_team"]
-    resolved = {sig: names_mod.closest(text, players, team_of.get(sig)) for sig, text in text_of.items()}
+    scored = {sig: names_mod.closest_scored(text, players, team_of.get(sig)) for sig, text in text_of.items()}
+    resolved = {sig: slot for sig, (slot, _) in scored.items()}
+    distance = {sig: d for sig, (_, d) in scored.items()}
     retry = [sig for sig, slot in resolved.items() if slot is None]
     if retry:
         with tempfile.TemporaryDirectory() as tmp:
@@ -228,16 +239,16 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
         for sig, ps in variant_paths.items():
             for p in ps:
                 text = " ".join(line["text"] for line in read2.get(str(Path(p).resolve()), []))
-                slot = names_mod.closest(text, players, team_of.get(sig))
+                slot, d = names_mod.closest_scored(text, players, team_of.get(sig))
                 if slot is not None:
-                    resolved[sig] = slot
+                    resolved[sig], distance[sig] = slot, d
                     break
     reads = []
     for o in observations:
-        killer = resolved.get(o["killer_sig"])
+        killer = resolved.get(o["killer_sig"]) if o["killer_sig"] else None
         victim = resolved.get(o["victim_sig"])
         if victim is not None:
-            reads.append({**o, "killer": killer, "victim": victim})
+            reads.append({**o, "killer": killer, "victim": victim, "vdist": distance.get(o["victim_sig"], 1.0)})
     # 2. une entrée reste affichée plusieurs secondes : on regroupe les observations d'une même victime qui se suivent
     #    (écart < ENTRY_GAP_S), et le tueur est le plus souvent lu sur toute la durée d'affichage.
     events = []
@@ -248,12 +259,15 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
             ev["last"] = r["t"]
             ev["killers"].append(r["killer"])
             ev["icons"].append(r["icon"])
+            ev["seen"] += 1
+            ev["vdist"] = min(ev["vdist"], r["vdist"])
+            ev["alone"] = ev["alone"] and r["alone"]
         else:
-            ev = {"t": r["t"], "last": r["t"], "victim": r["victim"], "victim_team": r["victim_team"], "killer_team": r["killer_team"], "killers": [r["killer"]], "icons": [r["icon"]]}
+            ev = {"t": r["t"], "last": r["t"], "victim": r["victim"], "victim_team": r["victim_team"], "killer_team": r["killer_team"], "killers": [r["killer"]], "icons": [r["icon"]], "alone": r["alone"], "seen": 1, "vdist": r["vdist"]}
             open_by_victim[r["victim"]] = ev
             events.append(ev)
     out = []
-    for ev in events:
+    for ev in (e for e in events if e["seen"] >= MIN_OBSERVATIONS or e["vdist"] <= CLEAR_READ):
         known = [k for k in ev["killers"] if k is not None]
         killer = max(set(known), key=known.count) if known else None
         icons = [i for i in ev["icons"] if i is not None]
@@ -263,5 +277,6 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
             heads.append(headshot)
             if weapon is None:
                 weapon = weapons.identify(shape)
-        out.append({"t": ev["t"], "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": weapon, "headshot": sum(heads) * 2 > len(heads) if heads else False})
+        kind = "environment" if ev["alone"] else ("unknown" if killer is None else ("suicide" if killer == ev["victim"] else "kill"))
+        out.append({"t": ev["t"], "kind": kind, "killer": killer, "victim": ev["victim"], "killer_team": ev["killer_team"], "victim_team": ev["victim_team"], "weapon": weapon, "headshot": sum(heads) * 2 > len(heads) if heads else False})
     return out

@@ -22,6 +22,8 @@ def connect(db_path):
     if "checked" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
         conn.execute("ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0")
     _migrate_calibrations(conn)
+    if "kind" not in {row["name"] for row in conn.execute("PRAGMA table_info(kills)")}:
+        conn.execute("ALTER TABLE kills ADD COLUMN kind TEXT")
     if "headshot" not in {row["name"] for row in conn.execute("PRAGMA table_info(kills)")}:
         conn.execute("ALTER TABLE kills ADD COLUMN headshot INTEGER NOT NULL DEFAULT 0")
     if "with_kills" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
@@ -232,15 +234,15 @@ def replace_kills(conn, game_id, events):
     """Enregistre d'un seul bloc les kills d'une game (events : {t, killer, victim, weapon})."""
     conn.execute("DELETE FROM kills WHERE game_id = ?", (game_id,))
     conn.executemany(
-        "INSERT OR REPLACE INTO kills (game_id, t, killer_slot, victim_slot, weapon, headshot) VALUES (?, ?, ?, ?, ?, ?)",
-        [(game_id, round(e["t"], 2), e.get("killer"), e["victim"], e.get("weapon"), int(bool(e.get("headshot")))) for e in events],
+        "INSERT OR REPLACE INTO kills (game_id, t, killer_slot, victim_slot, weapon, headshot, kind) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [(game_id, round(e["t"], 2), e.get("killer"), e["victim"], e.get("weapon"), int(bool(e.get("headshot"))), e.get("kind")) for e in events],
     )
     conn.execute("INSERT OR REPLACE INTO kills_meta (game_id) VALUES (?)", (game_id,))
     conn.commit()
 
 
 def kills_of(conn, game_id):
-    return [dict(r) for r in conn.execute("SELECT t, killer_slot, victim_slot, weapon, headshot FROM kills WHERE game_id = ? ORDER BY t", (game_id,))]
+    return [dict(r) for r in conn.execute("SELECT t, killer_slot, victim_slot, weapon, headshot, kind FROM kills WHERE game_id = ? ORDER BY t", (game_id,))]
 
 
 def games_without_loadouts(conn, video_id):
@@ -261,3 +263,29 @@ def replace_loadouts(conn, game_id, loadouts):
         [(game_id, slot, l.get("arme1"), l.get("arme2"), l.get("gadget")) for slot, l in loadouts.items()],
     )
     conn.commit()
+
+
+def games_without_capture(conn, video_id):
+    return [
+        dict(r)
+        for r in conn.execute(
+            "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
+            "AND id NOT IN (SELECT DISTINCT game_id FROM capture_state WHERE point IN ('score_A', 'score_B')) ORDER BY start_s",
+            (video_id,),
+        )
+    ]
+
+
+def replace_capture(conn, game_id, series):
+    """Score de chaque équipe au cours de la game. series : {"A": [(t, %)], "B": [(t, %)]} (les valeurs None sont ignorées)."""
+    conn.execute("DELETE FROM capture_state WHERE game_id = ? AND point IN ('score_A', 'score_B')", (game_id,))
+    rows = [(game_id, round(t, 2), f"score_{team}", v, team) for team, pts in series.items() for t, v in pts if v is not None]
+    conn.executemany("INSERT OR REPLACE INTO capture_state (game_id, t, point, pct, team) VALUES (?, ?, ?, ?, ?)", rows)
+    conn.commit()
+
+
+def capture_of(conn, game_id):
+    out = {"A": [], "B": []}
+    for r in conn.execute("SELECT t, pct, team FROM capture_state WHERE game_id = ? AND point IN ('score_A', 'score_B') ORDER BY t", (game_id,)):
+        out[r["team"]].append((r["t"], r["pct"]))
+    return out

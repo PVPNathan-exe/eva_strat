@@ -1083,3 +1083,23 @@
   color: #9aa3b8;
   font-style: italic;
 }
+
+.replay__score {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+}
+
+.replay__score svg {
+  width: 100%;
+  height: 54px;
+  background: #0e1117;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.replay__score em {
+  color: #9aa3b8;
+  font-style: normal;
+}

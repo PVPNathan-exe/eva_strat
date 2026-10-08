@@ -162,14 +162,24 @@ test('la liste des games porte les pseudos, l’équipement et les kills (avec h
   const id = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 700, 'confirmed')").run(videoId).lastInsertRowid);
   ctx.db.prepare("INSERT INTO players (game_id, slot, name) VALUES (?, 1, 'SHADYJ4Y'), (?, 5, 'ORXPAPY')").run(id, id);
   ctx.db.prepare("INSERT INTO loadouts (game_id, slot, weapon1, weapon2, gadget) VALUES (?, 1, 'B1', 'B2', 'G1')").run(id);
-  ctx.db.prepare("INSERT INTO kills (game_id, t, killer_slot, victim_slot, weapon, headshot) VALUES (?, 150, 1, 5, 'W3', 1), (?, 160, NULL, 5, NULL, 0)").run(id, id);
+  ctx.db.prepare("INSERT INTO kills (game_id, t, killer_slot, victim_slot, weapon, headshot, kind) VALUES (?, 150, 1, 5, 'W3', 1, 'kill'), (?, 160, NULL, 5, NULL, 0, 'environment')").run(id, id);
   const game = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as Record<string, unknown>[])[0];
   assert.deepEqual(game.players, [
     { slot: 1, name: 'SHADYJ4Y', weapon1: 'B1', weapon2: 'B2', gadget: 'G1' },
     { slot: 5, name: 'ORXPAPY', weapon1: null, weapon2: null, gadget: null },
   ]);
   assert.deepEqual(game.kills, [
-    { t: 150, killer: 1, victim: 5, weapon: 'W3', headshot: true },
-    { t: 160, killer: null, victim: 5, weapon: null, headshot: false },
+    { t: 150, killer: 1, victim: 5, weapon: 'W3', headshot: true, kind: 'kill' },
+    { t: 160, killer: null, victim: 5, weapon: null, headshot: false, kind: 'environment' },
   ]);
+});
+
+test('GET /api/capture renvoie la courbe de score de chaque équipe', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  const id = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 700, 'confirmed')").run(videoId).lastInsertRowid);
+  ctx.db.prepare("INSERT INTO capture_state (game_id, t, point, pct, team) VALUES (?, 100, 'score_A', 0, 'A'), (?, 101, 'score_A', 3, 'A'), (?, 100, 'score_B', 0, 'B')").run(id, id, id);
+  const res = handleApi(ctx, 'GET', '/api/capture', q(`game=${id}`), undefined);
+  assert.deepEqual(res.json, { A: [{ t: 100, v: 0 }, { t: 101, v: 3 }], B: [{ t: 100, v: 0 }] });
+  assert.equal(handleApi(ctx, 'GET', '/api/capture', q(), undefined).status, 400);
 });

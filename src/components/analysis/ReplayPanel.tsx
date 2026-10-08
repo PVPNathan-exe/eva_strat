@@ -8,7 +8,7 @@ import { builtinMaps } from '../../lib/builtinMaps';
 import { formatTime } from '../../lib/timeline';
 import { getVideoElement } from '../../lib/videoRef';
 import { useAnalysisStore } from '../../store/analysisStore';
-import type { Game, Sample } from '../../types/analysis';
+import type { CaptureSeries, Game, Sample } from '../../types/analysis';
 
 const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
 const RATES = [0.5, 1, 2, 4, 8];
@@ -106,6 +106,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
   const [trails, setTrails] = useState(false);
+  const [capture, setCapture] = useState<CaptureSeries | null>(null);
   const [weaponNames, setWeaponNames] = useState<Record<string, string>>({});
   const [labels, setLabels] = useState(large); // pseudos affichés d'emblée dans la vue agrandie
   const [hidden, setHidden] = useState<Set<number>>(new Set());
@@ -118,6 +119,13 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const nameOf = useMemo(() => new Map(game.players.map((p) => [p.slot, p.name])), [game.players]);
   const plan = useMemo(() => builtinMaps.find((m) => m.name === game.map), [game.map]);
   const frames = useMemo(() => (samples ? groupFrames(samples) : []), [samples]);
+
+  useEffect(() => {
+    analysisApi
+      .capture(game.id)
+      .then(setCapture)
+      .catch(() => setCapture(null));
+  }, [game.id]);
 
   useEffect(() => {
     analysisApi
@@ -296,6 +304,10 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
         </select>
       </div>
 
+      {capture && (capture.A.length > 1 || capture.B.length > 1) && (
+        <ScoreChart capture={capture} start={game.start_s} end={game.end_s} time={time} onSeek={seek} />
+      )}
+
       <div className="replay__opts">
         <label>
           <input type="checkbox" checked={follow} onChange={(e) => { setFollow(e.target.checked); setPlaying(false); setT(time); }} />
@@ -334,8 +346,10 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
                 <button onClick={() => { setFollow(true); setPlaying(false); requestSeek(Math.max(game.start_s, k.t - 2)); }} title="Aller à ce kill dans la vidéo">
                   {formatTime(k.t - game.start_s)}
                 </button>
-                {k.killer === null ? (
-                  <span className="kill__env" title="Aucun tueur dans le killfeed : mort du décor ou action d'un admin">décor</span>
+                {k.kind === 'environment' ? (
+                  <span className="kill__env" title="Aucun tueur sur la ligne du killfeed : mort du décor ou action d'un admin">décor</span>
+                ) : k.killer === null ? (
+                  <span className="kill__env" title="Un tueur est affiché mais son pseudo n'a pas pu être lu">tueur ?</span>
                 ) : k.killer === k.victim ? (
                   <span className="kill__env" title="Même pseudo des deux côtés">suicide</span>
                 ) : (
@@ -365,4 +379,36 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
 
 function pos(inset: Inset, x: number, y: number) {
   return { x: (inset.l + x * (1 - inset.l - inset.r)) * 100, y: (inset.t + y * (1 - inset.t - inset.b)) * 100 };
+}
+
+/** Courbe du score de capture de chaque équipe (0 à 100 %), avec la position courante. Un clic déplace le replay. */
+function ScoreChart({ capture, start, end, time, onSeek }: { capture: CaptureSeries; start: number; end: number; time: number; onSeek: (t: number) => void }) {
+  const span = Math.max(end - start, 1);
+  const line = (pts: { t: number; v: number }[]) => pts.map((p) => `${(((p.t - start) / span) * 100).toFixed(2)},${(100 - p.v).toFixed(2)}`).join(' ');
+  const last = (pts: { t: number; v: number }[]) => (pts.length ? Math.round(pts[pts.length - 1].v) : 0);
+  const at = (pts: { t: number; v: number }[]) => {
+    let v = 0;
+    for (const p of pts) if (p.t <= time) v = p.v;
+    return Math.round(v);
+  };
+  return (
+    <div className="replay__score" title="Score de capture de chaque équipe">
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          onSeek(start + ((e.clientX - r.left) / r.width) * span);
+        }}
+      >
+        <polyline points={line(capture.A)} fill="none" stroke={TEAM_COLOR.A} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        <polyline points={line(capture.B)} fill="none" stroke={TEAM_COLOR.B} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        <line x1={((time - start) / span) * 100} x2={((time - start) / span) * 100} y1={0} y2={100} stroke="#fff" strokeWidth={1} vectorEffect="non-scaling-stroke" opacity={0.7} />
+      </svg>
+      <span>
+        <b style={{ color: TEAM_COLOR.A }}>{at(capture.A)} %</b> · <b style={{ color: TEAM_COLOR.B }}>{at(capture.B)} %</b>
+        <em> (fin : {last(capture.A)} % / {last(capture.B)} %)</em>
+      </span>
+    </div>
+  );
 }

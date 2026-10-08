@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { Game, JobEvent, Sample, Video, Weapon, Zones } from '../types/analysis';
+import type { CaptureSeries, Game, JobEvent, Sample, Video, Weapon, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -22,6 +22,7 @@ export const analysisApi = {
   games: (videoId: number) => fetch(`/api/games?video=${videoId}`).then(parse<Game[]>),
   weapons: () => fetch('/api/weapons', { cache: 'no-store' }).then(parse<Weapon[]>),
   nameWeapon: (id: string, name: string) => fetch(`/api/weapons/${id}`, jsonInit('PUT', { name })).then(parse<{ ok: true }>),
+  capture: (gameId: number) => fetch(`/api/capture?game=${gameId}`, { cache: 'no-store' }).then(parse<CaptureSeries>),
   samples: (gameId: number) => fetch(`/api/samples?game=${gameId}`).then(parse<Sample[]>),
   createGame: (videoId: number, start: number, end: number, map?: string) =>
     fetch('/api/games', jsonInit('POST', { video_id: videoId, start_s: start, end_s: end, map })).then(parse<{ id: number }>),

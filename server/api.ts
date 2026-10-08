@@ -51,11 +51,11 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const rows = ctx.db
     .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples FROM games WHERE video_id = ? ORDER BY start_s')
     .all(videoId) as Row[];
-  const kills = new Map<number, { t: number; killer: number | null; victim: number; weapon: string | null; headshot: boolean }[]>();
+  const kills = new Map<number, { t: number; killer: number | null; victim: number; weapon: string | null; headshot: boolean; kind: string | null }[]>();
   for (const k of ctx.db
-    .prepare('SELECT game_id, t, killer_slot, victim_slot, weapon, headshot FROM kills WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY t')
-    .all(videoId) as { game_id: number; t: number; killer_slot: number | null; victim_slot: number; weapon: string | null; headshot: number }[]) {
-    kills.set(k.game_id, [...(kills.get(k.game_id) ?? []), { t: k.t, killer: k.killer_slot, victim: k.victim_slot, weapon: k.weapon, headshot: !!k.headshot }]);
+    .prepare('SELECT game_id, t, killer_slot, victim_slot, weapon, headshot, kind FROM kills WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY t')
+    .all(videoId) as { game_id: number; t: number; killer_slot: number | null; victim_slot: number; weapon: string | null; headshot: number; kind: string | null }[]) {
+    kills.set(k.game_id, [...(kills.get(k.game_id) ?? []), { t: k.t, killer: k.killer_slot, victim: k.victim_slot, weapon: k.weapon, headshot: !!k.headshot, kind: k.kind }]);
   }
   type PlayerRow = { game_id: number; slot: number; name: string; weapon1: string | null; weapon2: string | null; gadget: string | null };
   const players = new Map<number, Omit<PlayerRow, 'game_id'>[]>();
@@ -110,6 +110,7 @@ function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
     ctx.db.prepare('DELETE FROM samples WHERE game_id = ?').run(id);
     ctx.db.prepare('DELETE FROM kills WHERE game_id = ?').run(id);
     ctx.db.prepare('DELETE FROM kills_meta WHERE game_id = ?').run(id);
+    ctx.db.prepare("DELETE FROM capture_state WHERE game_id = ? AND point IN ('score_A', 'score_B')").run(id);
   }
   // Les zones à vérifier ne valent plus rien une fois la game confirmée ou ses bornes déplacées.
   const clearDoubts = status !== current.status || 'start_s' in body || 'end_s' in body;
@@ -169,11 +170,22 @@ function putCalibration(ctx: ApiContext, body: Row): ApiResult {
 
 function listSamples(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const gameId = Number(query.get('game'));
-  if (!Number.isInteger(gameId)) return fail('Paramètre game manquant');
+  if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
   const rows = ctx.db
     .prepare('SELECT frame, t, slot, team, x, y, angle, alive, confidence FROM samples WHERE game_id = ? ORDER BY frame, slot')
     .all(gameId);
   return reply(200, rows);
+}
+
+function getCapture(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = Number(query.get('game'));
+  if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
+  const rows = ctx.db
+    .prepare("SELECT t, pct, team FROM capture_state WHERE game_id = ? AND point IN ('score_A', 'score_B') ORDER BY t")
+    .all(gameId) as { t: number; pct: number; team: 'A' | 'B' }[];
+  const out: Record<'A' | 'B', { t: number; v: number }[]> = { A: [], B: [] };
+  for (const r of rows) out[r.team].push({ t: r.t, v: r.pct });
+  return reply(200, out);
 }
 
 export function handleApi(
@@ -193,6 +205,7 @@ export function handleApi(
     if (method === 'POST') return createGame(ctx, payload);
   }
   if (method === 'GET' && pathname === '/api/samples') return listSamples(ctx, query);
+  if (method === 'GET' && pathname === '/api/capture') return getCapture(ctx, query);
   const gameMatch = /^\/api\/games\/(\d+)$/.exec(pathname);
   if (gameMatch) {
     const id = Number(gameMatch[1]);
