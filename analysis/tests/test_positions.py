@@ -154,9 +154,9 @@ def test_static_unnumbered_blobs_are_dropped_but_numbered_markers_stay():
     for i in range(100):
         dets = [det(0.5, 0.5)]  # tache du décor : toujours au même endroit, sans numéro
         dets.append(det(0.1 + i * 0.005, 0.3, number=6))  # un joueur numéroté qui avance
-        dets.append(det(0.2 + (i % 50) * 0.01, 0.8))  # un inconnu qui bouge : jamais assez longtemps au même endroit
+        dets.append(det(0.05 + i * 0.009, 0.8))  # un inconnu qui traverse la carte : jamais assez longtemps au même endroit
         frames.append((i, i * 0.2, dets))
     kept = tracking.drop_static_noise(frames)
-    assert all(not any(abs(d["x"] - 0.5) < 1e-9 and d["number"] is None for d in dets) for _, _, dets in kept)
+    assert all(not any(abs(d["x"] - 0.5) < 1e-9 and abs(d["y"] - 0.5) < 1e-9 and d["number"] is None for d in dets) for _, _, dets in kept)
     assert all(any(d["number"] == 6 for d in dets) for _, _, dets in kept)
     assert sum(len(dets) for _, _, dets in kept) == 100 * 2
