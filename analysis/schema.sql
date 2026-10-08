@@ -50,6 +50,12 @@ CREATE TABLE IF NOT EXISTS samples (
   PRIMARY KEY (game_id, frame, slot)
 );
 
+-- Version des réglages du suivi avec laquelle les positions d'une game ont été lues : si elle change, elles sont relues.
+CREATE TABLE IF NOT EXISTS samples_meta (
+  game_id INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
+  params_version INTEGER NOT NULL
+);
+
 -- Remplie au chantier 2.
 CREATE TABLE IF NOT EXISTS capture_state (
   game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,

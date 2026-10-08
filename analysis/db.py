@@ -143,17 +143,22 @@ def _sample_step(conn, game_id):
     return (row["hi"] - row["lo"]) / (row["n"] - 1) if row["n"] > 1 else 0.0
 
 
-def games_without_samples(conn, video_id, step_s=None):
-    """Games dont les positions sont à lire : aucune lecture, ou lues à une autre cadence que step_s (si donnée)."""
+def games_without_samples(conn, video_id, step_s=None, params_version=None):
+    """Games dont les positions sont à lire : aucune lecture, lues à une autre cadence que step_s, ou avec d'autres réglages
+    du suivi que params_version (si donnés)."""
     out = []
     for g in conn.execute("SELECT id, start_s, end_s, map FROM games WHERE video_id = ? ORDER BY start_s", (video_id,)).fetchall():
         have = _sample_step(conn, g["id"])
-        if have is None or (step_s is not None and abs(have - step_s) > 0.15 * step_s):
+        stale = False
+        if params_version is not None:
+            meta = conn.execute("SELECT params_version FROM samples_meta WHERE game_id = ?", (g["id"],)).fetchone()
+            stale = (meta["params_version"] if meta else 0) != params_version
+        if have is None or stale or (step_s is not None and abs(have - step_s) > 0.15 * step_s):
             out.append(dict(g))
     return out
 
 
-def replace_samples(conn, game_id, rows):
+def replace_samples(conn, game_id, rows, params_version=0):
     """Enregistre d'un seul bloc les positions d'une game (lignes : frame, t, slot, team, x, y, angle, alive, confiance)."""
     conn.execute("DELETE FROM samples WHERE game_id = ?", (game_id,))
     conn.executemany(
@@ -161,4 +166,5 @@ def replace_samples(conn, game_id, rows):
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(game_id, *r) for r in rows],
     )
+    conn.execute("INSERT OR REPLACE INTO samples_meta (game_id, params_version) VALUES (?, ?)", (game_id, params_version))
     conn.commit()

@@ -18,6 +18,7 @@ import mapname
 import positions
 import segments
 import timer
+import tracking
 
 ZONES_PATH = Path(__file__).with_name("default_zones.json")
 
@@ -91,14 +92,14 @@ def fill_maps(conn, video_id, path, meta, emit, control=None):
 
 def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=positions.STEP_S):
     """Positions des joueurs des games qui n'en ont pas encore. Chaque game est enregistrée d'un seul bloc."""
-    todo = db.games_without_samples(conn, video_id, step_s)
+    todo = db.games_without_samples(conn, video_id, step_s, tracking.PARAMS_VERSION)
     for i, g in enumerate(todo):
         def progress(pct, i=i):
             emit({"event": "progress", "stage": "positions", "pct": round((i + pct / 100) / len(todo) * 100, 1), "game": i + 1, "games": len(todo)})
 
         zone = db.zone_for(conn, g["map"], "minimap")
         rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s)
-        db.replace_samples(conn, g["id"], rows)
+        db.replace_samples(conn, g["id"], rows, tracking.PARAMS_VERSION)
     return len(todo)
 
 

@@ -9,15 +9,20 @@ l'ensemble de la game :
   4. les petits trous sont comblés par interpolation et les directions lissées (médiane circulaire).
 """
 
+import json
 import math
 from collections import Counter
+from pathlib import Path
 
 SLOTS = {"A": (1, 2, 3, 4), "B": (5, 6, 7, 8)}
 GATE_BASE = 0.04  # distance maximale (normalisée) entre deux lectures successives du même joueur : base...
 GATE_SPEED = 0.25  # ...plus cette vitesse (par seconde) × temps écoulé
 MAX_MISS_S = 1.0  # une trajectoire survit à une disparition de cette durée (pastille cachée, chiffre mal lu)
-GAP_FILL_S = 1.2  # trou comblé entre deux trajectoires d'un même joueur (au-delà, un trait droit traverserait les murs)
-GAP_FILL_DIST = 0.18  # distance maximale d'un trou comblé
+ASSIGN_GAP_S = 1.2  # une trajectoire peut prolonger celle d'un joueur arrêtée jusqu'à cette durée avant (décision d'identité)
+ASSIGN_GAP_DIST = 0.18  # ...et à cette distance au plus
+# Interpolation affichée : plafonnée en dur, sinon un trait droit traverserait les murs. Ce n'est pas un réglage.
+FILL_MAX_S = 1.2
+FILL_MAX_DIST = 0.18
 X_LINK_S = 3.0  # une croix se rattache à une trajectoire arrêtée au plus tôt cette durée avant
 X_LINK_DIST = 0.15
 SMOOTH_S = 0.6  # fenêtre de lissage des directions
@@ -139,13 +144,15 @@ def _overlap(a, b, slack=0):
     return a.first <= b.last + slack and b.first <= a.last + slack
 
 
-def _gap_cost(a, b, step_s):
+def _gap_cost(a, b, step_s, max_gap=None, max_dist=None):
     """Coût pour que b prolonge a (b commence après la fin de a), None si invraisemblable."""
+    max_gap = ASSIGN_GAP_S if max_gap is None else max_gap
+    max_dist = ASSIGN_GAP_DIST if max_dist is None else max_dist
     gap = (b.first - a.last) * step_s
-    if gap < 0 or gap > GAP_FILL_S:
+    if gap < 0 or gap > max_gap:
         return None
     dist = math.hypot(a.pos[0] - b.pts[b.first]["x"], a.pos[1] - b.pts[b.first]["y"])
-    if dist > min(GATE_BASE + GATE_SPEED * max(gap, step_s) * 1.6, GAP_FILL_DIST):
+    if dist > min(GATE_BASE + GATE_SPEED * max(gap, step_s) * 1.6, max_dist):
         return None
     return dist + 0.01 * gap
 
@@ -344,7 +351,7 @@ def solve(frames, step_s):
                 put(k, slot, t.team, x, y, None, True, CONF_FILL)
         # trous entre deux trajectoires du même joueur (disparition plus longue, même sans réapparition lointaine)
         for a, b in zip(tracks, tracks[1:]):
-            if _gap_cost(a, b, step_s) is None:
+            if _gap_cost(a, b, step_s, FILL_MAX_S, FILL_MAX_DIST) is None:
                 continue
             ia, ib = a.last, b.first
             pa, pb = a.pts[ia], b.pts[ib]
@@ -357,3 +364,41 @@ def solve(frames, step_s):
             if (k, x.slot) not in rows:
                 put(k, x.slot, x.team, d["x"], d["y"], None, False, x.how)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
+
+
+# ---------- réglages ----------
+# Les valeurs ci-dessus sont les réglages d'origine. tracking_params.json (dans le dépôt) contient les meilleurs trouvés par
+# tune.py : ils sont chargés à l'import, donc retrouvés tels quels sur un autre PC.
+PARAMS_PATH = Path(__file__).with_name("tracking_params.json")
+TUNABLE = (
+    "GATE_BASE", "GATE_SPEED", "MAX_MISS_S", "ASSIGN_GAP_S", "ASSIGN_GAP_DIST",
+    "X_LINK_S", "X_LINK_DIST", "SMOOTH_S", "VOTE_MISMATCH", "SKEW_FULL", "FLIP_COST",
+)
+
+
+def current_params():
+    return {name: globals()[name] for name in TUNABLE}
+
+
+def configure(params):
+    """Applique des réglages (les noms inconnus sont ignorés)."""
+    for name, value in params.items():
+        if name in TUNABLE:
+            globals()[name] = float(value)
+
+
+PARAMS_VERSION = 0  # version des réglages sauvegardés (0 : réglages d'origine)
+
+
+def _load_saved():
+    global PARAMS_VERSION
+    if PARAMS_PATH.exists():
+        try:
+            saved = json.loads(PARAMS_PATH.read_text(encoding="utf-8"))
+            configure(saved.get("params", {}))
+            PARAMS_VERSION = int(saved.get("version", 0))
+        except (OSError, ValueError):
+            pass  # fichier illisible : réglages d'origine
+
+
+_load_saved()

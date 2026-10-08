@@ -13,8 +13,8 @@ EVERY_FRAMES = 6  # une lecture de la minimap toutes les 6 images (5 par seconde
 STEP_S = 0.2  # valeur de repli quand la cadence de la vidéo est inconnue
 
 
-def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S):
-    """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
+def detect_frames(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S):
+    """Détections brutes de la minimap à cadence régulière : [(indice, t, [pastilles])], sans suivi."""
     templates = minimap.load_digit_templates()
     frames = []
     start, end = game["start_s"], game["end_s"]
@@ -25,4 +25,9 @@ def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STE
         frames.append((i, t, detections))
         if emit:
             emit(min(100, 100 * (t - start) / max(end - start, 1)))
-    return tracking.solve(frames, step_s)
+    return frames
+
+
+def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S):
+    """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
+    return tracking.solve(detect_frames(video, game, zone, width, height, emit, wait, step_s), step_s)
