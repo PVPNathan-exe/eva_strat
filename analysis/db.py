@@ -116,3 +116,37 @@ def all_verified(conn, video_id):
         (video_id,),
     ).fetchone()
     return row["n"] > 0 and row["ok"] == row["n"]
+
+
+DEFAULT_ZONES_PATH = Path(__file__).with_name("default_zones.json")
+
+
+def zone_for(conn, map_name, zone):
+    """Rectangle relatif d'une zone du HUD : calibration de la carte si elle existe, sinon zone par défaut."""
+    if map_name:
+        row = conn.execute("SELECT x, y, w, h FROM calibrations WHERE map = ? AND zone = ?", (map_name, zone)).fetchone()
+        if row:
+            return dict(row)
+    return json.loads(DEFAULT_ZONES_PATH.read_text(encoding="utf-8"))[zone]
+
+
+def games_without_samples(conn, video_id):
+    return [
+        dict(r)
+        for r in conn.execute(
+            "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
+            "AND id NOT IN (SELECT DISTINCT game_id FROM samples) ORDER BY start_s",
+            (video_id,),
+        )
+    ]
+
+
+def replace_samples(conn, game_id, rows):
+    """Enregistre d'un seul bloc les positions d'une game (lignes : frame, t, slot, team, x, y, angle, alive, confiance)."""
+    conn.execute("DELETE FROM samples WHERE game_id = ?", (game_id,))
+    conn.executemany(
+        "INSERT OR REPLACE INTO samples (game_id, frame, t, slot, team, x, y, angle, alive, confidence) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [(game_id, *r) for r in rows],
+    )
+    conn.commit()

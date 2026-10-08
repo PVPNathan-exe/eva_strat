@@ -73,6 +73,7 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
           )}
         </div>
       )}
+      {g.samples > 0 && <div className="game__positions">Positions lues ({g.samples} points)</div>}
       <div className="game__actions">
         <select value={g.map ?? ''} onChange={(e) => void act(() => analysisApi.patchGame(g.id, { map: e.target.value || null }))}>
           <option value="">Carte ?</option>

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { analysisApi } from '../../lib/analysisApi';
 import { useAnalysisStore } from '../../store/analysisStore';
 
-const STAGE_LABEL = { download: 'Téléchargement', detect: 'Détection des games', maps: 'Lecture des cartes' } as const;
+const STAGE_LABEL = { download: 'Téléchargement', detect: 'Détection des games', maps: 'Lecture des cartes', positions: 'Positions des joueurs' } as const;
 
 export function IngestBar() {
   const [source, setSource] = useState('');

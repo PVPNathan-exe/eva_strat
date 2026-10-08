@@ -9,7 +9,7 @@ export interface JobState {
   running: boolean;
   jobId: string | null;
   paused: boolean;
-  stage: 'download' | 'detect' | 'maps' | null;
+  stage: 'download' | 'detect' | 'maps' | 'positions' | null;
   pct: number;
   error: string | null;
   message: string | null;
@@ -85,13 +85,13 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   startIngest: async (source, { preRoll, postRoll, skipIfOk, withPositions } = {}) => {
     set({ job: { ...idleJob, running: true } });
     try {
-      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk });
+      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions });
       set({ job: { ...get().job, jobId } });
       subscribeJob(jobId, (e: JobEvent) => {
         if (e.event === 'progress') {
           set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
         } else if (e.event === 'done') {
-          set({ job: { ...idleJob, message: withPositions ? `${e.message ?? 'Games à jour'} · positions des joueurs : pas encore disponibles (chantier suivant)` : (e.message ?? 'Vidéo chargée') } });
+          set({ job: { ...idleJob, message: e.message ?? 'Vidéo chargée' } });
           void get()
             .loadVideos()
             .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined))

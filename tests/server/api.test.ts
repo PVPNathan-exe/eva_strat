@@ -142,3 +142,16 @@ test('PATCH efface les zones à vérifier à la confirmation, pas pour un simple
   handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { status: 'confirmed' });
   assert.equal(doubts().length, 0);
 });
+
+test('les positions sont comptées par game et effacées quand on déplace une borne', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  const id = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 700, 'confirmed')").run(videoId).lastInsertRowid);
+  ctx.db.prepare("INSERT INTO samples (game_id, frame, t, slot, team, x, y) VALUES (?, 0, 100, 1, 'A', 0.1, 0.2)").run(id);
+  const samples = () => (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { samples: number }[])[0].samples;
+  assert.equal(samples(), 1);
+  handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { map: 'Silva' });
+  assert.equal(samples(), 1);
+  handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { end_s: 710 });
+  assert.equal(samples(), 0);
+});

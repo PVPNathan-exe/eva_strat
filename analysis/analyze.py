@@ -15,6 +15,7 @@ from pathlib import Path
 import db
 import ingest
 import mapname
+import positions
 import segments
 import timer
 
@@ -88,7 +89,20 @@ def fill_maps(conn, video_id, path, meta, emit, control=None):
     conn.commit()
 
 
-def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False, control=None):
+def extract_positions(conn, video_id, path, meta, emit, control=None):
+    """Positions des joueurs des games qui n'en ont pas encore. Chaque game est enregistrée d'un seul bloc."""
+    todo = db.games_without_samples(conn, video_id)
+    for i, g in enumerate(todo):
+        def progress(pct, i=i):
+            emit({"event": "progress", "stage": "positions", "pct": round((i + pct / 100) / len(todo) * 100, 1), "game": i + 1, "games": len(todo)})
+
+        zone = db.zone_for(conn, g["map"], "minimap")
+        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control))
+        db.replace_samples(conn, g["id"], rows)
+    return len(todo)
+
+
+def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False, control=None, with_positions=False):
     conn = db.connect(db_path)
     source_url = None
 
@@ -107,19 +121,30 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
     meta = ingest.probe(path)
     video_id = db.upsert_video(conn, str(path.resolve()), source_url, **meta)
 
-    if skip_if_ok and db.all_verified(conn, video_id):
+    verified = skip_if_ok and db.all_verified(conn, video_id)
+    if verified and not with_positions:
         emit({"event": "done", "video_id": video_id, "message": "Toutes les games sont déjà vérifiées : rien à relancer"})
         return
 
-    if do_detect:
+    if do_detect and not verified:
         emit({"event": "progress", "stage": "detect", "pct": 0})
         ok = db.ok_games(conn, video_id) if skip_if_ok else []
         ranges = gaps_around(ok, meta["duration_s"]) if ok else None
         found = detect(path, meta, emit, pre_roll, post_roll, ranges, control) if ranges != [] else []
         db.replace_detected_games(conn, video_id, found, keep_ok=skip_if_ok)
-    fill_maps(conn, video_id, path, meta, emit, control)
+    if not verified:
+        fill_maps(conn, video_id, path, meta, emit, control)
 
-    emit({"event": "done", "video_id": video_id})
+    message = "Games déjà vérifiées" if verified else None
+    if with_positions:
+        n = extract_positions(conn, video_id, path, meta, emit, control)
+        text = f"positions lues sur {n} game(s)" if n else "positions déjà à jour"
+        message = f"{message} · {text}" if message else text.capitalize()
+
+    event = {"event": "done", "video_id": video_id}
+    if message:
+        event["message"] = message
+    emit(event)
 
 
 def main(argv=None, emit=print_event):
@@ -132,9 +157,10 @@ def main(argv=None, emit=print_event):
     parser.add_argument("--post-roll", type=float, default=segments.POST_ROLL_S, help="Secondes gardées après la fin du chrono (écran de victoire)")
     parser.add_argument("--skip-if-ok", action="store_true", help="Ne rien relire si toutes les games sont déjà confirmées et vérifiées")
     parser.add_argument("--control", default=None, help="Fichier dont la présence met l'analyse en pause")
+    parser.add_argument("--positions", action="store_true", help="Lire aussi les positions des joueurs (minimap)")
     args = parser.parse_args(argv)
     try:
-        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok, control=args.control)
+        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok, control=args.control, with_positions=args.positions)
     except Exception as exc:  # noqa: BLE001 - tout échec doit être signalé à l'UI
         emit({"event": "error", "message": str(exc)})
         return 1

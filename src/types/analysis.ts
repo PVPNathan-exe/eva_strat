@@ -25,6 +25,7 @@ export interface Game {
   status: GameStatus;
   winner: string | null;
   doubts: Doubt[];
+  samples: number;
 }
 
 export const ZONE_NAMES = ['minimap', 'capture_points', 'team_a_bar', 'team_b_bar', 'timer'] as const;
@@ -48,7 +49,7 @@ export const ZONE_LABELS: Record<ZoneName, string> = {
 
 export interface JobEvent {
   event: 'progress' | 'done' | 'error';
-  stage?: 'download' | 'detect' | 'maps';
+  stage?: 'download' | 'detect' | 'maps' | 'positions';
   pct?: number;
   video_id?: number;
   message?: string;

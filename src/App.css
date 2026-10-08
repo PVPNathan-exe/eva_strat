@@ -610,6 +610,12 @@
   font-size: 0.9rem;
 }
 
+.game__positions {
+  margin: 0.3rem 0;
+  font-size: 0.8rem;
+  color: #5ad18b;
+}
+
 .game__check {
   display: flex;
   flex-direction: column;

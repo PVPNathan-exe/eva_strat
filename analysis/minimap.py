@@ -1,0 +1,234 @@
+"""Lecture de la minimap : une pastille par joueur (équipe, position, numéro, direction, vivant, observé).
+
+Sur la minimap, un joueur est une pastille ronde à pointe (la pointe donne la direction) portant son numéro, orange pour
+l'équipe de gauche (1 à 4) et bleue pour l'équipe de droite (6 à 9). Un joueur mort devient une croix colorée, le joueur
+observé par la caméra est une pastille blanche cerclée de sa couleur d'équipe. Le numéro est lu par comparaison à des modèles
+(digit_templates ci-dessous), appris une fois depuis des vidéos.
+"""
+
+import math
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+BASE_ZONE_W = 440.0  # largeur en pixels de la minimap de référence (1080p) : les surfaces sont mises à l'échelle
+MARKER_AREA = (140, 900)  # surface d'une pastille à l'échelle de référence
+SPAWN_MIN_AREA = 1500  # une zone d'apparition colorée est bien plus grande qu'une pastille
+GLYPH_SIZE = (20, 20)
+DIGIT_TEMPLATES_PATH = Path(__file__).with_name("minimap_digits.npz")
+DEAD_SOLIDITY = 0.82  # en dessous : croix de joueur mort
+MIN_DIGIT_SCORE = 0.65
+MIN_DIGIT_MARGIN = 0.03
+
+ORANGE = ((3, 150, 195), (22, 255, 255))  # V élevé : les zones d'apparition colorées sont plus sombres
+BLUE = ((98, 100, 195), (118, 255, 255))
+RING_ORANGE = ((3, 110, 110), (22, 255, 255))  # liseré du joueur observé : plus sombre qu'une pastille pleine
+RING_BLUE = ((98, 90, 110), (118, 255, 255))
+
+
+def _scale(crop):
+    return (crop.shape[1] / BASE_ZONE_W) ** 2
+
+
+def _color_mask(hsv, bounds):
+    m = cv2.inRange(hsv, np.array(bounds[0]), np.array(bounds[1]))
+    return cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+
+
+def _split_blob(mask, label_img, i, expected):
+    """Une pastille de plus d'une surface normale : deux joueurs superposés. On les sépare par k-means sur les pixels."""
+    ys, xs = np.nonzero(label_img == i)
+    pts = np.column_stack([xs, ys]).astype(np.float32)
+    k = 2
+    _, lab, centers = cv2.kmeans(pts, k, None, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 0.5), 3, cv2.KMEANS_PP_CENTERS)
+    parts = []
+    for j in range(k):
+        sel = pts[lab.ravel() == j].astype(int)
+        part = np.zeros_like(mask)
+        part[sel[:, 1], sel[:, 0]] = 1
+        parts.append(part)
+    return parts
+
+
+def _blobs(mask, scale, min_area=None):
+    """Composantes de la taille d'une pastille, avec un indicateur « coupée » (les gros amas sont séparés en deux)."""
+    lo, hi = MARKER_AREA[0] * scale, MARKER_AREA[1] * scale
+    if min_area is not None:
+        lo = min_area
+    n, lab, stats, _ = cv2.connectedComponentsWithStats((mask > 0).astype(np.uint8))
+    out = []
+    for i in range(1, n):
+        area = stats[i, cv2.CC_STAT_AREA]
+        if area < lo or area >= SPAWN_MIN_AREA * scale:
+            continue
+        single = np.uint8(lab == i)
+        if area > 1.5 * 320 * scale:
+            out.extend((part, True) for part in _split_blob(single, lab, i, 320 * scale))
+        else:
+            out.append((single, False))
+    return out
+
+
+def _tip_angle(blob):
+    """Angle (degrés, 0 = droite, sens horaire à l'écran) de la pointe de la pastille, ou None si le contour est rond."""
+    cnts, _ = cv2.findContours(blob, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not cnts:
+        return None
+    c = max(cnts, key=cv2.contourArea)
+    pts = c.reshape(-1, 2).astype(np.float32)
+    # Le numéro fait un trou dans la pastille : on remplit avant de chercher le centre du corps rond.
+    solid = np.zeros_like(blob)
+    cv2.drawContours(solid, [c], -1, 1, cv2.FILLED)
+    dist = cv2.distanceTransform(solid, cv2.DIST_L2, 3)
+    _, rmax, _, loc = cv2.minMaxLoc(dist)
+    bx, by = loc
+    d = np.hypot(pts[:, 0] - bx, pts[:, 1] - by)
+    k = int(np.argmax(d))
+    if d[k] - rmax < 0.18 * rmax:
+        return None
+    return math.degrees(math.atan2(pts[k, 1] - by, pts[k, 0] - bx)) % 360
+
+
+def _solidity(blob):
+    """Surface / surface de l'enveloppe convexe : ~0,95 pour une pastille, ~0,6 pour une croix (joueur mort)."""
+    cnts, _ = cv2.findContours(blob, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not cnts:
+        return 1.0
+    c = max(cnts, key=cv2.contourArea)
+    return cv2.contourArea(c) / max(cv2.contourArea(cv2.convexHull(c)), 1.0)
+
+
+def _glyph(crop_gray, blob):
+    """Chiffre du numéro : fenêtre centrée sur le corps rond de la pastille, agrandie, puis pixels sombres (seuil d'Otsu)."""
+    cnts, _ = cv2.findContours(blob, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not cnts:
+        return None
+    solid = np.zeros_like(blob)
+    cv2.drawContours(solid, [max(cnts, key=cv2.contourArea)], -1, 1, cv2.FILLED)
+    _, rmax, _, (bx, by) = cv2.minMaxLoc(cv2.distanceTransform(solid, cv2.DIST_L2, 3))
+    r = int(round(rmax))
+    if r < 4:
+        return None
+    h, w = crop_gray.shape
+    y0, y1, x0, x1 = max(by - r, 0), min(by + r + 1, h), max(bx - r, 0), min(bx + r + 1, w)
+    win = cv2.resize(crop_gray[y0:y1, x0:x1], (GLYPH_SIZE[0], GLYPH_SIZE[1]), interpolation=cv2.INTER_CUBIC)
+    yy, xx = np.mgrid[0 : GLYPH_SIZE[1], 0 : GLYPH_SIZE[0]]
+    inside = ((xx - GLYPH_SIZE[0] / 2 + 0.5) ** 2 / (GLYPH_SIZE[0] * 0.42) ** 2 + (yy - GLYPH_SIZE[1] / 2 + 0.5) ** 2 / (GLYPH_SIZE[1] * 0.42) ** 2) <= 1
+    thr, _ = cv2.threshold(win[inside].reshape(-1, 1), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    dark = ((win < thr) & inside).astype(np.uint8)
+    if dark.sum() < 12:
+        return None
+    return dark * 255
+
+
+def _vec(g):
+    return g.astype(np.float32).ravel() / 255.0
+
+
+def load_digit_templates(path=DIGIT_TEMPLATES_PATH):
+    """Modèles par chiffre : plusieurs variantes possibles (clés « 3 », « 3_2 »…)."""
+    if not Path(path).exists():
+        return {}
+    data = np.load(path)
+    out = {}
+    for key in data.files:
+        out.setdefault(key.split("_")[0], []).append(_vec(data[key]))
+    return out
+
+
+def _read_digit(glyph, templates):
+    if glyph is None or not templates:
+        return None
+    v = _vec(glyph)
+    scored = []
+    for label, variants in templates.items():
+        best = -1.0
+        for tpl in variants:
+            a, b = v - v.mean(), tpl - tpl.mean()
+            d = np.linalg.norm(a) * np.linalg.norm(b)
+            best = max(best, float(a @ b / d) if d else -1.0)
+        scored.append((best, label))
+    scored.sort(reverse=True)
+    if scored[0][0] < MIN_DIGIT_SCORE or (len(scored) > 1 and scored[0][0] - scored[1][0] < MIN_DIGIT_MARGIN):
+        return None
+    return int(scored[0][1])
+
+
+def _holes(glyph):
+    """Ordonnées (sur 60) des centres des trous du chiffre : 8 en a deux, 6 un en bas, 9 un en haut."""
+    up = (cv2.resize(glyph, (60, 60), interpolation=cv2.INTER_CUBIC) > 127).astype(np.uint8)
+    cnts, hier = cv2.findContours(up, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+    out = []
+    if hier is not None:
+        for c, h in zip(cnts, hier[0]):
+            if h[3] != -1 and cv2.contourArea(c) >= 15:
+                m = cv2.moments(c)
+                out.append(m["m01"] / m["m00"])
+    return out
+
+
+def _read_blue_digit(glyph, templates):
+    """Équipe bleue (6 à 9) : 6, 8 et 9 se distinguent par leurs trous, bien mieux que par corrélation. Le 7 n'a pas de trou."""
+    if glyph is None:
+        return None
+    holes = _holes(glyph)
+    if len(holes) >= 2:
+        return 8
+    if len(holes) == 1:
+        return 9 if holes[0] < 30 else 6
+    return 7 if _read_digit(glyph, templates) == 7 else None
+
+
+def slot_of(number):
+    """Numéro affiché (1-4 puis 6-9) -> slot 1 à 8."""
+    return number if number <= 4 else number - 1
+
+
+def find_markers(crop, templates=None):
+    """Toutes les pastilles de la minimap. Coordonnées normalisées (0 à 1) dans le recadrage."""
+    templates = templates if templates is not None else load_digit_templates()
+    h, w = crop.shape[:2]
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    gray = hsv[:, :, 2]  # luminosité : le numéro est plus sombre que la pastille quelle que soit sa couleur
+    scale = _scale(crop)
+    found = []
+
+    def add(blob, team, alive, spectated):
+        m = cv2.moments(blob, binaryImage=True)
+        if not m["m00"]:
+            return
+        glyph = _glyph(gray, blob)
+        number = _read_blue_digit(glyph, templates) if team == "B" else _read_digit(glyph, templates)
+        found.append(
+            {
+                "team": team,
+                "x": m["m10"] / m["m00"] / w,
+                "y": m["m01"] / m["m00"] / h,
+                "number": number,
+                "slot": slot_of(number) if number else None,
+                "angle": _tip_angle(blob) if alive else None,
+                "alive": alive,
+                "spectated": spectated,
+                "glyph": glyph,
+                "area": int(m["m00"]),
+            }
+        )
+
+    for team, bounds in (("A", ORANGE), ("B", BLUE)):
+        for blob, split in _blobs(_color_mask(hsv, bounds), scale):
+            add(blob, team, alive=split or _solidity(blob) >= DEAD_SOLIDITY, spectated=False)
+
+    # Joueur observé : pastille blanche, cerclée de la couleur de son équipe.
+    white = cv2.inRange(hsv, np.array((0, 0, 205)), np.array((180, 70, 255)))
+    white = cv2.morphologyEx(white, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    for blob, _ in _blobs(white, scale, min_area=180 * scale):
+        ring = cv2.dilate(blob, np.ones((7, 7), np.uint8)) - blob
+        votes = {
+            "A": int((_color_mask(hsv, RING_ORANGE) > 0)[ring > 0].sum()),
+            "B": int((_color_mask(hsv, RING_BLUE) > 0)[ring > 0].sum()),
+        }
+        team = max(votes, key=votes.get)
+        if votes[team] >= 10 * scale:
+            add(blob, team, alive=True, spectated=True)
+    return found
