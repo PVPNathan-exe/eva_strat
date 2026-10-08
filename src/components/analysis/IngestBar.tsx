@@ -51,38 +51,40 @@ export function IngestBar() {
           placeholder="Colle un chemin .mp4 ou une URL YouTube, ou clique sur Parcourir"
           disabled={job.running || picking}
         />
-        <label className="ingest__single" title="Secondes gardées avant le départ du chrono (compte à rebours)">
-          Avant
-          <input
-            className="ingest__preroll"
-            type="number"
-            min={0}
-            max={60}
-            step={0.5}
-            value={preRoll}
-            onChange={(e) => setPreRoll(Math.min(60, Math.max(0, Number(e.target.value) || 0)))}
-            disabled={job.running}
-          />
-          s
-        </label>
-        <label className="ingest__single" title="Secondes gardées après la fin du chrono (écran de victoire)">
-          Après
-          <input
-            className="ingest__preroll"
-            type="number"
-            min={0}
-            max={120}
-            step={0.5}
-            value={postRoll}
-            onChange={(e) => setPostRoll(Math.min(120, Math.max(0, Number(e.target.value) || 0)))}
-            disabled={job.running}
-          />
-          s
-        </label>
         <button type="submit" disabled={job.running || !source.trim()}>
           Analyser
         </button>
       </form>
+
+      <div className="ingest__row">
+          <label className="ingest__single" title="Secondes gardées avant le départ du chrono (compte à rebours)">
+            Avant
+            <input
+              className="ingest__preroll"
+              type="number"
+              min={0}
+              max={60}
+              step={0.5}
+              value={preRoll}
+              onChange={(e) => setPreRoll(Math.min(60, Math.max(0, Number(e.target.value) || 0)))}
+              disabled={job.running}
+            />
+            s
+          </label>
+          <label className="ingest__single" title="Secondes gardées après la fin du chrono (écran de victoire)">
+            Après
+            <input
+              className="ingest__preroll"
+              type="number"
+              min={0}
+              max={120}
+              step={0.5}
+              value={postRoll}
+              onChange={(e) => setPostRoll(Math.min(120, Math.max(0, Number(e.target.value) || 0)))}
+              disabled={job.running}
+            />
+            s
+          </label>
 
       {videoId !== null && currentVideo && (
         <button
@@ -103,6 +105,7 @@ export function IngestBar() {
           ))}
         </select>
       )}
+      </div>
 
       {job.running && (
         <div className="ingest__progress">

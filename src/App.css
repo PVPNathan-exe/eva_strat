@@ -378,9 +378,17 @@
 
 .ingest__form {
   display: flex;
-  flex: 1;
+  flex: 1 1 100%;
   gap: 0.4rem;
   min-width: 0;
+}
+
+.ingest__row {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
 }
 
 .ingest__single {
@@ -460,7 +468,9 @@
 
 .player {
   width: 100%;
-  max-height: calc(100vh - 330px);
+  flex: 1;
+  min-height: 240px;
+  object-fit: contain;
   display: block;
   background: #000;
   border-radius: 8px 8px 0 0;
@@ -470,6 +480,8 @@
 .player-box {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .controls {
