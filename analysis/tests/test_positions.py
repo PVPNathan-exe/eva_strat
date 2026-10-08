@@ -142,3 +142,21 @@ def test_matching_does_not_explode_with_many_tracks_and_detections():
     assert time.time() - start < 2
     assert len({i for i, _ in pairs}) == len(pairs) == len({j for _, j in pairs})  # chaque trajectoire et chaque détection une fois
     assert len(pairs) >= n - 3  # presque tout est apparié
+
+
+def test_static_unnumbered_blobs_are_dropped_but_numbered_markers_stay():
+    import tracking
+
+    def det(x, y, team="B", number=None):
+        return {"team": team, "x": x, "y": y, "number": number, "slot": None if number is None else number - 1, "angle": 0.0, "axis": 0.0, "skew": 1.0, "alive": True, "spectated": False}
+
+    frames = []
+    for i in range(100):
+        dets = [det(0.5, 0.5)]  # tache du décor : toujours au même endroit, sans numéro
+        dets.append(det(0.1 + i * 0.005, 0.3, number=6))  # un joueur numéroté qui avance
+        dets.append(det(0.2 + (i % 50) * 0.01, 0.8))  # un inconnu qui bouge : jamais assez longtemps au même endroit
+        frames.append((i, i * 0.2, dets))
+    kept = tracking.drop_static_noise(frames)
+    assert all(not any(abs(d["x"] - 0.5) < 1e-9 and d["number"] is None for d in dets) for _, _, dets in kept)
+    assert all(any(d["number"] == 6 for d in dets) for _, _, dets in kept)
+    assert sum(len(dets) for _, _, dets in kept) == 100 * 2

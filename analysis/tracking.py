@@ -386,11 +386,47 @@ def _between_angle(smooth, idx, k):
     return (smooth[a] + da * (k - a) / (b - a)) % 360
 
 
+STATIC_CELL = 0.02  # taille (relative à la minimap) des cases où l'on compte les pastilles sans numéro
+STATIC_SHARE = 0.10  # une case où une pastille sans numéro revient dans plus de cette part des images est du décor, pas un joueur
+STATIC_MIN_FRAMES = 60  # en dessous, trop peu d'images pour décider
+
+
+def drop_static_noise(frames):
+    """Retire les fausses pastilles du décor : sur certaines cartes le fond de la minimap a des taches de la couleur d'une équipe.
+    Elles ne bougent pas et n'ont pas de numéro, alors qu'un joueur ne reste jamais aussi longtemps au même endroit sans que son
+    numéro soit lu. Les pastilles numérotées sont toujours conservées."""
+    if len(frames) < STATIC_MIN_FRAMES:
+        return frames
+    seen = {}  # (équipe, case) -> nombre d'images où une pastille sans numéro s'y trouve (voisines comprises)
+    for _, _, dets in frames:
+        cells = set()
+        for d in dets:
+            if d.get("number") or d.get("slot"):
+                continue
+            cx, cy = round(d["x"] / STATIC_CELL), round(d["y"] / STATIC_CELL)
+            cells.update((d["team"], cx + i, cy + j) for i in (-1, 0, 1) for j in (-1, 0, 1))
+        for c in cells:
+            seen[c] = seen.get(c, 0) + 1
+    limit = STATIC_SHARE * len(frames)
+    banned = {c for c, n in seen.items() if n > limit}
+    if not banned:
+        return frames
+    out = []
+    for fi, t, dets in frames:
+        keep = [
+            d for d in dets
+            if d.get("number") or d.get("slot") or (d["team"], round(d["x"] / STATIC_CELL), round(d["y"] / STATIC_CELL)) not in banned
+        ]
+        out.append((fi, t, keep))
+    return out
+
+
 def solve(frames, step_s, deaths=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
+    frames = drop_static_noise(frames)
     times = {fi: t for fi, t, _ in frames}
     alive_tracks, dead_tracks = _link(frames, step_s)
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
