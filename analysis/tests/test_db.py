@@ -76,3 +76,28 @@ def test_games_in_order_are_left_alone_when_keep_ok(tmp_path):
     rows = conn.execute("SELECT start_s, doubts, checked FROM games ORDER BY start_s").fetchall()
     assert rows[0]["doubts"] is None and rows[0]["checked"] == 1  # pas de faux « aucun chrono lu »
     assert "Début posé trop tôt" in rows[1]["doubts"] and rows[1]["checked"] == 1
+
+
+def test_old_calibrations_table_is_rebuilt_to_accept_new_zones(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        """
+        CREATE TABLE calibrations (
+          map TEXT NOT NULL,
+          zone TEXT NOT NULL CHECK (zone IN ('minimap', 'capture_points', 'team_a_bar', 'team_b_bar', 'timer')),
+          x REAL NOT NULL, y REAL NOT NULL, w REAL NOT NULL, h REAL NOT NULL,
+          PRIMARY KEY (map, zone)
+        );
+        INSERT INTO calibrations VALUES ('Silva', 'minimap', 0.1, 0.2, 0.3, 0.4);
+        """
+    )
+    old.commit()
+    old.close()
+    conn = db.connect(path)
+    assert conn.execute("SELECT x FROM calibrations WHERE map = 'Silva' AND zone = 'minimap'").fetchone()["x"] == 0.1
+    conn.execute("INSERT INTO calibrations VALUES ('Silva', 'capture_pct_a', 0.4, 0.06, 0.05, 0.03)")  # refusée avant la migration
+    conn.commit()
+    assert conn.execute("SELECT COUNT(*) AS n FROM calibrations").fetchone()["n"] == 2

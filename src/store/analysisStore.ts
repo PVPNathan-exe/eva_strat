@@ -9,7 +9,7 @@ export interface JobState {
   running: boolean;
   jobId: string | null;
   paused: boolean;
-  stage: 'download' | 'detect' | 'maps' | 'positions' | null;
+  stage: 'download' | 'detect' | 'maps' | 'names' | 'positions' | null;
   pct: number;
   error: string | null;
   message: string | null;

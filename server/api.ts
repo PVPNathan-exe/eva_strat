@@ -2,7 +2,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 
-export const ZONE_NAMES = ['minimap', 'capture_points', 'team_a_bar', 'team_b_bar', 'timer'] as const;
+export const ZONE_NAMES = ['minimap', 'capture_points', 'capture_pct_a', 'capture_pct_b', 'team_a_bar', 'team_b_bar', 'timer'] as const;
 export type ZoneName = (typeof ZONE_NAMES)[number];
 export interface Zone {
   x: number;
@@ -51,9 +51,19 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const rows = ctx.db
     .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples FROM games WHERE video_id = ? ORDER BY start_s')
     .all(videoId) as Row[];
+  const players = new Map<number, { slot: number; name: string }[]>();
+  for (const p of ctx.db
+    .prepare('SELECT game_id, slot, name FROM players WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY slot')
+    .all(videoId) as { game_id: number; slot: number; name: string }[]) {
+    players.set(p.game_id, [...(players.get(p.game_id) ?? []), { slot: p.slot, name: p.name }]);
+  }
   return reply(
     200,
-    rows.map((r) => ({ ...r, doubts: typeof r.doubts === 'string' ? JSON.parse(r.doubts) : [] })),
+    rows.map((r) => ({
+      ...r,
+      doubts: typeof r.doubts === 'string' ? JSON.parse(r.doubts) : [],
+      players: players.get(r.id as number) ?? [],
+    })),
   );
 }
 

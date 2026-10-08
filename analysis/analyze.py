@@ -15,6 +15,8 @@ from pathlib import Path
 import db
 import ingest
 import mapname
+import names
+import ocr
 import positions
 import segments
 import timer
@@ -90,6 +92,24 @@ def fill_maps(conn, video_id, path, meta, emit, control=None):
     conn.commit()
 
 
+def extract_names(conn, video_id, path, meta, emit, control=None):
+    """Pseudos des joueurs des games qui n'en ont pas encore (lus sur les bandeaux). Renvoie (games lues, message d'échec ou None)."""
+    todo = db.games_without_players(conn, video_id)
+    done = 0
+    for i, g in enumerate(todo):
+        wait_if_paused(control)
+        emit({"event": "progress", "stage": "names", "pct": round(100 * i / len(todo), 1)})
+        zones = {key: db.zone_for(conn, g["map"], key) for key in ("team_a_bar", "team_b_bar")}
+        try:
+            found = names.read_names(path, g, zones, meta["width"], meta["height"])
+        except ocr.OcrUnavailable as exc:
+            return done, str(exc)
+        if found:
+            db.replace_players(conn, g["id"], found)
+            done += 1
+    return done, None
+
+
 def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=positions.STEP_S):
     """Positions des joueurs des games qui n'en ont pas encore. Chaque game est enregistrée d'un seul bloc."""
     todo = db.games_without_samples(conn, video_id, step_s, tracking.PARAMS_VERSION)
@@ -138,6 +158,9 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
 
     message = "Games déjà vérifiées" if verified else None
     if with_positions:
+        n_names, names_error = extract_names(conn, video_id, path, meta, emit, control)
+        if names_error:
+            message = f"{message} · pseudos non lus ({names_error})" if message else f"Pseudos non lus ({names_error})"
         step_s = pos_every / meta["fps"] if meta.get("fps") else positions.STEP_S
         n = extract_positions(conn, video_id, path, meta, emit, control, step_s=step_s)
         text = f"positions lues sur {n} game(s)" if n else "positions déjà à jour"

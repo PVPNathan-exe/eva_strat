@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_games_video ON games(video_id);
 
 CREATE TABLE IF NOT EXISTS calibrations (
   map TEXT NOT NULL,
-  zone TEXT NOT NULL CHECK (zone IN ('minimap', 'capture_points', 'team_a_bar', 'team_b_bar', 'timer')),
+  zone TEXT NOT NULL CHECK (zone IN ('minimap', 'capture_points', 'capture_pct_a', 'capture_pct_b', 'team_a_bar', 'team_b_bar', 'timer')),
   x REAL NOT NULL,
   y REAL NOT NULL,
   w REAL NOT NULL,
@@ -48,6 +48,14 @@ CREATE TABLE IF NOT EXISTS samples (
   weapon TEXT,
   confidence REAL,
   PRIMARY KEY (game_id, frame, slot)
+);
+
+-- Pseudos des 8 joueurs d'une game (slot 1 à 4 : équipe de gauche, 5 à 8 : équipe de droite), lus sur les bandeaux.
+CREATE TABLE IF NOT EXISTS players (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  name TEXT NOT NULL,
+  PRIMARY KEY (game_id, slot)
 );
 
 -- Version des réglages du suivi avec laquelle les positions d'une game ont été lues : si elle change, elles sont relues.

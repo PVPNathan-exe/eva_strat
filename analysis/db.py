@@ -21,12 +21,29 @@ def connect(db_path):
         conn.execute("ALTER TABLE games ADD COLUMN doubts TEXT")
     if "checked" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
         conn.execute("ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0")
+    _migrate_calibrations(conn)
     # Version 2 : suivi global des joueurs. Les positions lues avec l'ancien algorithme sont à refaire.
     if conn.execute("PRAGMA user_version").fetchone()[0] < 2:
         conn.execute("DELETE FROM samples")
         conn.execute("PRAGMA user_version = 2")
         conn.commit()
     return conn
+
+
+def _migrate_calibrations(conn):
+    """Une base créée avant l'ajout de zones du HUD a une contrainte CHECK trop stricte : on reconstruit la table."""
+    sql = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'calibrations'").fetchone()
+    if not sql or "capture_pct_a" in sql["sql"]:
+        return
+    schema = SCHEMA_PATH.read_text(encoding="utf-8")
+    start = schema.index("CREATE TABLE IF NOT EXISTS calibrations")
+    create = schema[start : schema.index(");", start) + 2].replace("IF NOT EXISTS calibrations", "calibrations_new")
+    conn.execute("DROP TABLE IF EXISTS calibrations_new")
+    conn.execute(create)
+    conn.execute("INSERT INTO calibrations_new SELECT map, zone, x, y, w, h FROM calibrations")
+    conn.execute("DROP TABLE calibrations")
+    conn.execute("ALTER TABLE calibrations_new RENAME TO calibrations")
+    conn.commit()
 
 
 def upsert_video(conn, path, source_url, duration_s, fps, width, height):
@@ -167,4 +184,22 @@ def replace_samples(conn, game_id, rows, params_version=0):
         [(game_id, *r) for r in rows],
     )
     conn.execute("INSERT OR REPLACE INTO samples_meta (game_id, params_version) VALUES (?, ?)", (game_id, params_version))
+    conn.commit()
+
+
+def games_without_players(conn, video_id):
+    return [
+        dict(r)
+        for r in conn.execute(
+            "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
+            "AND id NOT IN (SELECT DISTINCT game_id FROM players) ORDER BY start_s",
+            (video_id,),
+        )
+    ]
+
+
+def replace_players(conn, game_id, names):
+    """Enregistre les pseudos d'une game ({slot: pseudo})."""
+    conn.execute("DELETE FROM players WHERE game_id = ?", (game_id,))
+    conn.executemany("INSERT INTO players (game_id, slot, name) VALUES (?, ?, ?)", [(game_id, s, n) for s, n in names.items()])
     conn.commit()

@@ -89,7 +89,7 @@ test('GET /api/calibrations renvoie les zones par défaut quand rien n’est enr
   assert.equal(res.status, 200);
   const body = res.json as { isDefault: boolean; zones: Record<string, unknown> };
   assert.equal(body.isDefault, true);
-  assert.deepEqual(Object.keys(body.zones).sort(), ['capture_points', 'minimap', 'team_a_bar', 'team_b_bar', 'timer']);
+  assert.deepEqual(Object.keys(body.zones).sort(), ['capture_pct_a', 'capture_pct_b', 'capture_points', 'minimap', 'team_a_bar', 'team_b_bar', 'timer']);
 });
 
 test('PUT /api/calibrations enregistre puis relit les zones', () => {

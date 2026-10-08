@@ -106,12 +106,14 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const [playing, setPlaying] = useState(false);
   const [rate, setRate] = useState(1);
   const [trails, setTrails] = useState(false);
+  const [labels, setLabels] = useState(large); // pseudos affichés d'emblée dans la vue agrandie
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [inset, setInset] = useState<Inset>(() => loadInset(game.map ?? ''));
   const raf = useRef(0);
   // Position de la vidéo lue à chaque image affichée (et non toutes les ~250 ms comme l'événement timeupdate) : mouvement continu.
   const [live, setLive] = useState<number | null>(null);
 
+  const nameOf = useMemo(() => new Map(game.players.map((p) => [p.slot, p.name])), [game.players]);
   const plan = useMemo(() => builtinMaps.find((m) => m.name === game.map), [game.map]);
   const frames = useMemo(() => (samples ? groupFrames(samples) : []), [samples]);
 
@@ -252,10 +254,11 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
               key={p.slot}
               className={`replay__dot${p.alive ? '' : ' is-dead'}${(p.confidence ?? 1) < 0.5 ? ' is-unsure' : ''}`}
               style={{ left: `${x}%`, top: `${y}%`, ['--c' as string]: TEAM_COLOR[p.team] }}
-              title={`Joueur ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.confidence !== null && p.confidence < 1 ? ` · identité ${Math.round(p.confidence * 100)} %` : ''}`}
+              title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.confidence !== null && p.confidence < 1 ? ` · identité ${Math.round(p.confidence * 100)} %` : ''}`}
             >
               {p.alive && p.angle !== null && <i className="replay__dir" style={{ transform: `rotate(${p.angle}deg)` }} />}
               <b>{p.alive ? numberOfSlot(p.slot) : '✕'}</b>
+              {labels && nameOf.get(p.slot) && <em className="replay__name">{nameOf.get(p.slot)}</em>}
             </div>
           );
         })}
@@ -290,6 +293,10 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           Suivre la vidéo
         </label>
         <label>
+          <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} />
+          Pseudos
+        </label>
+        <label>
           <input type="checkbox" checked={trails} onChange={(e) => setTrails(e.target.checked)} />
           Traînées
         </label>
@@ -302,7 +309,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
             className={hidden.has(slot) ? 'is-off' : ''}
             style={{ ['--c' as string]: TEAM_COLOR[slot <= 4 ? 'A' : 'B'] }}
             onClick={() => setHidden((h) => { const n = new Set(h); if (n.has(slot)) n.delete(slot); else n.add(slot); return n; })}
-            title="Afficher / masquer ce joueur"
+            title={`${nameOf.get(slot) ?? 'Joueur'} · n° ${numberOfSlot(slot)} : afficher / masquer`}
           >
             {numberOfSlot(slot)}
           </button>

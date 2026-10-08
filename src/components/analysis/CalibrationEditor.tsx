@@ -10,6 +10,8 @@ import { ZONE_LABELS, ZONE_NAMES, type ZoneName, type Zones } from '../../types/
 const ZONE_COLORS: Record<ZoneName, string> = {
   minimap: '#2ec27e',
   capture_points: '#f5c211',
+  capture_pct_a: '#ffcf70',
+  capture_pct_b: '#7fc4ff',
   team_a_bar: '#ff9f1c',
   team_b_bar: '#3d8bff',
   timer: '#ffffff',
