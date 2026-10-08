@@ -32,7 +32,7 @@ interface AnalysisState {
   setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
   controlJob: (action: 'pause' | 'resume' | 'stop') => Promise<void>;
-  startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean }) => Promise<void>;
+  startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean; withPositions?: boolean }) => Promise<void>;
 }
 
 const idleJob: JobState = { running: false, jobId: null, paused: false, stage: null, pct: 0, error: null, message: null };
@@ -82,7 +82,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     }
   },
 
-  startIngest: async (source, { preRoll, postRoll, skipIfOk } = {}) => {
+  startIngest: async (source, { preRoll, postRoll, skipIfOk, withPositions } = {}) => {
     set({ job: { ...idleJob, running: true } });
     try {
       const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk });
@@ -91,7 +91,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         if (e.event === 'progress') {
           set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
         } else if (e.event === 'done') {
-          set({ job: { ...idleJob, message: e.message ?? 'Vidéo chargée' } });
+          set({ job: { ...idleJob, message: withPositions ? `${e.message ?? 'Games à jour'} · positions des joueurs : pas encore disponibles (chantier suivant)` : (e.message ?? 'Vidéo chargée') } });
           void get()
             .loadVideos()
             .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined))
