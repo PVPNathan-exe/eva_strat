@@ -57,7 +57,7 @@ export function IngestBar() {
         <button
           type="submit"
           disabled={job.running || !target}
-          title={source.trim() ? 'Charge et analyse ce fichier ou cette URL' : 'Analyse la vidéo choisie (rien n'est relu si toutes ses games sont déjà vérifiées)'}
+          title={source.trim() ? 'Charge et analyse ce fichier ou cette URL' : "Analyse la vidéo choisie (rien n'est relu si toutes ses games sont déjà vérifiées)"}
         >
           Analyser
         </button>
