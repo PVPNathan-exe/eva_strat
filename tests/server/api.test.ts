@@ -127,3 +127,18 @@ test('PATCH sans toucher aux bornes accepte une fin qui dépasse un peu la duré
   assert.equal(handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { map: 'Silva' }).status, 200);
   assert.equal(handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { end_s: 99999 }).status, 400);
 });
+
+test('PATCH efface les zones à vérifier à la confirmation, pas pour un simple changement de carte', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  const id = Number(
+    ctx.db
+      .prepare("INSERT INTO games (video_id, start_s, end_s, status, doubts) VALUES (?, 100, 700, 'detected', ?)")
+      .run(videoId, JSON.stringify([{ start_s: 690, end_s: 700, label: 'x' }])).lastInsertRowid,
+  );
+  const doubts = () => (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { doubts: unknown[] }[])[0].doubts;
+  handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { map: 'Silva' });
+  assert.equal(doubts().length, 1);
+  handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { status: 'confirmed' });
+  assert.equal(doubts().length, 0);
+});

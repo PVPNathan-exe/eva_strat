@@ -83,9 +83,11 @@ function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
   if (typeof status !== 'string' || !STATUSES.includes(status)) return fail('Statut inconnu');
   const map = 'map' in body ? (typeof body.map === 'string' && body.map ? body.map : null) : (current.map as string | null);
   const winner = 'winner' in body ? (typeof body.winner === 'string' && body.winner ? body.winner : null) : (current.winner as string | null);
+  // Les zones à vérifier ne valent plus rien une fois la game confirmée ou ses bornes déplacées.
+  const clearDoubts = status !== current.status || 'start_s' in body || 'end_s' in body;
   ctx.db
-    .prepare('UPDATE games SET start_s = ?, end_s = ?, map = ?, status = ?, winner = ? WHERE id = ?')
-    .run(start as number, end as number, map, status, winner, id);
+    .prepare('UPDATE games SET start_s = ?, end_s = ?, map = ?, status = ?, winner = ?, doubts = CASE WHEN ? THEN NULL ELSE doubts END WHERE id = ?')
+    .run(start as number, end as number, map, status, winner, clearDoubts ? 1 : 0, id);
   return reply(200, { ok: true });
 }
 
