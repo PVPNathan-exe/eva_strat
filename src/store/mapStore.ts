@@ -29,7 +29,7 @@ interface MapState {
   // --- Module armes (éphémère) ---
   selectedStuffName: string | null; // arme/secondaire choisi dans le panneau
   // Armes posées sur la carte (plusieurs possibles pour comparer leurs portées).
-  placedStuffs: { id: string; name: string; x: number; y: number }[];
+  placedStuffs: { id: string; name: string; x: number; y: number; /** Direction (radians) des gadgets orientables (Clone). */ angle?: number }[];
 
   // --- Cartes ---
   addMap: (name: string) => void;
@@ -55,6 +55,7 @@ interface MapState {
   selectStuff: (name: string | null) => void;
   placeStuff: (x: number, y: number) => void;
   movePlacedStuff: (id: string, x: number, y: number) => void;
+  orientPlacedStuff: (id: string, angle: number) => void;
   removePlacedStuff: (id: string) => void;
   clearPlacedStuff: () => void;
 
@@ -219,6 +220,10 @@ export const useMapStore = create<MapState>()(
       movePlacedStuff: (id, x, y) =>
         set((state) => ({
           placedStuffs: state.placedStuffs.map((p) => (p.id === id ? { ...p, x, y } : p)),
+        })),
+      orientPlacedStuff: (id, angle) =>
+        set((state) => ({
+          placedStuffs: state.placedStuffs.map((p) => (p.id === id ? { ...p, angle } : p)),
         })),
       removePlacedStuff: (id) =>
         set((state) => ({

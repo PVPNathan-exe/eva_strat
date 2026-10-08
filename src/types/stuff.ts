@@ -78,6 +78,12 @@ export interface Utility {
   radiusM?: number;
   /** Temps avant déclenchement (s) (Sonar). */
   fuseS?: number;
+  /** Points de vie rendus au joueur (MedPack). */
+  healHp?: number;
+  /** Vitesse de déplacement (km/h) (Clone) : il avance dans la direction choisie pendant `durationS`. */
+  speedKmh?: number;
+  /** false : gadget qui s'utilise sur soi, rien à poser sur la carte (MedPack). */
+  placeable?: boolean;
 }
 
 export type Stuff = Firearm | Grenade | Utility;

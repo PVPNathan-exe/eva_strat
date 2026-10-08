@@ -6,9 +6,7 @@ import { stuffs } from './stuffs';
 import { canonicalName as canonical } from './weaponNames';
 
 const FIREARMS = stuffs.filter((s) => s.kind === 'firearm').map((s) => s.name);
-// Gadgets ajoutés par les patchs et pas encore dans l'onglet Stratégie.
-const PATCH_GADGETS = ['CLONE', 'MEDPACK'];
-const GADGETS = [...stuffs.filter((s) => s.kind !== 'firearm').map((s) => s.name), ...PATCH_GADGETS.filter((n) => !stuffs.some((s) => s.name === n))];
+const GADGETS = stuffs.filter((s) => s.kind !== 'firearm').map((s) => s.name);
 
 export const SUGGESTIONS: Record<WeaponKind, string[]> = {
   arme: FIREARMS,

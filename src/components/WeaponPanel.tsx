@@ -60,8 +60,16 @@ export function WeaponPanel() {
         </button>
         <button
           className={activeTool === 'weapon' ? 'is-active' : ''}
-          disabled={!stuff || !ppm}
-          title={!ppm ? "Calibre d'abord l'échelle" : 'Cliquer sur la carte pour poser (plusieurs possibles)'}
+          disabled={!stuff || !ppm || (stuff.kind === 'utility' && stuff.placeable === false)}
+          title={
+            stuff?.kind === 'utility' && stuff.placeable === false
+              ? "S'utilise sur soi : rien à poser sur la carte"
+              : !ppm
+                ? "Calibre d'abord l'échelle"
+                : stuff?.kind === 'utility' && stuff.speedKmh
+                  ? 'Cliquer sur la carte pour poser, garder appuyé et glisser pour orienter'
+                  : 'Cliquer sur la carte pour poser (plusieurs possibles)'
+          }
           onClick={() => setActiveTool('weapon')}
         >
           <Target className="ic" /> Poser
@@ -167,10 +175,12 @@ function StuffStats({ stuff }: { stuff: Stuff }) {
 
       {stuff.kind === 'utility' && (
         <>
+          {stuff.healHp !== undefined && <Chip label="Soin" value={`${stuff.healHp} PV`} />}
           {stuff.hp !== undefined && <Chip label="PV" value={stuff.hp} />}
+          {stuff.speedKmh !== undefined && <Chip label="Vitesse" value={`${stuff.speedKmh} km/h`} />}
           {stuff.durationS !== undefined && <Chip label="Durée" value={`${stuff.durationS}s`} />}
           {stuff.activationS !== undefined && (
-            <Chip label="Activation" value={`${stuff.activationS}s`} />
+            <Chip label="Activation" value={stuff.activationS === 0 ? 'Immédiat' : `${stuff.activationS}s`} />
           )}
           {stuff.radiusM !== undefined && <Chip label="Rayon" value={`${stuff.radiusM} m`} />}
           {stuff.fuseS !== undefined && <Chip label="Déclench." value={`${stuff.fuseS}s`} />}

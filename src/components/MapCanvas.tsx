@@ -36,12 +36,15 @@ export function MapCanvas() {
   const placedStuffs = useMapStore((s) => s.placedStuffs);
   const placeStuff = useMapStore((s) => s.placeStuff);
   const movePlacedStuff = useMapStore((s) => s.movePlacedStuff);
+  const orientPlacedStuff = useMapStore((s) => s.orientPlacedStuff);
   const clearPlacedStuff = useMapStore((s) => s.clearPlacedStuff);
 
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [stageSize, setStageSize] = useState({ width: MAX_WIDTH, height: MAX_HEIGHT });
   const [draft, setDraft] = useState<Shape | null>(null);
   const isDrawing = useRef(false);
+  // Gadget orientable (Clone) en cours de pose : on garde le clic appuyé et on glisse pour choisir sa direction.
+  const orienting = useRef<{ id: string; x: number; y: number } | null>(null);
 
   // Recharge l'image de fond quand la data URL change, et ajuste la taille du
   // Stage au ratio de l'image (fit dans MAX_WIDTH×MAX_HEIGHT) pour éviter toute
@@ -101,7 +104,15 @@ export function MapCanvas() {
 
     // Poser l'arme sélectionnée : un simple clic, pas de glisser.
     if (tool === 'weapon') {
+      if (e.target.name() === 'orient-handle') return; // la poignée de direction a son propre glisser
+      const chosen = useMapStore.getState().selectedStuffName;
+      const stuff = chosen ? findStuff(chosen) : undefined;
+      if (stuff?.kind === 'utility' && stuff.placeable === false) return;
       placeStuff(pos.x, pos.y);
+      if (stuff?.kind === 'utility' && stuff.speedKmh) {
+        const placed = useMapStore.getState().placedStuffs.find((p) => p.name === stuff.name);
+        if (placed) orienting.current = { id: placed.id, x: pos.x, y: pos.y };
+      }
       return;
     }
 
@@ -121,6 +132,12 @@ export function MapCanvas() {
   };
 
   const handleMouseMove = (e: StageMouseEvent) => {
+    if (orienting.current) {
+      const pos = pointerPos(e);
+      const o = orienting.current;
+      if (pos && Math.hypot(pos.x - o.x, pos.y - o.y) > 4) orientPlacedStuff(o.id, Math.atan2(pos.y - o.y, pos.x - o.x));
+      return;
+    }
     if (!isDrawing.current || !draft) return;
     const pos = pointerPos(e);
     if (!pos) return;
@@ -136,6 +153,7 @@ export function MapCanvas() {
   };
 
   const handleMouseUp = () => {
+    orienting.current = null;
     if (!isDrawing.current || !draft || !map) {
       isDrawing.current = false;
       return;
@@ -251,6 +269,7 @@ export function MapCanvas() {
                 stageSize={stageSize}
                 draggable={tool === 'select'}
                 onMove={movePlacedStuff}
+                onOrient={orientPlacedStuff}
               />
             ))}
           </Layer>
@@ -275,11 +294,12 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 interface StuffRangeProps {
-  placed: { id: string; name: string; x: number; y: number };
+  placed: { id: string; name: string; x: number; y: number; angle?: number };
   ppm: number;
   stageSize: { width: number; height: number };
   draggable: boolean;
   onMove: (id: string, x: number, y: number) => void;
+  onOrient: (id: string, angle: number) => void;
 }
 
 /**
@@ -287,7 +307,7 @@ interface StuffRangeProps {
  * Les enfants sont dessinés en coordonnées RELATIVES (centre 0,0) ; le Group
  * est positionné en (placed.x, placed.y). Déplaçable avec l'outil Sélection.
  */
-function StuffRange({ placed, ppm, stageSize, draggable, onMove }: StuffRangeProps) {
+function StuffRange({ placed, ppm, stageSize, draggable, onMove, onOrient }: StuffRangeProps) {
   const stuff = findStuff(placed.name);
   if (!stuff) return null;
 
@@ -328,6 +348,12 @@ function StuffRange({ placed, ppm, stageSize, draggable, onMove }: StuffRangePro
     ];
   }
 
+  // Gadget qui avance (Clone) : un trait dans sa direction, long de vitesse x durée, avec une poignée pour le réorienter.
+  const walk = stuff.kind === 'utility' && stuff.speedKmh && stuff.durationS ? { speed: stuff.speedKmh, seconds: stuff.durationS } : null;
+  const walkAngle = placed.angle ?? 0;
+  const walkLen = walk ? ((walk.speed * 1000) / 3600) * walk.seconds : 0; // mètres
+  const walkPx = walkLen * ppm;
+
   // Tri décroissant : le plus grand dessous, le plus petit par-dessus.
   rings.sort((a, b) => b.radius - a.radius);
 
@@ -364,6 +390,42 @@ function StuffRange({ placed, ppm, stageSize, draggable, onMove }: StuffRangePro
           listening={false}
         />
       ))}
+      {walk && (
+        <>
+          <Line
+            points={[0, 0, Math.cos(walkAngle) * walkPx, Math.sin(walkAngle) * walkPx]}
+            stroke="#4da3ff"
+            strokeWidth={3}
+            dash={[8, 5]}
+            listening={false}
+          />
+          <Text
+            x={Math.cos(walkAngle) * walkPx + 8}
+            y={Math.sin(walkAngle) * walkPx - 6}
+            text={`${walk.seconds} s à ${walk.speed} km/h · ${walkLen.toFixed(1)} m`}
+            fontSize={12}
+            fill="#fff"
+            shadowColor="#000"
+            shadowBlur={3}
+            listening={false}
+          />
+          <Circle
+            name="orient-handle"
+            x={Math.cos(walkAngle) * walkPx}
+            y={Math.sin(walkAngle) * walkPx}
+            radius={7}
+            fill="#4da3ff"
+            stroke="#ffffff"
+            strokeWidth={1.5}
+            draggable
+            onDragMove={(e) => {
+              const a = Math.atan2(e.target.y(), e.target.x());
+              e.target.position({ x: Math.cos(a) * walkPx, y: Math.sin(a) * walkPx });
+              onOrient(placed.id, a);
+            }}
+          />
+        </>
+      )}
       {/* zone de saisie pour attraper l'arme (outil Sélection) */}
       {draggable && <Circle x={0} y={0} radius={14} fill="rgba(0,0,0,0.01)" />}
       {/* marqueur central */}
