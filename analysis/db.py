@@ -22,6 +22,8 @@ def connect(db_path):
     if "checked" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
         conn.execute("ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0")
     _migrate_calibrations(conn)
+    if "with_kills" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
+        conn.execute("ALTER TABLE samples_meta ADD COLUMN with_kills INTEGER NOT NULL DEFAULT 0")
     # Version 2 : suivi global des joueurs. Les positions lues avec l'ancien algorithme sont à refaire.
     if conn.execute("PRAGMA user_version").fetchone()[0] < 2:
         conn.execute("DELETE FROM samples")
@@ -160,7 +162,7 @@ def _sample_step(conn, game_id):
     return (row["hi"] - row["lo"]) / (row["n"] - 1) if row["n"] > 1 else 0.0
 
 
-def games_without_samples(conn, video_id, step_s=None, params_version=None):
+def games_without_samples(conn, video_id, step_s=None, params_version=None, use_kills=False):
     """Games dont les positions sont à lire : aucune lecture, lues à une autre cadence que step_s, ou avec d'autres réglages
     du suivi que params_version (si donnés)."""
     out = []
@@ -168,14 +170,16 @@ def games_without_samples(conn, video_id, step_s=None, params_version=None):
         have = _sample_step(conn, g["id"])
         stale = False
         if params_version is not None:
-            meta = conn.execute("SELECT params_version FROM samples_meta WHERE game_id = ?", (g["id"],)).fetchone()
+            meta = conn.execute("SELECT params_version, with_kills FROM samples_meta WHERE game_id = ?", (g["id"],)).fetchone()
             stale = (meta["params_version"] if meta else 0) != params_version
+            if use_kills and conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (g["id"],)).fetchone():
+                stale = stale or not (meta and meta["with_kills"])
         if have is None or stale or (step_s is not None and abs(have - step_s) > 0.15 * step_s):
             out.append(dict(g))
     return out
 
 
-def replace_samples(conn, game_id, rows, params_version=0):
+def replace_samples(conn, game_id, rows, params_version=0, with_kills=False):
     """Enregistre d'un seul bloc les positions d'une game (lignes : frame, t, slot, team, x, y, angle, alive, confiance)."""
     conn.execute("DELETE FROM samples WHERE game_id = ?", (game_id,))
     conn.executemany(
@@ -183,7 +187,7 @@ def replace_samples(conn, game_id, rows, params_version=0):
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(game_id, *r) for r in rows],
     )
-    conn.execute("INSERT OR REPLACE INTO samples_meta (game_id, params_version) VALUES (?, ?)", (game_id, params_version))
+    conn.execute("INSERT OR REPLACE INTO samples_meta (game_id, params_version, with_kills) VALUES (?, ?, ?)", (game_id, params_version, int(with_kills)))
     conn.commit()
 
 
@@ -203,3 +207,35 @@ def replace_players(conn, game_id, names):
     conn.execute("DELETE FROM players WHERE game_id = ?", (game_id,))
     conn.executemany("INSERT INTO players (game_id, slot, name) VALUES (?, ?, ?)", [(game_id, s, n) for s, n in names.items()])
     conn.commit()
+
+
+def games_without_kills(conn, video_id):
+    """Games dont les pseudos sont connus (nécessaires pour reconnaître les noms du killfeed) et dont le killfeed n'a pas été lu."""
+    return [
+        dict(r)
+        for r in conn.execute(
+            "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
+            "AND id IN (SELECT DISTINCT game_id FROM players) "
+            "AND id NOT IN (SELECT game_id FROM kills_meta) ORDER BY start_s",
+            (video_id,),
+        )
+    ]
+
+
+def players_of(conn, game_id):
+    return {r["slot"]: r["name"] for r in conn.execute("SELECT slot, name FROM players WHERE game_id = ?", (game_id,))}
+
+
+def replace_kills(conn, game_id, events):
+    """Enregistre d'un seul bloc les kills d'une game (events : {t, killer, victim, weapon})."""
+    conn.execute("DELETE FROM kills WHERE game_id = ?", (game_id,))
+    conn.executemany(
+        "INSERT OR REPLACE INTO kills (game_id, t, killer_slot, victim_slot, weapon) VALUES (?, ?, ?, ?, ?)",
+        [(game_id, round(e["t"], 2), e.get("killer"), e["victim"], e.get("weapon")) for e in events],
+    )
+    conn.execute("INSERT OR REPLACE INTO kills_meta (game_id) VALUES (?)", (game_id,))
+    conn.commit()
+
+
+def kills_of(conn, game_id):
+    return [dict(r) for r in conn.execute("SELECT t, killer_slot, victim_slot, weapon FROM kills WHERE game_id = ? ORDER BY t", (game_id,))]

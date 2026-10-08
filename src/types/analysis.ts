@@ -16,6 +16,13 @@ export interface Doubt {
   label: string;
 }
 
+export interface Kill {
+  t: number;
+  killer: number | null;
+  victim: number;
+  weapon: string | null;
+}
+
 export interface Game {
   id: number;
   video_id: number;
@@ -27,6 +34,7 @@ export interface Game {
   doubts: Doubt[];
   samples: number;
   players: { slot: number; name: string }[];
+  kills: Kill[];
 }
 
 export interface Sample {
@@ -64,7 +72,7 @@ export const ZONE_LABELS: Record<ZoneName, string> = {
 
 export interface JobEvent {
   event: 'progress' | 'done' | 'error';
-  stage?: 'download' | 'detect' | 'maps' | 'names' | 'positions';
+  stage?: 'download' | 'detect' | 'maps' | 'names' | 'kills' | 'positions';
   pct?: number;
   video_id?: number;
   message?: string;

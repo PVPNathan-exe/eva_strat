@@ -17,7 +17,7 @@ class OcrUnavailable(RuntimeError):
 
 def read_images(paths):
     """paths : chemins d'images. Renvoie {chemin: [{"text", "x", "y", "w", "h"}]}."""
-    paths = [str(p) for p in paths]
+    paths = [str(Path(p).resolve()) for p in paths]
     if not paths:
         return {}
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:

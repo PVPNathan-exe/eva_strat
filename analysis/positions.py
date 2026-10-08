@@ -28,6 +28,7 @@ def detect_frames(video, game, zone, width, height, emit=None, wait=None, step_s
     return frames
 
 
-def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S):
-    """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
-    return tracking.solve(detect_frames(video, game, zone, width, height, emit, wait, step_s), step_s)
+def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None):
+    """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance).
+    deaths : [(t, slot)] morts connues par le killfeed."""
+    return tracking.solve(detect_frames(video, game, zone, width, height, emit, wait, step_s), step_s, deaths)

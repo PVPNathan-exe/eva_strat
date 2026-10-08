@@ -113,6 +113,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   // Position de la vidéo lue à chaque image affichée (et non toutes les ~250 ms comme l'événement timeupdate) : mouvement continu.
   const [live, setLive] = useState<number | null>(null);
 
+  const requestSeek = useAnalysisStore((s) => s.requestSeek);
   const nameOf = useMemo(() => new Map(game.players.map((p) => [p.slot, p.name])), [game.players]);
   const plan = useMemo(() => builtinMaps.find((m) => m.name === game.map), [game.map]);
   const frames = useMemo(() => (samples ? groupFrames(samples) : []), [samples]);
@@ -315,6 +316,24 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           </button>
         ))}
       </div>
+
+      {game.kills.length > 0 && (
+        <div className="replay__kills">
+          <strong>Kills ({game.kills.length})</strong>
+          <ul>
+            {game.kills.map((k) => (
+              <li key={`${k.t}-${k.victim}`} className={Math.abs(time - k.t) < 3 ? 'is-now' : ''}>
+                <button onClick={() => { setFollow(true); setPlaying(false); requestSeek(Math.max(game.start_s, k.t - 2)); }} title="Aller à ce kill dans la vidéo">
+                  {formatTime(k.t - game.start_s)}
+                </button>
+                <span style={{ color: TEAM_COLOR[k.killer && k.killer > 4 ? 'B' : 'A'] }}>{k.killer ? (nameOf.get(k.killer) ?? `n° ${numberOfSlot(k.killer)}`) : '?'}</span>
+                <i title={k.weapon ?? 'arme inconnue'}>{k.weapon ?? '·'}</i>
+                <span style={{ color: TEAM_COLOR[k.victim > 4 ? 'B' : 'A'] }}>{nameOf.get(k.victim) ?? `n° ${numberOfSlot(k.victim)}`}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <details className="replay__align">
         <summary>Alignement sur le plan</summary>

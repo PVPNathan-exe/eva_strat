@@ -204,12 +204,20 @@ def _assign(alive_tracks, step_s):
                 break
 
 
-def _attach_crosses(dead_tracks, alive_tracks, step_s):
+def _attach_crosses(dead_tracks, alive_tracks, step_s, deaths=None, times=None):
     """Étape 3 : chaque croix revient au joueur dont la trajectoire s'est arrêtée là juste avant."""
     link = max(1, round(X_LINK_S / step_s))
     kept = []
     for x in dead_tracks:
         x_pos = (x.pts[x.first]["x"], x.pts[x.first]["y"])
+        # Le killfeed dit qui est mort et quand : une croix qui apparaît à ce moment-là, dans la bonne équipe, est celle de ce joueur.
+        if deaths and times:
+            tx = times.get(x.first)
+            near = [d for d in deaths if tx is not None and d[1] in SLOTS[x.team] and -1.5 <= tx - d[0] <= 3.0]
+            if len(near) == 1:
+                x.slot, x.how = near[0][1], CONF_VOTE
+                kept.append(x)
+                continue
         best = None
         for t in alive_tracks:
             if t.team != x.team or t.slot is None:
@@ -302,8 +310,35 @@ def _smooth_angles(series, half):
     return out
 
 
-def solve(frames, step_s):
-    """frames : [(indice, t, [détections])]. Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
+DEATH_SHOWN_S = 2.0  # durée pendant laquelle la croix d'un joueur mort est affichée
+
+
+def _add_known_deaths(rows, deaths, times, step_s, put):
+    """Un kill du killfeed est une mort certaine : si la minimap n'a pas montré la croix (pastille cachée, bord de la carte),
+    on pose le joueur mort à sa dernière position connue, le temps d'une croix, sans écraser une lecture vivante."""
+    if not deaths or not times:
+        return
+    ordered = sorted(times)
+    for t_death, slot in deaths:
+        fi = min(ordered, key=lambda k: abs(times[k] - t_death))
+        if abs(times[fi] - t_death) > 1.5:
+            continue
+        window = [k for k in ordered if fi <= k <= fi + max(1, round(DEATH_SHOWN_S / step_s))]
+        if any((k, slot) in rows and not rows[(k, slot)][7] for k in window[:3]):
+            continue  # la croix a bien été vue
+        before = [rows[(k, slot)] for k in ordered if k <= fi and (k, slot) in rows and rows[(k, slot)][7]]
+        if not before or fi - before[-1][0] > round(3.0 / step_s):
+            continue  # on ne sait pas où il était
+        last = before[-1]
+        for k in window:
+            if (k, slot) in rows and rows[(k, slot)][7] and k > fi + 1:
+                break  # il est déjà revenu en vie
+            put(k, slot, last[3], last[4], last[5], None, False, CONF_VOTE * 0.9)
+
+
+def solve(frames, step_s, deaths=None):
+    """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
+    Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
     times = {fi: t for fi, t, _ in frames}
@@ -311,7 +346,7 @@ def solve(frames, step_s):
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
     _assign(alive_tracks, step_s)
     placed = [t for t in alive_tracks if t.slot is not None]
-    crosses = _attach_crosses([t for t in dead_tracks if len(t.pts) >= 2], placed, step_s)
+    crosses = _attach_crosses([t for t in dead_tracks if len(t.pts) >= 2], placed, step_s, deaths, times)
 
     half = max(1, round(SMOOTH_S / step_s / 2))
     by_slot = {}
@@ -363,6 +398,7 @@ def solve(frames, step_s):
         for k, d in x.pts.items():
             if (k, x.slot) not in rows:
                 put(k, x.slot, x.team, d["x"], d["y"], None, False, x.how)
+    _add_known_deaths(rows, deaths or [], times, step_s, put)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
 
 

@@ -58,10 +58,24 @@ CREATE TABLE IF NOT EXISTS players (
   PRIMARY KEY (game_id, slot)
 );
 
+-- Kills lus dans le killfeed. kills_meta : la game a été examinée (même s'il n'y a eu aucun kill).
+CREATE TABLE IF NOT EXISTS kills (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  t REAL NOT NULL,
+  killer_slot INTEGER CHECK (killer_slot BETWEEN 1 AND 8),
+  victim_slot INTEGER NOT NULL CHECK (victim_slot BETWEEN 1 AND 8),
+  weapon TEXT,
+  PRIMARY KEY (game_id, t, victim_slot)
+);
+CREATE TABLE IF NOT EXISTS kills_meta (
+  game_id INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE
+);
+
 -- Version des réglages du suivi avec laquelle les positions d'une game ont été lues : si elle change, elles sont relues.
 CREATE TABLE IF NOT EXISTS samples_meta (
   game_id INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
-  params_version INTEGER NOT NULL
+  params_version INTEGER NOT NULL,
+  with_kills INTEGER NOT NULL DEFAULT 0  -- 1 : les morts du killfeed étaient connues quand les positions ont été lues
 );
 
 -- Remplie au chantier 2.

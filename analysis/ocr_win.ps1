@@ -25,25 +25,32 @@ if ($null -eq $engine) { throw "Aucune langue de reconnaissance de texte install
 
 $out = New-Object System.Collections.ArrayList
 foreach ($raw in (Get-Content -LiteralPath $ListFile -Encoding UTF8)) {
-    $path = [string]$raw
-    if ([string]::IsNullOrWhiteSpace($path)) { continue }
-    $file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($path)) ([Windows.Storage.StorageFile])
-    $stream = Await ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
-    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
-    $bmp = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
-    $res = Await ($engine.RecognizeAsync($bmp)) ([Windows.Media.Ocr.OcrResult])
-    $lines = New-Object System.Collections.ArrayList
-    foreach ($line in $res.Lines) {
-        $x0 = [double]::MaxValue; $y0 = [double]::MaxValue; $x1 = 0.0; $y1 = 0.0
-        foreach ($w in $line.Words) {
-            $r = $w.BoundingRect
-            if ($r.X -lt $x0) { $x0 = $r.X }
-            if ($r.Y -lt $y0) { $y0 = $r.Y }
-            if ($r.X + $r.Width -gt $x1) { $x1 = $r.X + $r.Width }
-            if ($r.Y + $r.Height -gt $y1) { $y1 = $r.Y + $r.Height }
+    $orig = [string]$raw
+    if ([string]::IsNullOrWhiteSpace($orig)) { continue }
+    $path = $orig.Replace('/', '')  # Windows exige des antislashs
+    try {
+        $file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($path)) ([Windows.Storage.StorageFile])
+        $stream = Await ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
+        $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+        $bmp = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+        if ($bmp.BitmapPixelFormat -ne [Windows.Graphics.Imaging.BitmapPixelFormat]::Bgra8) { $bmp = [Windows.Graphics.Imaging.SoftwareBitmap]::Convert($bmp, [Windows.Graphics.Imaging.BitmapPixelFormat]::Bgra8) }
+        $res = Await ($engine.RecognizeAsync($bmp)) ([Windows.Media.Ocr.OcrResult])
+        $lines = New-Object System.Collections.ArrayList
+        foreach ($line in $res.Lines) {
+            $x0 = [double]::MaxValue; $y0 = [double]::MaxValue; $x1 = 0.0; $y1 = 0.0
+            foreach ($w in $line.Words) {
+                $r = $w.BoundingRect
+                if ($r.X -lt $x0) { $x0 = $r.X }
+                if ($r.Y -lt $y0) { $y0 = $r.Y }
+                if ($r.X + $r.Width -gt $x1) { $x1 = $r.X + $r.Width }
+                if ($r.Y + $r.Height -gt $y1) { $y1 = $r.Y + $r.Height }
+            }
+            [void]$lines.Add([ordered]@{ text = [string]$line.Text; x = $x0; y = $y0; w = ($x1 - $x0); h = ($y1 - $y0) })
         }
-        [void]$lines.Add([ordered]@{ text = [string]$line.Text; x = $x0; y = $y0; w = ($x1 - $x0); h = ($y1 - $y0) })
+        [void]$out.Add([ordered]@{ path = $orig; lines = @($lines) })
+    } catch {
+        # Une image illisible (trop petite, format) ne doit pas faire échouer tout le lot.
+        [void]$out.Add([ordered]@{ path = $orig; lines = @(); error = [string]$_.Exception.Message })
     }
-    [void]$out.Add([ordered]@{ path = [string]$path; lines = @($lines) })
 }
 ConvertTo-Json -InputObject @($out) -Depth 5 -Compress

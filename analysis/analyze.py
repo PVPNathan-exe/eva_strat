@@ -14,6 +14,7 @@ from pathlib import Path
 
 import db
 import ingest
+import killfeed
 import mapname
 import names
 import ocr
@@ -110,16 +111,38 @@ def extract_names(conn, video_id, path, meta, emit, control=None):
     return done, None
 
 
+def extract_kills(conn, video_id, path, meta, emit, control=None):
+    """Killfeed des games qui ont leurs pseudos et pas encore de kills lus. Renvoie le nombre de games lues, ou (n, erreur)."""
+    todo = db.games_without_kills(conn, video_id)
+    done = 0
+    for i, g in enumerate(todo):
+        def progress(pct, i=i):
+            emit({"event": "progress", "stage": "kills", "pct": round((i + pct / 100) / len(todo) * 100, 1)})
+
+        try:
+            events = killfeed.read_events(
+                path, g, db.players_of(conn, g["id"]), meta["width"], meta["height"],
+                wait=lambda: wait_if_paused(control), emit=progress,
+            )
+        except ocr.OcrUnavailable as exc:
+            return done, str(exc)
+        db.replace_kills(conn, g["id"], events)
+        done += 1
+    return done, None
+
+
 def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=positions.STEP_S):
     """Positions des joueurs des games qui n'en ont pas encore. Chaque game est enregistrée d'un seul bloc."""
-    todo = db.games_without_samples(conn, video_id, step_s, tracking.PARAMS_VERSION)
+    todo = db.games_without_samples(conn, video_id, step_s, tracking.PARAMS_VERSION, use_kills=True)
     for i, g in enumerate(todo):
         def progress(pct, i=i):
             emit({"event": "progress", "stage": "positions", "pct": round((i + pct / 100) / len(todo) * 100, 1), "game": i + 1, "games": len(todo)})
 
         zone = db.zone_for(conn, g["map"], "minimap")
-        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s)
-        db.replace_samples(conn, g["id"], rows, tracking.PARAMS_VERSION)
+        scanned = conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (g["id"],)).fetchone() is not None
+        deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, g["id"])]
+        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s, deaths=deaths)
+        db.replace_samples(conn, g["id"], rows, tracking.PARAMS_VERSION, with_kills=scanned)
     return len(todo)
 
 
@@ -161,6 +184,9 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
         n_names, names_error = extract_names(conn, video_id, path, meta, emit, control)
         if names_error:
             message = f"{message} · pseudos non lus ({names_error})" if message else f"Pseudos non lus ({names_error})"
+        n_kills, kills_error = extract_kills(conn, video_id, path, meta, emit, control)
+        if kills_error:
+            message = f"{message} · killfeed non lu ({kills_error})" if message else f"Killfeed non lu ({kills_error})"
         step_s = pos_every / meta["fps"] if meta.get("fps") else positions.STEP_S
         n = extract_positions(conn, video_id, path, meta, emit, control, step_s=step_s)
         text = f"positions lues sur {n} game(s)" if n else "positions déjà à jour"

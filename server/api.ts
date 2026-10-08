@@ -51,6 +51,12 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const rows = ctx.db
     .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples FROM games WHERE video_id = ? ORDER BY start_s')
     .all(videoId) as Row[];
+  const kills = new Map<number, { t: number; killer: number | null; victim: number; weapon: string | null }[]>();
+  for (const k of ctx.db
+    .prepare('SELECT game_id, t, killer_slot, victim_slot, weapon FROM kills WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY t')
+    .all(videoId) as { game_id: number; t: number; killer_slot: number | null; victim_slot: number; weapon: string | null }[]) {
+    kills.set(k.game_id, [...(kills.get(k.game_id) ?? []), { t: k.t, killer: k.killer_slot, victim: k.victim_slot, weapon: k.weapon }]);
+  }
   const players = new Map<number, { slot: number; name: string }[]>();
   for (const p of ctx.db
     .prepare('SELECT game_id, slot, name FROM players WHERE game_id IN (SELECT id FROM games WHERE video_id = ?) ORDER BY slot')
@@ -63,6 +69,7 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
       ...r,
       doubts: typeof r.doubts === 'string' ? JSON.parse(r.doubts) : [],
       players: players.get(r.id as number) ?? [],
+      kills: kills.get(r.id as number) ?? [],
     })),
   );
 }
@@ -94,7 +101,11 @@ function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
   const map = 'map' in body ? (typeof body.map === 'string' && body.map ? body.map : null) : (current.map as string | null);
   const winner = 'winner' in body ? (typeof body.winner === 'string' && body.winner ? body.winner : null) : (current.winner as string | null);
   // Des bornes déplacées rendent les positions déjà lues caduques : elles seront relues à la prochaine analyse.
-  if ('start_s' in body || 'end_s' in body) ctx.db.prepare('DELETE FROM samples WHERE game_id = ?').run(id);
+  if ('start_s' in body || 'end_s' in body) {
+    ctx.db.prepare('DELETE FROM samples WHERE game_id = ?').run(id);
+    ctx.db.prepare('DELETE FROM kills WHERE game_id = ?').run(id);
+    ctx.db.prepare('DELETE FROM kills_meta WHERE game_id = ?').run(id);
+  }
   // Les zones à vérifier ne valent plus rien une fois la game confirmée ou ses bornes déplacées.
   const clearDoubts = status !== current.status || 'start_s' in body || 'end_s' in body;
   ctx.db

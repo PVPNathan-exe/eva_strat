@@ -15,6 +15,8 @@ export function openDb(path: string, schemaPath: string): DatabaseSync {
   const columns = db.prepare('PRAGMA table_info(games)').all() as { name: string }[];
   if (!columns.some((c) => c.name === 'doubts')) db.exec('ALTER TABLE games ADD COLUMN doubts TEXT');
   if (!columns.some((c) => c.name === 'checked')) db.exec('ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0');
+  const meta = db.prepare('PRAGMA table_info(samples_meta)').all() as { name: string }[];
+  if (meta.length && !meta.some((c) => c.name === 'with_kills')) db.exec('ALTER TABLE samples_meta ADD COLUMN with_kills INTEGER NOT NULL DEFAULT 0');
   // Une base créée avant l'ajout de zones du HUD a une contrainte CHECK trop stricte : on reconstruit la table (même logique que db.py).
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'calibrations'").get() as { sql: string } | undefined;
   if (row && !row.sql.includes('capture_pct_a')) {

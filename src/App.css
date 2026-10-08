@@ -945,6 +945,41 @@
   text-decoration: line-through;
 }
 
+.replay__kills {
+  font-size: 0.8rem;
+}
+
+.replay__kills ul {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.replay__kills li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.1rem 0.2rem;
+  border-radius: 4px;
+}
+
+.replay__kills li.is-now {
+  background: #2c3242;
+}
+
+.replay__kills li button {
+  padding: 0 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.replay__kills li i {
+  color: #9aa3b8;
+  font-style: normal;
+  font-size: 0.72rem;
+}
+
 .replay__align {
   font-size: 0.8rem;
   color: #9aa3b8;
