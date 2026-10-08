@@ -15,6 +15,7 @@ export class Job {
   readonly id = randomUUID();
   readonly events: JobEvent[] = [];
   finished = false;
+  paused = false;
   private listeners = new Set<Listener>();
   private stdoutBuffer = '';
   private stderrTail = '';
@@ -55,6 +56,7 @@ export class Job {
 
   // La pause passe par un fichier de contrôle que le script consulte entre deux étapes.
   private setPaused(paused: boolean) {
+    this.paused = paused;
     if (!this.controlPath) return;
     if (paused) writeFileSync(this.controlPath, 'pause');
     else rmSync(this.controlPath, { force: true });
@@ -123,5 +125,10 @@ export class JobManager {
 
   get(id: string): Job | undefined {
     return this.jobs.get(id);
+  }
+
+  /** L'analyse en cours, s'il y en a une (pour que la page se reconnecte après un rechargement). */
+  running(): Job | null {
+    return this.current && !this.current.finished ? this.current : null;
   }
 }

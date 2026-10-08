@@ -43,6 +43,7 @@ export const analysisApi = {
     fetch(`/api/calibrations?map=${encodeURIComponent(map)}`).then(parse<{ map: string; zones: Zones; isDefault: boolean }>),
   saveCalibration: (map: string, zones: Zones) =>
     fetch('/api/calibrations', jsonInit('PUT', { map, zones })).then(parse<{ ok: true }>),
+  currentJob: () => fetch('/api/jobs/current', { cache: 'no-store' }).then(parse<{ jobId: string | null; paused: boolean }>),
   ingest: (source: string, options: { detect?: boolean; preRoll?: number; postRoll?: number; skipIfOk?: boolean; positions?: boolean; posEvery?: number } = {}) =>
     fetch('/api/ingest', jsonInit('POST', { source, ...options })).then(parse<{ jobId: string }>),
   jobControl: (jobId: string, action: 'pause' | 'resume' | 'stop') =>

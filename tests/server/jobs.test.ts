@@ -81,3 +81,13 @@ test('pause écrit le fichier de contrôle, reprise et fin le retirent', async (
   await new Promise<void>((resolve) => job.subscribe((e) => e.event === 'done' && resolve()));
   assert.equal(existsSync(control), false);
 });
+
+test('running() renvoie l’analyse en cours, avec son état de pause, puis plus rien une fois finie', async () => {
+  const manager = new JobManager();
+  assert.equal(manager.running(), null);
+  const job = manager.start(node, ['-e', 'setTimeout(() => console.log(JSON.stringify({event:"done"})), 300)']);
+  assert.equal(manager.running()?.id, job.id);
+  assert.equal(manager.running()?.paused, false);
+  await new Promise<void>((resolve) => job.subscribe((e) => e.event === 'done' && resolve()));
+  assert.equal(manager.running(), null);
+});

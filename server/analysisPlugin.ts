@@ -143,6 +143,11 @@ export function analysisPlugin(): Plugin {
             return sendJson(res, 200, { ok: true });
           }
 
+          if (url.pathname === '/api/jobs/current' && method === 'GET') {
+            const job = jobs.running();
+            return sendJson(res, 200, { jobId: job?.id ?? null, paused: job?.paused ?? false });
+          }
+
           const control = /^\/api\/jobs\/([\w-]+)\/(pause|resume|stop)$/.exec(url.pathname);
           if (control && method === 'POST') {
             const job = jobs.get(control[1]);

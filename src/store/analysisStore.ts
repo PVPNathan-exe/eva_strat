@@ -46,12 +46,30 @@ interface AnalysisState {
   setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
   controlJob: (action: 'pause' | 'resume' | 'stop') => Promise<void>;
+  resumeJob: () => Promise<void>;
   startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean; withPositions?: boolean; posEvery?: number }) => Promise<void>;
 }
 
 const idleJob: JobState = { running: false, jobId: null, paused: false, stage: null, pct: 0, error: null, message: null };
 
-export const useAnalysisStore = create<AnalysisState>((set, get) => ({
+export const useAnalysisStore = create<AnalysisState>((set, get) => {
+  const watchJob = (jobId: string) =>
+    subscribeJob(jobId, (e: JobEvent) => {
+      if (e.event === 'progress') {
+        set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
+      } else if (e.event === 'done') {
+        set({ job: { ...idleJob, message: e.message ?? 'Vidéo chargée' } });
+        void get()
+          .loadVideos()
+          .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined))
+          .then(() => get().loadWeapons(true))
+          .catch((err: Error) => set({ job: { ...idleJob, error: err.message } }));
+      } else {
+        set({ job: { ...idleJob, error: e.message ?? 'Erreur inconnue' } });
+      }
+    });
+
+  return {
   videos: [],
   videoId: null,
   games: [],
@@ -150,27 +168,24 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     }
   },
 
+  // Suit une analyse (en cours ou reprise après un rechargement de la page) : progression, fin, erreur.
+  resumeJob: async () => {
+    const { jobId, paused } = await analysisApi.currentJob();
+    if (jobId && !get().job.running) {
+      set({ job: { ...idleJob, running: true, jobId, paused } });
+      watchJob(jobId);
+    }
+  },
+
   startIngest: async (source, { preRoll, postRoll, skipIfOk, withPositions, posEvery } = {}) => {
     set({ job: { ...idleJob, running: true } });
     try {
       const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions, posEvery });
       set({ job: { ...get().job, jobId } });
-      subscribeJob(jobId, (e: JobEvent) => {
-        if (e.event === 'progress') {
-          set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
-        } else if (e.event === 'done') {
-          set({ job: { ...idleJob, message: e.message ?? 'Vidéo chargée' } });
-          void get()
-            .loadVideos()
-            .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined))
-            .then(() => get().loadWeapons(true))
-            .catch((err: Error) => set({ job: { ...idleJob, error: err.message } }));
-        } else {
-          set({ job: { ...idleJob, error: e.message ?? 'Erreur inconnue' } });
-        }
-      });
+      watchJob(jobId);
     } catch (err) {
       set({ job: { ...idleJob, error: (err as Error).message } });
     }
   },
-}));
+};
+});

@@ -16,12 +16,18 @@ export default function App() {
   const [view, setView] = useState<View>('strategie');
   const weapons = useAnalysisStore((s) => s.weapons);
   const loadWeapons = useAnalysisStore((s) => s.loadWeapons);
+  const resumeJob = useAnalysisStore((s) => s.resumeJob);
   const unnamed = (weapons ?? []).filter((w) => !w.name).length;
 
   // Compteur d'icônes sans nom sur l'onglet Armes (si le serveur d'analyse n'est pas joignable, il n'y en a simplement pas).
   useEffect(() => {
     void loadWeapons().catch(() => undefined);
   }, [loadWeapons]);
+
+  // Après un rechargement de la page, on se reconnecte à l'analyse en cours (progression, pause, arrêt).
+  useEffect(() => {
+    void resumeJob().catch(() => undefined);
+  }, [resumeJob]);
 
   return (
     <div className="app">
