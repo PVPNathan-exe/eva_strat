@@ -143,7 +143,7 @@ function sourcesOf(db: DatabaseSync): Map<string, WeaponSource[]> {
     if (!icon || !g) return;
     const list = out.get(icon) ?? [];
     if (list.length >= MAX_SOURCES || list.some((s) => s.gameId === gameId)) return;
-    out.set(icon, [...list, { gameId, video: g.path.split(/[\/]/).pop() ?? g.path, game: g.rank, map: g.map, t, player: pseudo(gameId, slot) }]);
+    out.set(icon, [...list, { gameId, video: g.path.split(/[\\/]/).pop() ?? g.path, game: g.rank, map: g.map, t, player: pseudo(gameId, slot) }]);
   };
   for (const k of db.prepare('SELECT game_id, t, weapon, killer_slot FROM kills WHERE weapon IS NOT NULL ORDER BY t').all() as { game_id: number; t: number; weapon: string; killer_slot: number | null }[])
     push(k.weapon, k.game_id, k.t, k.killer_slot);
