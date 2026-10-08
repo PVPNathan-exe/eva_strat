@@ -830,7 +830,7 @@
   color: #111;
   font-size: 11px;
   line-height: 1;
-  transition: left 0.12s linear, top 0.12s linear;
+  will-change: left, top;
 }
 
 .replay--large .replay__dot {

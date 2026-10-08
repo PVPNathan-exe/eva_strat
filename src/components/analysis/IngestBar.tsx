@@ -12,6 +12,7 @@ export function IngestBar() {
   const [picking, setPicking] = useState(false);
   const [preRoll, setPreRoll] = useState(3);
   const [postRoll, setPostRoll] = useState(1);
+  const [posEvery, setPosEvery] = useState(6);
   const [pickError, setPickError] = useState<string | null>(null);
   const videos = useAnalysisStore((s) => s.videos);
   const videoId = useAnalysisStore((s) => s.videoId);
@@ -26,7 +27,7 @@ export function IngestBar() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (target && !job.running) void startIngest(target, { preRoll, postRoll, skipIfOk: true, withPositions: true });
+    if (target && !job.running) void startIngest(target, { preRoll, postRoll, skipIfOk: true, withPositions: true, posEvery });
   };
 
   const browse = async () => {
@@ -92,6 +93,20 @@ export function IngestBar() {
               disabled={job.running}
             />
             s
+          </label>
+          <label className="ingest__single" title="Une lecture de la minimap toutes les N images de la vidéo : 6 = 5 par seconde à 30 i/s. Moins = plus précis (replay plus fluide, analyse plus longue).">
+            Positions : toutes les
+            <input
+              className="ingest__preroll"
+              type="number"
+              min={1}
+              max={60}
+              step={1}
+              value={posEvery}
+              onChange={(e) => setPosEvery(Math.min(60, Math.max(1, Math.round(Number(e.target.value)) || 1)))}
+              disabled={job.running}
+            />
+            frames
           </label>
 
       {videoId !== null && currentVideo && (

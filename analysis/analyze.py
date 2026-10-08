@@ -89,20 +89,20 @@ def fill_maps(conn, video_id, path, meta, emit, control=None):
     conn.commit()
 
 
-def extract_positions(conn, video_id, path, meta, emit, control=None):
+def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=positions.STEP_S):
     """Positions des joueurs des games qui n'en ont pas encore. Chaque game est enregistrée d'un seul bloc."""
-    todo = db.games_without_samples(conn, video_id)
+    todo = db.games_without_samples(conn, video_id, step_s)
     for i, g in enumerate(todo):
         def progress(pct, i=i):
             emit({"event": "progress", "stage": "positions", "pct": round((i + pct / 100) / len(todo) * 100, 1), "game": i + 1, "games": len(todo)})
 
         zone = db.zone_for(conn, g["map"], "minimap")
-        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control))
+        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s)
         db.replace_samples(conn, g["id"], rows)
     return len(todo)
 
 
-def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False, control=None, with_positions=False):
+def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False, control=None, with_positions=False, pos_every=positions.EVERY_FRAMES):
     conn = db.connect(db_path)
     source_url = None
 
@@ -137,7 +137,8 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
 
     message = "Games déjà vérifiées" if verified else None
     if with_positions:
-        n = extract_positions(conn, video_id, path, meta, emit, control)
+        step_s = pos_every / meta["fps"] if meta.get("fps") else positions.STEP_S
+        n = extract_positions(conn, video_id, path, meta, emit, control, step_s=step_s)
         text = f"positions lues sur {n} game(s)" if n else "positions déjà à jour"
         message = f"{message} · {text}" if message else text.capitalize()
 
@@ -157,10 +158,11 @@ def main(argv=None, emit=print_event):
     parser.add_argument("--post-roll", type=float, default=segments.POST_ROLL_S, help="Secondes gardées après la fin du chrono (écran de victoire)")
     parser.add_argument("--skip-if-ok", action="store_true", help="Ne rien relire si toutes les games sont déjà confirmées et vérifiées")
     parser.add_argument("--control", default=None, help="Fichier dont la présence met l'analyse en pause")
+    parser.add_argument("--pos-every", type=int, default=positions.EVERY_FRAMES, help="Une lecture de la minimap toutes les N images (positions)")
     parser.add_argument("--positions", action="store_true", help="Lire aussi les positions des joueurs (minimap)")
     args = parser.parse_args(argv)
     try:
-        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok, control=args.control, with_positions=args.positions)
+        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok, control=args.control, with_positions=args.positions, pos_every=args.pos_every)
     except Exception as exc:  # noqa: BLE001 - tout échec doit être signalé à l'UI
         emit({"event": "error", "message": str(exc)})
         return 1

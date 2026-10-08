@@ -32,7 +32,7 @@ interface AnalysisState {
   setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
   controlJob: (action: 'pause' | 'resume' | 'stop') => Promise<void>;
-  startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean; withPositions?: boolean }) => Promise<void>;
+  startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean; withPositions?: boolean; posEvery?: number }) => Promise<void>;
 }
 
 const idleJob: JobState = { running: false, jobId: null, paused: false, stage: null, pct: 0, error: null, message: null };
@@ -82,10 +82,10 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     }
   },
 
-  startIngest: async (source, { preRoll, postRoll, skipIfOk, withPositions } = {}) => {
+  startIngest: async (source, { preRoll, postRoll, skipIfOk, withPositions, posEvery } = {}) => {
     set({ job: { ...idleJob, running: true } });
     try {
-      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions });
+      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions, posEvery });
       set({ job: { ...get().job, jobId } });
       subscribeJob(jobId, (e: JobEvent) => {
         if (e.event === 'progress') {

@@ -10,7 +10,8 @@ import math
 import minimap
 import timer
 
-STEP_S = 1.0
+EVERY_FRAMES = 6  # une lecture de la minimap toutes les 6 images (5 par seconde à 30 i/s) : animation fluide
+STEP_S = 0.2  # valeur de repli quand la cadence de la vidéo est inconnue
 MAX_JUMP = 0.30  # déplacement maximal (normalisé) entre deux lectures pour rattacher une pastille à un joueur
 CONF_READ, CONF_NEAR, CONF_ELIM = 1.0, 0.6, 0.4
 SLOTS = {"A": (1, 2, 3, 4), "B": (5, 6, 7, 8)}

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { analysisApi } from '../../lib/analysisApi';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { formatTime } from '../../lib/timeline';
+import { getVideoElement } from '../../lib/videoRef';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game, Sample } from '../../types/analysis';
 
@@ -69,6 +70,12 @@ interface Shown {
   confidence: number | null;
 }
 
+/** Angle intermédiaire par le plus court chemin (359° -> 1° ne fait pas le tour). */
+function lerpAngle(a: number, b: number, k: number): number {
+  const d = ((((b - a) % 360) + 540) % 360) - 180;
+  return (a + d * k + 360) % 360;
+}
+
 function shownAt(frames: Frame[], t: number): Shown[] {
   if (frames.length === 0) return [];
   const i = frameIndexAt(frames, t);
@@ -78,12 +85,14 @@ function shownAt(frames: Frame[], t: number): Shown[] {
   const out: Shown[] = [];
   for (const [slot, s] of a.bySlot) {
     let { x, y } = s;
+    let angle = s.angle;
     const n = b?.bySlot.get(slot);
     if (n && s.alive && n.alive && n.t - s.t <= MAX_GAP_S && Math.hypot(n.x - s.x, n.y - s.y) < MAX_JUMP) {
       x = s.x + (n.x - s.x) * k;
       y = s.y + (n.y - s.y) * k;
+      if (s.angle !== null && n.angle !== null) angle = lerpAngle(s.angle, n.angle, k);
     }
-    out.push({ slot, team: s.team, x, y, angle: s.angle, alive: !!s.alive, confidence: s.confidence });
+    out.push({ slot, team: s.team, x, y, angle, alive: !!s.alive, confidence: s.confidence });
   }
   return out;
 }
@@ -100,6 +109,8 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [inset, setInset] = useState<Inset>(() => loadInset(game.map ?? ''));
   const raf = useRef(0);
+  // Position de la vidéo lue à chaque image affichée (et non toutes les ~250 ms comme l'événement timeupdate) : mouvement continu.
+  const [live, setLive] = useState<number | null>(null);
 
   const plan = useMemo(() => builtinMaps.find((m) => m.name === game.map), [game.map]);
   const frames = useMemo(() => (samples ? groupFrames(samples) : []), [samples]);
@@ -114,6 +125,18 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
       cancelled = true;
     };
   }, [game.id, game.samples]);
+
+  useEffect(() => {
+    if (!follow) return;
+    let id = 0;
+    const tick = () => {
+      const el = getVideoElement();
+      if (el) setLive((prev) => (prev === el.currentTime ? prev : el.currentTime));
+      id = requestAnimationFrame(tick);
+    };
+    id = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(id);
+  }, [follow]);
 
   // Horloge propre : avance en temps réel × vitesse, s'arrête à la fin de la game.
   useEffect(() => {
@@ -136,7 +159,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     return () => cancelAnimationFrame(raf.current);
   }, [playing, follow, rate, game.end_s]);
 
-  const time = follow ? Math.min(Math.max(currentTime, game.start_s), game.end_s) : t;
+  const time = follow ? Math.min(Math.max(live ?? currentTime, game.start_s), game.end_s) : t;
   const shown = useMemo(() => shownAt(frames, time).filter((p) => !hidden.has(p.slot)), [frames, time, hidden]);
 
   const trailPaths = useMemo(() => {

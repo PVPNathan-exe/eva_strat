@@ -130,15 +130,22 @@ def zone_for(conn, map_name, zone):
     return json.loads(DEFAULT_ZONES_PATH.read_text(encoding="utf-8"))[zone]
 
 
-def games_without_samples(conn, video_id):
-    return [
-        dict(r)
-        for r in conn.execute(
-            "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
-            "AND id NOT IN (SELECT DISTINCT game_id FROM samples) ORDER BY start_s",
-            (video_id,),
-        )
-    ]
+def _sample_step(conn, game_id):
+    """Intervalle (s) entre deux lectures déjà enregistrées pour une game, ou None s'il n'y en a pas."""
+    row = conn.execute("SELECT COUNT(DISTINCT frame) AS n, MIN(t) AS lo, MAX(t) AS hi FROM samples WHERE game_id = ?", (game_id,)).fetchone()
+    if not row["n"]:
+        return None
+    return (row["hi"] - row["lo"]) / (row["n"] - 1) if row["n"] > 1 else 0.0
+
+
+def games_without_samples(conn, video_id, step_s=None):
+    """Games dont les positions sont à lire : aucune lecture, ou lues à une autre cadence que step_s (si donnée)."""
+    out = []
+    for g in conn.execute("SELECT id, start_s, end_s, map FROM games WHERE video_id = ? ORDER BY start_s", (video_id,)).fetchall():
+        have = _sample_step(conn, g["id"])
+        if have is None or (step_s is not None and abs(have - step_s) > 0.15 * step_s):
+            out.append(dict(g))
+    return out
 
 
 def replace_samples(conn, game_id, rows):

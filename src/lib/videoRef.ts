@@ -6,6 +6,11 @@ export function setVideoElement(el: HTMLVideoElement | null) {
   element = el;
 }
 
+/** Élément <video> courant (pour lire sa position à chaque image affichée). */
+export function getVideoElement(): HTMLVideoElement | null {
+  return element;
+}
+
 /** Image courante de la vidéo en data URL JPEG, ou null si indisponible. */
 export function captureFrame(): string | null {
   if (!element || !element.videoWidth) return null;
