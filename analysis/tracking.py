@@ -524,7 +524,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 3  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 4  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
