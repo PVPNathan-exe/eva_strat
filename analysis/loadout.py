@@ -100,8 +100,8 @@ HELD_MIN_MARGIN = 30  # l'arme tenue est en noir sur le bandeau (relief vers 120
 HELD_OFFSETS = (-0.5, 0.0)  # images lues avant l'apparition de l'entrée du killfeed (le kill a eu lieu juste avant)
 
 
-def _held_scores(video, zone, width, height, t, index):
-    """Relief (95e centile) des deux armes du bandeau d'un joueur à l'instant t : (arme1, arme2), ou None."""
+def _held_reads(video, zone, width, height, t, index):
+    """Les deux armes du bandeau d'un joueur à l'instant t : [(relief 95e centile, forme)] pour arme1 puis arme2, ou None."""
     import names
 
     crop = names._grab(video, t, zone, width, height)
@@ -110,12 +110,42 @@ def _held_scores(video, zone, width, height, t, index):
     h, w = crop.shape[:2]
     bw = w / 4
     banner = crop[:, int(index * bw) : int((index + 1) * bw)]
-    scores = []
+    reads = []
     for key in ("arme1", "arme2"):
         a, b, c, d = BOXES[key]
         piece = banner[int(c * h) : int(d * h), int(a * bw) : int(b * bw)]
-        scores.append(float(np.percentile(_dark(piece), 95)))
-    return scores[0], scores[1]
+        reads.append((float(np.percentile(_dark(piece), 95)), _shape(piece)))
+    return reads
+
+
+def _held_scores(video, zone, width, height, t, index):
+    """Relief des deux armes du bandeau à l'instant t : (arme1, arme2), ou None."""
+    reads = _held_reads(video, zone, width, height, t, index)
+    return (reads[0][0], reads[1][0]) if reads else None
+
+
+def _bar_of(zones, slot):
+    import names
+
+    for key, slots in names.TEAM_SLOTS.items():
+        if slot in slots:
+            return zones[key], slots.index(slot)
+    return None, None
+
+
+def held_icon(video, zones, width, height, t, slot):
+    """Identifiant de l'icône de l'arme que le joueur tenait juste avant t (« B3 »), lue directement sur son bandeau à cet instant :
+    l'équipement change à chaque réapparition, celui enregistré pour la game ne suffit pas. None si ambigu ou icône inconnue."""
+    zone, index = _bar_of(zones, slot)
+    if zone is None:
+        return None
+    icon = None
+    for dt in HELD_OFFSETS:
+        reads = _held_reads(video, zone, width, height, t + dt, index)
+        if reads and abs(reads[0][0] - reads[1][0]) >= HELD_MIN_MARGIN:
+            shape = reads[0][1] if reads[0][0] > reads[1][0] else reads[1][1]
+            icon = identify(shape, "arme1", create=False) if shape.sum() else None
+    return icon
 
 
 def held_weapon(video, zones, width, height, t, slot):

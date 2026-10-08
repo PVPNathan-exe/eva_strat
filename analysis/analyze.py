@@ -140,6 +140,9 @@ def extract_loadouts(conn, video_id, path, meta, emit, control=None):
     return len(todo)
 
 
+KILLING_GADGETS = ("DX3", "STICKY")  # les grenades, seuls gadgets qui peuvent tuer
+
+
 def kill_weapon(path, meta, zones, loads, killer, t, grenade):
     """Arme d'un kill : le gadget du tueur pour une grenade, sinon l'arme tenue sur son bandeau juste avant l'entrée du killfeed.
     None si on ne sait pas (pas de tueur, bandeau illisible ou ambigu)."""
@@ -147,7 +150,13 @@ def kill_weapon(path, meta, zones, loads, killer, t, grenade):
     if row is None:
         return None
     if grenade:
-        return row.get("gadget")
+        # Seules les grenades font des kills : un gadget qui n'en est pas une (sonar, clone, bouclier) ne compte pas.
+        gadget = row.get("gadget")
+        return gadget if weapons.display_names().get(gadget, "").strip().upper() in KILLING_GADGETS else None
+    # L'équipement change à la réapparition : on lit l'icône tenue au moment du kill, l'équipement de la game n'est que le recours.
+    icon = loadout.held_icon(path, zones, meta["width"], meta["height"], t, killer)
+    if icon:
+        return icon
     held = loadout.held_weapon(path, zones, meta["width"], meta["height"], t, killer)
     return row.get(held) if held else None
 

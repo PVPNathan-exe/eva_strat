@@ -272,10 +272,16 @@ def test_kill_weapon_comes_from_the_held_weapon_of_the_killer_banner(monkeypatch
 
     loads = {2: {"arme1": "B2", "arme2": "B3", "gadget": "G1"}}
     meta = {"width": 1920, "height": 1080}
+    monkeypatch.setattr(analyze.weapons, "display_names", lambda folder=None: {"G1": "STICKY", "G2": "SONAR"})
+    monkeypatch.setattr(analyze.loadout, "held_icon", lambda *a: "B7")  # l'équipement a changé à la réapparition : on lit l'icône du moment
+    assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=False) == "B7"
+    monkeypatch.setattr(analyze.loadout, "held_icon", lambda *a: None)
     monkeypatch.setattr(analyze.loadout, "held_weapon", lambda *a: "arme2")
-    assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=False) == "B3"
+    assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=False) == "B3"  # icône inconnue : l'équipement de la game
     assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=True) == "G1"  # une grenade : le gadget du tueur
     assert analyze.kill_weapon("v.mp4", meta, {}, loads, None, 10.0, grenade=False) is None  # pas de tueur
+    loads[2]["gadget"] = "G2"
+    assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=True) is None  # un sonar ne tue pas
     monkeypatch.setattr(analyze.loadout, "held_weapon", lambda *a: None)  # bandeau ambigu : on ne devine pas
     assert analyze.kill_weapon("v.mp4", meta, {}, loads, 2, 10.0, grenade=False) is None
 
