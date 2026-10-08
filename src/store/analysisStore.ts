@@ -29,8 +29,7 @@ interface AnalysisState {
   setCurrentTime: (t: number) => void;
   setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
-  startIngest: (source: string, options?: { singleGame?: boolean; preRoll?: number; postRoll?: number }) => Promise<void>;
-  createWholeGame: () => Promise<void>;
+  startIngest: (source: string, options?: { preRoll?: number; postRoll?: number }) => Promise<void>;
 }
 
 const idleJob: JobState = { running: false, stage: null, pct: 0, error: null, message: null };
@@ -69,20 +68,10 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   setPendingStart: (t) => set({ pendingStart: t }),
   requestSeek: (t) => set({ seekRequest: { t, nonce: Date.now() } }),
 
-  // La vidéo entière devient une game (pour une vidéo qui ne contient qu'une seule game).
-  createWholeGame: async () => {
-    const { videoId, videos } = get();
-    const video = videos.find((v) => v.id === videoId);
-    if (videoId === null || !video) return;
-    const { id } = await analysisApi.createGame(videoId, 0, video.duration_s);
-    await get().refreshGames();
-    if (get().videoId === videoId) set({ selectedGameId: id });
-  },
-
-  startIngest: async (source, { singleGame = false, preRoll, postRoll } = {}) => {
+  startIngest: async (source, { preRoll, postRoll } = {}) => {
     set({ job: { ...idleJob, running: true } });
     try {
-      const { jobId } = await analysisApi.ingest(source, { detect: !singleGame, preRoll, postRoll });
+      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll });
       subscribeJob(jobId, (e: JobEvent) => {
         if (e.event === 'progress') {
           set({ job: { running: true, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
@@ -91,7 +80,6 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           void get()
             .loadVideos()
             .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined))
-            .then(() => (singleGame && e.video_id ? get().createWholeGame() : undefined))
             .catch((err: Error) => set({ job: { ...idleJob, error: err.message } }));
         } else {
           set({ job: { ...idleJob, error: e.message ?? 'Erreur inconnue' } });

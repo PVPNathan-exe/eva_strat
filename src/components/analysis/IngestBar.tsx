@@ -10,19 +10,19 @@ const STAGE_LABEL = { download: 'Téléchargement', detect: 'Détection des game
 export function IngestBar() {
   const [source, setSource] = useState('');
   const [picking, setPicking] = useState(false);
-  const [singleGame, setSingleGame] = useState(false);
   const [preRoll, setPreRoll] = useState(3);
   const [postRoll, setPostRoll] = useState(1);
   const [pickError, setPickError] = useState<string | null>(null);
   const videos = useAnalysisStore((s) => s.videos);
   const videoId = useAnalysisStore((s) => s.videoId);
+  const currentVideo = videos.find((v) => v.id === videoId);
   const job = useAnalysisStore((s) => s.job);
   const selectVideo = useAnalysisStore((s) => s.selectVideo);
   const startIngest = useAnalysisStore((s) => s.startIngest);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (source.trim() && !job.running) void startIngest(source.trim(), { singleGame, preRoll, postRoll });
+    if (source.trim() && !job.running) void startIngest(source.trim(), { preRoll, postRoll });
   };
 
   const browse = async () => {
@@ -51,10 +51,6 @@ export function IngestBar() {
           placeholder="Colle un chemin .mp4 ou une URL YouTube, ou clique sur Parcourir"
           disabled={job.running || picking}
         />
-        <label className="ingest__single" title="Crée directement une game couvrant toute la vidéo">
-          <input type="checkbox" checked={singleGame} onChange={(e) => setSingleGame(e.target.checked)} disabled={job.running} />
-          1 seule game
-        </label>
         <label className="ingest__single" title="Secondes gardées avant le départ du chrono (compte à rebours)">
           Avant
           <input
@@ -65,7 +61,7 @@ export function IngestBar() {
             step={0.5}
             value={preRoll}
             onChange={(e) => setPreRoll(Math.min(60, Math.max(0, Number(e.target.value) || 0)))}
-            disabled={job.running || singleGame}
+            disabled={job.running}
           />
           s
         </label>
@@ -79,7 +75,7 @@ export function IngestBar() {
             step={0.5}
             value={postRoll}
             onChange={(e) => setPostRoll(Math.min(120, Math.max(0, Number(e.target.value) || 0)))}
-            disabled={job.running || singleGame}
+            disabled={job.running}
           />
           s
         </label>
@@ -87,6 +83,16 @@ export function IngestBar() {
           Analyser
         </button>
       </form>
+
+      {videoId !== null && currentVideo && (
+        <button
+          title="Relit le chrono de la vidéo choisie et propose les games (tes games confirmées ne sont jamais modifiées)"
+          disabled={job.running}
+          onClick={() => void startIngest(currentVideo.path, { preRoll, postRoll })}
+        >
+          Détecter les games
+        </button>
+      )}
 
       {videos.length > 0 && (
         <select value={videoId ?? ''} onChange={(e) => void selectVideo(Number(e.target.value))}>
