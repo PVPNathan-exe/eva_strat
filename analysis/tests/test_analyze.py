@@ -1,3 +1,4 @@
+import pytest
 import subprocess
 
 import analyze
@@ -12,23 +13,15 @@ def make_video(path):
     )
 
 
-def test_run_registers_video_without_games(tmp_path):
+def test_run_stops_and_forgets_video_without_games(tmp_path):
+    """Un fichier sans aucun chrono lisible (pas une rediff) : l'analyse s'arrête avec un message et la vidéo n'est pas gardée."""
     video = tmp_path / "match.mp4"
     make_video(video)
-    events = []
-    analyze.run(
-        source=f'"{video}"',
-        db_path=tmp_path / "eva.db",
-        cache_dir=tmp_path / "cache",
-        emit=events.append,
-    )
+    with pytest.raises(ValueError, match="Aucune game"):
+        analyze.run(source=f'"{video}"', db_path=tmp_path / "eva.db", cache_dir=tmp_path / "cache", emit=lambda e: None)
 
     conn = db.connect(tmp_path / "eva.db")
-    videos = conn.execute("SELECT id, width, height FROM videos").fetchall()
-    assert len(videos) == 1
-    assert (videos[0]["width"], videos[0]["height"]) == (320, 180)
-    assert conn.execute("SELECT COUNT(*) AS n FROM games").fetchone()["n"] == 0
-    assert events[-1] == {"event": "done", "video_id": videos[0]["id"]}
+    assert conn.execute("SELECT COUNT(*) AS n FROM videos").fetchone()["n"] == 0
 
 
 def test_run_reports_missing_file(tmp_path):

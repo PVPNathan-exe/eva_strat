@@ -135,6 +135,25 @@ def replace_detected_games(conn, video_id, games, keep_ok=False):
     return added
 
 
+def confirm_clean_games(conn, video_id):
+    """Confirme les games détectées sans aucun doute : l'analyse complète les a lues, inutile de redemander les bornes.
+    Celles qui ont une zone à vérifier restent « détectées » pour que l'utilisateur les regarde."""
+    conn.execute("UPDATE games SET status = 'confirmed', checked = 1 WHERE video_id = ? AND status = 'detected' AND doubts IS NULL", (video_id,))
+    conn.commit()
+
+
+def drop_video_if_empty(conn, video_id):
+    """Retire une vidéo qui n'a aucune game ni commentaire (fichier qui n'est pas une rediff). Renvoie True si elle a été retirée."""
+    row = conn.execute(
+        "SELECT (SELECT COUNT(*) FROM games WHERE video_id = ?) AS g, (SELECT COUNT(*) FROM comments WHERE video_id = ?) AS c", (video_id, video_id)
+    ).fetchone()
+    if row["g"] or row["c"]:
+        return False
+    conn.execute("DELETE FROM videos WHERE id = ?", (video_id,))
+    conn.commit()
+    return True
+
+
 def all_verified(conn, video_id):
     """Vrai si la vidéo a des games et que toutes sont confirmées, vérifiées, sans doute restant et avec une carte."""
     row = conn.execute(

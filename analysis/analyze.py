@@ -326,6 +326,9 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
         ranges = gaps_around(ok, meta["duration_s"]) if ok else None
         found = detect(path, meta, emit, pre_roll, post_roll, ranges, control) if ranges != [] else []
         db.replace_detected_games(conn, video_id, found, keep_ok=skip_if_ok)
+        if not conn.execute("SELECT 1 FROM games WHERE video_id = ?", (video_id,)).fetchone():
+            db.drop_video_if_empty(conn, video_id)
+            raise ValueError("Aucune game trouvée dans cette vidéo (chrono introuvable) : ce n'est pas une rediff EVA exploitable. Analyse arrêtée.")
     if not verified:
         fill_maps(conn, video_id, path, meta, emit, control)
 
@@ -346,6 +349,8 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
         text = f"positions lues sur {n} game(s)" if n else "positions déjà à jour"
         message = f"{message} · {text}" if message else text.capitalize()
 
+    if with_positions:
+        db.confirm_clean_games(conn, video_id)  # l'analyse complète a lu ces games : les bornes sans doute n'ont pas à être revalidées
     event = {"event": "done", "video_id": video_id}
     if message:
         event["message"] = message
