@@ -16,8 +16,7 @@ vidéos, et ce qui est enregistré dans le navigateur.
 git clone <adresse du dépôt> eva_strat
 cd eva_strat
 git checkout feat/onglet-analyse
-npm install
-python -m pip install -r analysis/requirements.txt
+npm start        # installe ce qui manque (npm, Python, ffmpeg) puis lance le site
 ```
 
 Si `npm` échoue sur un certificat SSL : `NODE_OPTIONS=--use-system-ca`.

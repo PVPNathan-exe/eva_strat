@@ -60,7 +60,7 @@ src/
 
 On charge un .mp4 (bouton « Parcourir… » ou chemin collé) ou une URL YouTube, puis on pose soi-même les marqueurs de début et de fin de chaque game.
 
-**Prérequis** : Python 3.10+, ffmpeg dans le PATH, puis `python -m pip install -r analysis/requirements.txt`.
+**Démarrage** : après un clone ou un `git pull`, `npm start` installe ce qui manque (paquets npm, bibliothèques Python, ffmpeg par winget sous Windows) puis lance le site sur http://localhost:5173. `npm run setup` fait l'installation sans lancer le site. Seuls Node 22+ et Python 3.10+ sont à installer soi-même.
 
 **Source de la vidéo** : il faut un fichier **.mp4** local. Pour une vidéo YouTube, l'extraire d'abord avec [4K Video Downloader](https://www.4kdownload.com/) (en 1080p ou plus, la minimap est illisible en 360p), puis charger le .mp4 obtenu. Le téléchargement direct par URL (yt-dlp) est souvent bloqué par YouTube.
 
