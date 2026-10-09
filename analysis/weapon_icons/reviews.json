@@ -1,17 +1,128 @@
 {
   "B13": {
-    "reported": true
-  },
-  "B18": {
-    "reported": true
+    "verdict": "ok",
+    "locked": true
   },
   "B15": {
-    "reported": true
+    "guess": "SPECTRE"
   },
   "B8": {
-    "reported": true
+    "guess": "AK77",
+    "verdict": "ok"
   },
-  "G16": {
-    "reported": true
+  "B21": {
+    "verdict": "ok",
+    "locked": true
+  },
+  "B1": {
+    "locked": true
+  },
+  "B2": {
+    "locked": true
+  },
+  "B3": {
+    "locked": true
+  },
+  "B4": {
+    "locked": true
+  },
+  "B5": {
+    "locked": true
+  },
+  "B6": {
+    "locked": true
+  },
+  "B14": {
+    "locked": true
+  },
+  "B12": {
+    "locked": true
+  },
+  "B11": {
+    "locked": true
+  },
+  "B10": {
+    "locked": true
+  },
+  "B9": {
+    "locked": true
+  },
+  "B17": {
+    "locked": true
+  },
+  "B19": {
+    "locked": true
+  },
+  "B20": {
+    "locked": true
+  },
+  "B22": {
+    "locked": true
+  },
+  "G1": {
+    "locked": true
+  },
+  "G2": {
+    "locked": true
+  },
+  "G3": {
+    "locked": true
+  },
+  "G11": {
+    "locked": true
+  },
+  "G10": {
+    "locked": true
+  },
+  "G9": {
+    "locked": true
+  },
+  "G13": {
+    "locked": true
+  },
+  "G4": {
+    "locked": true
+  },
+  "G5": {
+    "locked": true
+  },
+  "G6": {
+    "locked": true
+  },
+  "G7": {
+    "locked": true
+  },
+  "G8": {
+    "locked": true
+  },
+  "G15": {
+    "locked": true
+  },
+  "G17": {
+    "locked": true
+  },
+  "B18": {
+    "verdict": "ok",
+    "locked": true
+  },
+  "B23": {
+    "verdict": "ok",
+    "locked": true
+  },
+  "B7": {
+    "guess": "AK77",
+    "verdict": "bad",
+    "rejected": [
+      "AK77"
+    ]
+  },
+  "B16": {
+    "locked": true
+  },
+  "G12": {
+    "locked": true
+  },
+  "G14": {
+    "locked": true
   }
 }
