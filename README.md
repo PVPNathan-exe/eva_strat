@@ -29,6 +29,12 @@ npm run preview  # prévisualiser le build
 > Note : si `npm` échoue avec une erreur de certificat SSL (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`),
 > lance avec `NODE_OPTIONS=--use-system-ca`.
 
+## Documentation de reprise
+
+- [`docs/CHANGER_DE_PC.md`](docs/CHANGER_DE_PC.md) : installer le projet sur un autre PC et ce qui n'est pas dans Git (base, vidéos, réglages du navigateur).
+- [`docs/PLAN_RESTANT.md`](docs/PLAN_RESTANT.md) : où en est l'onglet Analyse, ce qui reste à faire dans l'ordre.
+- [`docs/PLAN_OPTIMISATIONS.md`](docs/PLAN_OPTIMISATIONS.md) : pistes pour analyser plus vite, avec les mesures de référence (`python analysis/benchmark.py`).
+
 ## Structure
 
 ```

@@ -31,7 +31,8 @@ test('relaie les événements JSON du script', async () => {
 test('un abonné tardif reçoit l’historique', async () => {
   const manager = new JobManager();
   const job = manager.start(node, ['-e', "console.log(JSON.stringify({event:'done'}))"]);
-  await new Promise((r) => setTimeout(r, 500));
+  // On attend l'événement plutôt qu'une durée fixe : un PC chargé démarre le processus enfant plus lentement.
+  for (let i = 0; i < 100 && job.events.length === 0; i++) await new Promise((r) => setTimeout(r, 50));
   const seen: string[] = [];
   job.subscribe((e) => seen.push(e.event));
   assert.deepEqual(seen, ['done']);
