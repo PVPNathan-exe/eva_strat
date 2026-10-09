@@ -272,6 +272,7 @@ def _is_waiting_circle(blob, spawn_colors):
 def find_markers(crop, templates=None):
     """Toutes les pastilles de la minimap. Coordonnées normalisées (0 à 1) dans le recadrage."""
     templates = templates if templates is not None else load_digit_templates()
+    cv2.setRNGSeed(0)  # le découpage des amas (k-means) est aléatoire : sans graine, deux lectures de la même image pouvaient différer
     h, w = crop.shape[:2]
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
     gray = hsv[:, :, 2]  # luminosité : le numéro est plus sombre que la pastille quelle que soit sa couleur
