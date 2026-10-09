@@ -179,14 +179,63 @@ def _gap_cost(a, b, step_s, max_gap=None, max_dist=None):
     return dist + 0.01 * gap
 
 
-def _assign(alive_tracks, step_s):
-    """Étape 2 : un joueur par trajectoire."""
+DEAD_TRACK_SHARE = 0.5  # une trajectoire ne peut pas appartenir à un joueur dont le bandeau est grisé pendant plus de cette part de sa durée
+MIN_ALIVE_SHARE = 0.2  # un bandeau « mort » plus de 80 % de la game est probablement mal lu : on ne s'en sert pas
+
+
+def _number_of(slot):
+    return slot if slot <= 4 else slot + 1
+
+
+def dead_frames(states):
+    """{slot: ensemble d'indices d'images} où le bandeau du joueur est grisé (mort). Un état isolé sur une seule image est ignoré,
+    et un bandeau qui paraît mort presque toute la game (mal lu) n'est pas utilisé."""
+    if not states:
+        return {}
+    keys = sorted(states)
+    out = {}
+    for slot in range(1, 9):
+        raw = {k: (slot in states[k] and not states[k][slot]["alive"]) for k in keys}
+        alive_share = sum(1 for k in keys if slot in states[k] and states[k][slot]["alive"]) / max(len(keys), 1)
+        if alive_share < MIN_ALIVE_SHARE:
+            continue
+        out[slot] = {k for k in keys if raw[k] and (raw.get(k - 1) or raw.get(k + 1))}
+    return out
+
+
+def anchor_spectated(frames, states):
+    """Le cadre blanc du bandeau dit quel joueur est observé : la pastille blanche de la minimap est donc ce joueur, quel que soit son
+    numéro lu (souvent illisible sur cette pastille). Les autres pastilles blanches (joueurs qui attendent leur réapparition) gardent le leur."""
+    if not states:
+        return frames
+    out = []
+    for fi, t, dets in frames:
+        watched = [s for s, v in states.get(fi, {}).items() if v["spectated"]]
+        if len(watched) != 1:
+            out.append((fi, t, dets))
+            continue
+        slot = watched[0]
+        team = "A" if slot <= 4 else "B"
+        cands = [d for d in dets if d.get("spectated") and d["team"] == team and d.get("alive", True)]
+        pick = next((d for d in cands if d.get("number") == _number_of(slot)), None) or (max(cands, key=lambda d: d.get("area", 0)) if len(cands) == 1 else None)
+        if pick is None:
+            out.append((fi, t, dets))
+            continue
+        out.append((fi, t, [({**d, "number": _number_of(slot), "slot": slot} if d is pick else d) for d in dets]))
+    return out
+
+
+def _assign(alive_tracks, step_s, dead=None):
+    """Étape 2 : un joueur par trajectoire. dead : {slot: images où son bandeau est grisé} (facultatif)."""
+    dead = dead or {}
     for team in ("A", "B"):
         tracks = [t for t in alive_tracks if t.team == team]
         slots = SLOTS[team]
         assigned = {s: [] for s in slots}
 
         def free(t, s):
+            if s in dead and t.pts and sum(1 for k in t.pts if k in dead[s]) / len(t.pts) > DEAD_TRACK_SHARE:
+                return False  # le bandeau de ce joueur est grisé pendant la trajectoire : ce n'est pas lui
             return not any(_overlap(t, o) for o in assigned[s])
 
         # a) par vote : les trajectoires les mieux étayées d'abord
@@ -421,16 +470,20 @@ def drop_static_noise(frames):
     return out
 
 
-def solve(frames, step_s, deaths=None):
+def solve(frames, step_s, deaths=None, states=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
+    states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
+    morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
+    frames = anchor_spectated(frames, states)
+    dead = dead_frames(states)
     frames = drop_static_noise(frames)
     times = {fi: t for fi, t, _ in frames}
     alive_tracks, dead_tracks = _link(frames, step_s)
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
-    _assign(alive_tracks, step_s)
+    _assign(alive_tracks, step_s, dead)
     placed = [t for t in alive_tracks if t.slot is not None]
     crosses = _attach_crosses([t for t in dead_tracks if len(t.pts) >= 2], placed, step_s, deaths, times)
 
@@ -499,6 +552,9 @@ def solve(frames, step_s, deaths=None):
         for k, d in x.pts.items():
             if (k, x.slot) not in rows:
                 put(k, x.slot, x.team, d["x"], d["y"], None, False, x.how)
+    # Un joueur dont le bandeau est grisé n'a pas de pastille vivante (les croix restent : elles montrent où il est mort).
+    for key in [k for k, r in rows.items() if r[7] and k[0] in dead.get(k[1], ())]:
+        del rows[key]
     _add_known_deaths(rows, deaths or [], times, step_s, put)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
 

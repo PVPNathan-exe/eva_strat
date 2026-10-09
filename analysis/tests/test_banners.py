@@ -1,0 +1,78 @@
+import cv2
+import numpy as np
+
+import banners
+import minimap
+import tracking
+
+
+def _bar(fills, spectated=None, hue=12, size=(120, 400)):
+    """Barre de 4 bandeaux : chacun est rempli depuis le bas à la hauteur donnée (0 = grisé), cadre blanc sur celui qui est observé."""
+    h, w = size
+    img = np.full((h, w, 3), 90, np.uint8)  # gris
+    color = cv2.cvtColor(np.uint8([[[hue, 220, 230]]]), cv2.COLOR_HSV2BGR)[0, 0].tolist()
+    bw = w // 4
+    for i, fill in enumerate(fills):
+        top = int(h * (1 - fill))
+        img[top:h, i * bw + 2 : (i + 1) * bw - 2] = color
+        if spectated == i:
+            img[:3, i * bw + 8 : (i + 1) * bw - 8] = 255
+            img[-3:, i * bw + 8 : (i + 1) * bw - 8] = 255
+    return img
+
+
+def test_banner_fill_gives_alive_dead_and_the_observed_player():
+    states = banners.read_team(_bar([1.0, 0.5, 0.0, 0.06], spectated=1))
+    assert [s["alive"] for s in states] == [True, True, False, True]  # à moitié rempli ou presque vide : blessé, pas mort
+    assert [s["spectated"] for s in states] == [False, True, False, False]
+    assert states[0]["fill"] > states[1]["fill"] > states[3]["fill"] > states[2]["fill"]
+
+
+def _states(per_frame):
+    return {i: {slot: {"alive": alive, "spectated": False} for slot, alive in per.items()} for i, per in enumerate(per_frame)}
+
+
+def test_dead_frames_ignore_a_single_glitch_and_unreadable_banners():
+    glitch = [{1: True}] * 5 + [{1: False}] + [{1: True}] * 5
+    assert tracking.dead_frames(_states(glitch))[1] == set()  # un seul état mort isolé : ignoré
+    died = [{1: True}] * 5 + [{1: False}] * 4 + [{1: True}] * 5
+    assert tracking.dead_frames(_states(died))[1] == {5, 6, 7, 8}
+    broken = [{2: False}] * 20  # grisé toute la game : bandeau mal lu, pas un témoin
+    assert 2 not in tracking.dead_frames(_states(broken))
+
+
+def test_the_white_marker_is_the_observed_player_whatever_number_was_read():
+    det = lambda number, spec: {"team": "B", "x": 0.5, "y": 0.5, "number": number, "slot": None, "alive": True, "spectated": spec, "area": 200}
+    frames = [(0, 0.0, [det(None, True), det(9, False)])]
+    states = {0: {slot: {"alive": True, "spectated": slot == 6} for slot in range(1, 9)}}
+    out = tracking.anchor_spectated(frames, states)[0][2]
+    assert out[0]["slot"] == 6 and out[0]["number"] == 7  # le slot 6 est le numéro 7
+    assert out[1]["number"] == 9  # les autres ne changent pas
+
+
+def test_a_track_cannot_belong_to_a_player_whose_banner_is_greyed_out():
+    def det(x, number=None):
+        return {"team": "A", "x": x, "y": 0.5, "number": number, "slot": minimap.slot_of(number) if number else None, "angle": 0.0, "axis": 0.0, "skew": 1.0, "alive": True, "spectated": False}
+
+    # un joueur numéroté « 3 » partout, mais le bandeau du joueur 3 est grisé : la pastille ne peut pas être la sienne
+    frames = [(i, i * 0.2, [det(0.2 + i * 0.002, 3), det(0.6, 1)]) for i in range(40)]
+    states = {i: {slot: {"alive": slot != 3 or False, "spectated": False} for slot in range(1, 5)} for i in range(40)}
+    # le bandeau 3 est mort, mais pour que ce témoin soit retenu il doit être vivant ailleurs : on ajoute une période vivante
+    for i in range(40, 120):
+        states[i] = {slot: {"alive": True, "spectated": False} for slot in range(1, 5)}
+    slots = {r[2] for r in tracking.solve(frames, 0.2, None, states) if r[7]}
+    assert 3 not in slots
+
+
+def test_a_waiting_player_circle_is_not_taken_for_the_observed_marker():
+    def crop_with(radius, on_spawn):
+        img = np.full((330, 440, 3), 60, np.uint8)
+        if on_spawn:
+            blue = cv2.cvtColor(np.uint8([[[108, 200, 200]]]), cv2.COLOR_HSV2BGR)[0, 0].tolist()
+            cv2.rectangle(img, (300, 100), (440, 260), blue, -1)
+        cx, cy = (360, 180) if on_spawn else (200, 160)
+        cv2.circle(img, (cx, cy), radius, (255, 255, 255), -1)
+        return img
+
+    waiting = [d for d in minimap.find_markers(crop_with(8, True), {}) if d["spectated"]]
+    assert waiting == []  # petit disque blanc sur la zone de départ : joueur mort en attente

@@ -30,6 +30,8 @@ BLUE = ((98, 100, 195), (118, 255, 255))
 # sont retirées plus tard (tracking.drop_static_noise).
 ORANGE_DIM = ((3, 150, 135), (22, 255, 255))
 BLUE_DIM = ((98, 100, 140), (118, 255, 255))
+WAITING_CIRCULARITY = 0.85  # un joueur mort qui attend sa réapparition est un petit disque blanc (un joueur observé est une goutte pointée)
+WAITING_SPAWN_SHARE = 0.25  # part du pourtour sur la couleur de la zone de départ de son équipe
 WHITE_REQUIRE_DIGIT = False  # vrai : une pastille blanche n'est acceptée que si son numéro est lisible (les symboles blancs de la carte n'en ont pas)
 WHITE_MAX_UNNUMBERED = 2  # une image normale a au plus un joueur observé : plus de pastilles blanches sans numéro, c'est du décor (Polaris)
 WHITE_MIN_AREA = 90  # le joueur observé rétrécit par moments (animation) : sa pastille blanche peut tomber vers 100 pixels ; le liseré coloré reste exigé
@@ -253,6 +255,20 @@ def slot_of(number):
     return number if number <= 4 else number - 1
 
 
+def _is_waiting_circle(blob, spawn_colors):
+    """Disque blanc (et non goutte pointée) posé sur la couleur de la zone de départ : un joueur mort attend sa réapparition."""
+    cnts, _ = cv2.findContours(blob, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not cnts:
+        return False
+    c = max(cnts, key=cv2.contourArea)
+    _, r = cv2.minEnclosingCircle(c)
+    if r <= 0 or cv2.contourArea(c) / (math.pi * r * r) < WAITING_CIRCULARITY:
+        return False
+    around = (cv2.dilate(blob, np.ones((21, 21), np.uint8)) - cv2.dilate(blob, np.ones((5, 5), np.uint8))) > 0
+    n = int(around.sum())
+    return n > 0 and any(int((mask > 0)[around].sum()) / n >= WAITING_SPAWN_SHARE for mask in spawn_colors.values())
+
+
 def find_markers(crop, templates=None):
     """Toutes les pastilles de la minimap. Coordonnées normalisées (0 à 1) dans le recadrage."""
     templates = templates if templates is not None else load_digit_templates()
@@ -310,7 +326,13 @@ def find_markers(crop, templates=None):
     # Joueur observé : pastille blanche, cerclée de la couleur de son équipe.
     white = cv2.inRange(hsv, np.array((0, 0, 205)), np.array((180, 70, 255)))
     white = cv2.morphologyEx(white, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    spawn_colors = {
+        "A": cv2.morphologyEx(cv2.inRange(hsv, np.array((3, 90, 90)), np.array((22, 255, 255))), cv2.MORPH_OPEN, np.ones((9, 9), np.uint8)),
+        "B": cv2.morphologyEx(cv2.inRange(hsv, np.array((98, 90, 90)), np.array((118, 255, 255))), cv2.MORPH_OPEN, np.ones((9, 9), np.uint8)),
+    }
     for blob, _ in _blobs(white, scale, min_area=WHITE_MIN_AREA * scale):
+        if _is_waiting_circle(blob, spawn_colors):
+            continue  # joueur mort qui attend dans sa zone de départ : ce n'est pas une pastille en jeu
         ring = cv2.dilate(blob, np.ones((7, 7), np.uint8)) - blob
         votes = {
             "A": int((_color_mask(hsv, RING_ORANGE) > 0)[ring > 0].sum()),

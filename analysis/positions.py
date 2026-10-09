@@ -5,6 +5,7 @@ ensuite ces pastilles dans le temps et attribue les slots 1 à 8 à l'ensemble d
 illisibles, les croisements et les disparitions passagères.
 """
 
+import banners
 import minimap
 import timer
 import tracking
@@ -28,7 +29,21 @@ def detect_frames(video, game, zone, width, height, emit=None, wait=None, step_s
     return frames
 
 
-def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None):
+def detect_states(video, game, zone_a, zone_b, width, height, wait=None, step_s=STEP_S):
+    """État des 8 joueurs lu sur les bandeaux à la même cadence que la minimap : {indice d'image: {slot: {"alive", "spectated"}}}."""
+    states = {}
+    start, end = game["start_s"], game["end_s"]
+    crops_a = timer.iter_crops(video, zone_a, width, height, step_s=step_s, t0=start, t1=end)
+    crops_b = timer.iter_crops(video, zone_b, width, height, step_s=step_s, t0=start, t1=end)
+    for i, ((_, ca), (_, cb)) in enumerate(zip(crops_a, crops_b)):
+        if wait:
+            wait()
+        states[i] = banners.read_states(ca, cb)
+    return states
+
+
+def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None):
     """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance).
-    deaths : [(t, slot)] morts connues par le killfeed."""
-    return tracking.solve(detect_frames(video, game, zone, width, height, emit, wait, step_s), step_s, deaths)
+    deaths : [(t, slot)] morts connues par le killfeed. bars : (zone du bandeau gauche, zone du bandeau droit) pour guider le suivi."""
+    states = detect_states(video, game, bars[0], bars[1], width, height, wait, step_s) if bars else None
+    return tracking.solve(detect_frames(video, game, zone, width, height, emit, wait, step_s), step_s, deaths, states)
