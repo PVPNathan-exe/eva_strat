@@ -1,0 +1,25 @@
+/* Onglets Stratégie, Analyse et Armes */
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4rem 1rem 0;
+  background: #141822;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.tabs button {
+  padding: 0.4rem 1rem;
+  background: transparent;
+  color: var(--c-text-muted);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+}
+
+.tabs button.is-active {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border-color: var(--c-border);
+}

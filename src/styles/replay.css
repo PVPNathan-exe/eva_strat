@@ -1,0 +1,239 @@
+/* Replay des positions */
+
+.replay-box {
+  padding: 0.5rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.replay-box header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.replay {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.replay__stage {
+  position: relative;
+  background: var(--c-bg);
+  border-radius: 6px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.replay__stage img {
+  width: 100%;
+  display: block;
+  user-select: none;
+}
+
+.replay__noplan {
+  aspect-ratio: 1.9;
+  background: repeating-linear-gradient(0deg, var(--c-surface) 0 24px, var(--c-surface-2) 24px 25px), repeating-linear-gradient(90deg, transparent 0 24px, var(--c-surface-2) 24px 25px);
+}
+
+.replay__hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.3rem;
+  margin: 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--c-text-muted);
+}
+
+.replay__trails {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.replay__dot {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+  color: #111;
+  font-size: 11px;
+  line-height: 1;
+  will-change: left, top;
+}
+
+.replay--large .replay__dot {
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  font-size: 14px;
+}
+
+.replay__name {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  margin-top: 1px;
+  padding: 0 3px;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 3px;
+  color: #fff;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.replay--large .replay__name {
+  font-size: 12px;
+}
+
+.replay__dot b {
+  font-weight: 700;
+}
+
+.replay__dot.is-dead {
+  background: rgba(0, 0, 0, 0.55);
+  border-color: var(--c);
+  color: var(--c);
+}
+
+.replay__dot.is-unsure {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.replay__dir {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  pointer-events: none;
+}
+
+.replay--large .replay__dir {
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+}
+
+.replay__dir::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  margin-top: -5px;
+  border-left: 9px solid #fff;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+
+.replay__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.replay__bar input[type='range'] {
+  flex: 1;
+  min-width: 60px;
+}
+
+.replay__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.replay__opts {
+  display: flex;
+  gap: 0.9rem;
+  font-size: 0.85rem;
+}
+
+.replay__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.replay__legend button {
+  width: 1.8rem;
+  padding: 0.15rem 0;
+  border-color: var(--c);
+  color: var(--c);
+  font-weight: 700;
+}
+
+.replay__legend button.is-off {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+.replay__kills {
+  font-size: 0.8rem;
+}
+
+.replay__kills ul {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.replay__kills li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.1rem 0.2rem;
+  border-radius: 4px;
+}
+
+.replay__kills li.is-now {
+  background: var(--c-border);
+}
+
+.replay__kills li button {
+  padding: 0 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.replay__kills li i {
+  color: var(--c-text-muted);
+  font-style: normal;
+  font-size: 0.72rem;
+}
+
+.replay__align {
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+}
+
+.replay__align label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.replay-modal {
+  width: min(1100px, 94vw);
+}

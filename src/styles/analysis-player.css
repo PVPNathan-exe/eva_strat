@@ -1,0 +1,64 @@
+/* Onglet Analyse : lecteur vidéo et commandes */
+
+.player {
+  width: 100%;
+  /* Hauteur liée à la fenêtre (et non à la place restante) : la colonne défile au lieu d'écraser la vidéo sous la timeline. */
+  height: clamp(220px, 54vh, 680px);
+  flex: none;
+  object-fit: contain;
+  display: block;
+  background: #000;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+}
+
+.player-stage {
+  position: relative;
+}
+
+.player-stage__vision {
+  position: absolute;
+  pointer-events: none;
+}
+
+.player-box {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 0 0 8px 8px;
+  color: var(--c-text);
+}
+
+.controls__seek {
+  flex: 1;
+  min-width: 80px;
+}
+
+.controls__goto {
+  width: 5.2em;
+  padding: 0.2rem 0.4rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.controls__goto.is-invalid {
+  border-color: #d9534f;
+}
+
+.controls__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}

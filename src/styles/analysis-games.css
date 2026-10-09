@@ -1,0 +1,112 @@
+/* Onglet Analyse : liste des games */
+
+.games__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.25rem 0 0.5rem;
+  background: var(--c-bg);
+}
+
+.games__head h3 {
+  margin: 0;
+}
+
+.games__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.games__marking {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.games__pending {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--c-yellow);
+}
+
+.games__empty {
+  color: var(--c-text-muted);
+  font-size: 0.9rem;
+}
+
+.games__error {
+  color: var(--c-danger-soft);
+  font-size: 0.9rem;
+}
+
+.game__positions {
+  margin: 0.3rem 0;
+  font-size: 0.8rem;
+  color: #5ad18b;
+}
+
+.game__check {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.4rem 0;
+  font-size: 0.8rem;
+  color: var(--c-amber);
+}
+
+.game__doubt {
+  text-align: left;
+  color: var(--c-amber);
+  border-color: #6b4a1c;
+}
+
+.game {
+  padding: 0.5rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.game.is-selected {
+  border-color: #6c8cff;
+}
+
+.game__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.game__time {
+  margin-left: auto;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.game__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.game__actions button,
+.game__actions select {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.game__delete {
+  color: var(--c-danger-soft);
+}
+
+.analysis__calibrate {
+  align-self: flex-start;
+}

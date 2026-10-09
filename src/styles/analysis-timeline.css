@@ -1,0 +1,60 @@
+/* Onglet Analyse : frise des games */
+
+.timeline__bar {
+  position: relative;
+  height: 28px;
+  background: #2a2f3d;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.timeline__game {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #2ec27e;
+  opacity: 0.85;
+}
+
+
+.timeline__game.is-selected {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+
+.timeline__doubt {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(45deg, var(--c-orange) 0 4px, rgba(0, 0, 0, 0.55) 4px 8px);
+  border-radius: 2px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.timeline__pending {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--c-yellow);
+  pointer-events: none;
+}
+
+.timeline__cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #fff;
+  pointer-events: none;
+}
+
+.timeline__legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+}

@@ -1,0 +1,95 @@
+/* Onglet Analyse : barre de chargement et de progression */
+
+.ingest {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.ingest__form {
+  display: flex;
+  flex: 1 1 100%;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.ingest__row {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.ingest__single {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  color: var(--c-text-soft);
+}
+
+.ingest__preroll {
+  width: 3.5rem;
+  padding: 0.25rem 0.3rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+}
+
+.ingest__input {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+}
+
+.ingest button,
+.ingest select,
+.analysis button,
+.analysis select {
+  padding: 0.35rem 0.7rem;
+  background: var(--c-border);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.analysis button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ingest__progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ingest__progress {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+}
+
+.ingest .ingest__stop {
+  background: #7a2630;
+  border-color: var(--c-danger-soft);
+}
+
+.ingest__error {
+  color: var(--c-danger-soft);
+}
+
+.ingest__ok {
+  color: #5ad18b;
+}

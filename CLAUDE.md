@@ -5,8 +5,10 @@ SQLite). Contexte et état d'avancement : `docs/PLAN_RESTANT.md`. Autre PC : `do
 
 ## Façon de travailler
 
+- **Lire `ARCHITECTURE.md` avant de chercher ou de créer un fichier** (carte du projet, endpoints, flux), et le mettre à jour quand un fichier est ajouté, renommé ou supprimé.
+- **Un fichier = une fonctionnalité**, nom clair, fonctions courtes et commentées. Les couleurs de l'interface sont dans `src/styles/tokens.css` (jamais de couleur en dur dans un autre fichier CSS), un fichier CSS par composant ou zone dans `src/styles/`.
 - **Répondre en français**, clairement, sans jargon inutile.
-- **Aucun emoji** ni pictogramme Unicode (play, flèche, cible) dans l'interface : utiliser `lucide-react` (classe `ic` dans `src/App.css`).
+- **Aucun emoji** ni pictogramme Unicode (play, flèche, cible) dans l'interface : utiliser `lucide-react` (classe `ic` dans `src/styles/icons.css`).
 - **Aucun tiret quadratin** (le long tiret) dans le code, les commentaires, les textes d'interface et la documentation : deux-points, virgule ou parenthèses.
 - **Un commit poussé après chaque morceau terminé**, sur la branche de travail (`feat/onglet-analyse`). Ne fusionner dans `main` que si on le demande. Terminer le message de commit par la ligne `Co-Authored-By` indiquée par la session.
 - **Dire ce qui est vérifié et ce qui ne l'est pas.** Ne jamais donner un chiffre non mesuré, ne pas écrire « c'est corrigé » sans l'avoir contrôlé sur les données ou dans le navigateur. Les limites et les échecs se disent clairement.

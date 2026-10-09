@@ -1,0 +1,120 @@
+/* Panneau des armes de l'onglet Stratégie */
+
+.weapon-panel {
+  padding: 0.4rem 1rem;
+  background: #10141c;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.weapon-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--c-text-muted);
+  font-size: 0.85rem;
+}
+
+.weapon-panel__row label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.weapon-panel__row select {
+  background: var(--c-border);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+}
+
+.weapon-panel__row button {
+  padding: 0.35rem 0.6rem;
+  background: var(--c-border);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.weapon-panel__row button.is-active {
+  background: var(--c-danger);
+  border-color: var(--c-danger);
+}
+
+.weapon-panel__row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.weapon-panel__scale {
+  color: var(--c-text);
+}
+
+.weapon-panel__placed {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.4rem;
+}
+
+.weapon-panel__placed-label {
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+.weapon-chip__remove {
+  padding: 0 !important;
+  width: 1rem;
+  height: 1rem;
+  line-height: 1;
+  background: transparent !important;
+  border: none !important;
+  color: var(--c-text-muted);
+  cursor: pointer;
+}
+
+.weapon-chip__remove:hover {
+  color: var(--c-danger);
+}
+
+.weapon-stats {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+
+.weapon-stats__name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #ff8a3b;
+  letter-spacing: 0.04em;
+  margin-right: 0.2rem;
+  cursor: help;
+}
+
+.weapon-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.12rem 0.45rem;
+  background: #161b25;
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.weapon-chip em {
+  color: var(--c-text-muted);
+  font-style: normal;
+}
+
+.weapon-chip strong {
+  color: var(--c-text);
+}

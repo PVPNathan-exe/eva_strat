@@ -1,0 +1,24 @@
+/* Couleurs et réglages communs : modifier ici pour changer le thème de toute l'application. */
+
+:root {
+  /* Texte */
+  --c-text: #e6e8ee;
+  --c-text-soft: #c7ccda;
+  --c-text-muted: #9aa3b8;
+
+  /* Fonds et bordures */
+  --c-bg: #0e1117;
+  --c-surface: #1b1f2a;
+  --c-surface-2: #232838;
+  --c-border: #2c3242;
+  --c-border-strong: #3a4256;
+
+  /* États */
+  --c-ok: #35e07a;
+  --c-danger: #ff3b3b;
+  --c-danger-soft: #ff6b6b;
+  --c-warn: #ffd166;
+  --c-amber: #ffb454;
+  --c-orange: #ff9f1c;
+  --c-yellow: #ffd60a;
+}

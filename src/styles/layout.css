@@ -1,0 +1,7 @@
+/* Structure générale de l'application */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}

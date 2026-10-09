@@ -8,7 +8,7 @@ import { MapCanvas } from './components/MapCanvas';
 import { AnalysisTab } from './components/analysis/AnalysisTab';
 import { WeaponPrompt } from './components/analysis/WeaponPrompt';
 import { WeaponsTab } from './components/analysis/WeaponsTab';
-import './App.css';
+import './styles/index.css';
 
 type View = 'strategie' | 'analyse' | 'armes';
 

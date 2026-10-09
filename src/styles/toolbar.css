@@ -1,0 +1,31 @@
+/* Barre d'outils du haut */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.toolbar__brand {
+  margin-right: 0.5rem;
+  color: var(--c-danger);
+  letter-spacing: 0.5px;
+}
+
+.toolbar button,
+.toolbar select {
+  padding: 0.35rem 0.7rem;
+  background: var(--c-border);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -1,0 +1,44 @@
+/* Onglet Analyse : mise en page générale */
+
+.analysis {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.analysis__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+  padding: 0.75rem;
+}
+
+.analysis__empty {
+  align-self: center;
+  margin: auto;
+  color: var(--c-text-muted);
+}
+
+.analysis__main > * {
+  flex-shrink: 0;
+}
+
+.analysis__main {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.analysis__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  overflow-y: auto;
+}

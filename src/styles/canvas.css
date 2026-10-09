@@ -1,0 +1,30 @@
+/* Zone de dessin de la carte */
+
+.app__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-bg);
+  overflow: auto;
+}
+
+.map-canvas {
+  position: relative;
+  border: 1px solid var(--c-border);
+  background: #11151d;
+}
+
+.map-canvas.is-drawing {
+  cursor: crosshair;
+}
+
+.map-canvas .hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  color: #6b7385;
+  pointer-events: none;
+}

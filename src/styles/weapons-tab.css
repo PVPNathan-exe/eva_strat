@@ -1,0 +1,372 @@
+/* Onglet Armes */
+
+.weapons {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 1rem 2rem;
+}
+
+.weapons__head {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.weapons__head h2 {
+  margin: 0;
+}
+
+.weapons__intro,
+.weapons__hint {
+  margin: 0.4rem 0;
+  color: var(--c-text-muted);
+  font-size: 0.88rem;
+  max-width: 70ch;
+}
+
+.weapons__section h3 {
+  margin: 1.2rem 0 0;
+}
+
+.weapons__section h3 small {
+  color: var(--c-text-muted);
+  font-weight: 400;
+}
+
+.weapons__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.weapon {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.weapon.is-named {
+  border-color: #2f6f4d;
+}
+
+.weapon img {
+  width: 100%;
+  height: 72px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  background: var(--c-bg);
+  border-radius: 6px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.weapon__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+}
+
+.weapon__sources {
+  font-size: 0.75rem;
+  color: var(--c-text-muted);
+}
+
+.weapon__sources summary {
+  cursor: pointer;
+}
+
+.weapon__sources li button {
+  all: unset;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.weapon__sources li button:hover {
+  color: var(--c-text);
+}
+
+.weapon__sources ul {
+  margin: 4px 0 0;
+  padding-left: 14px;
+}
+
+.weapons__batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  margin: 0.6rem 0;
+  padding: 0.5rem 0.8rem;
+  background: #151a24;
+  border: 1px solid #2a3142;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.weapons__batch-go {
+  background: #1f6f43;
+  border-color: var(--c-ok);
+}
+
+.weapon__select {
+  margin-right: 0.35rem;
+}
+
+.weapon__judge {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--c-text-muted);
+}
+
+.weapon__judge button,
+.weapon__report {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+.weapon__report.is-reported {
+  border-color: var(--c-warn);
+  color: var(--c-warn);
+}
+
+.report {
+  width: min(960px, 95vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: #151a24;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 10px;
+}
+
+.report__head,
+.report__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+}
+
+.report__head h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.report__body {
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.report__current {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 0.4rem 1rem;
+  align-items: center;
+}
+
+.report__current img {
+  grid-row: span 2;
+  width: 220px;
+  background: var(--c-bg);
+  border-radius: 6px;
+}
+
+.report__actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--c-text-muted);
+}
+
+.report__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.6rem;
+}
+
+.report__grid figure {
+  margin: 0;
+  padding: 6px;
+  background: var(--c-bg);
+  border: 1px solid #2a3142;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.report__grid figure.is-auto {
+  border-color: var(--c-ok);
+}
+
+.report__grid img {
+  width: 100%;
+  image-rendering: auto;
+}
+
+.report__grid figcaption {
+  font-size: 0.75rem;
+  color: var(--c-text-muted);
+}
+
+.report__grid figcaption em {
+  color: var(--c-ok);
+  font-style: normal;
+}
+
+.report__ok {
+  color: var(--c-ok);
+}
+
+.ic--spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.weapon input {
+  padding: 0.3rem 0.5rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+}
+
+.kill__env {
+  color: var(--c-text-muted);
+  font-style: italic;
+}
+
+.replay__score {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+}
+
+.replay__score svg {
+  width: 100%;
+  height: 54px;
+  background: var(--c-bg);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.replay__score em {
+  color: var(--c-text-muted);
+  font-style: normal;
+}
+
+.replay__dot.is-pickable {
+  cursor: pointer;
+}
+
+.replay__dot.is-picked {
+  box-shadow: 0 0 0 3px #fff, 0 0 10px 3px var(--c);
+  z-index: 2;
+}
+
+.replay__fix {
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+}
+
+.replay__fix p {
+  margin: 0.3rem 0;
+}
+
+.replay__fixform {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.replay__fixrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.replay__fixrow select {
+  flex: 1;
+  min-width: 90px;
+}
+
+.replay__fixlist {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.replay__fixlist li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.tabs__badge {
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--c-orange);
+  color: #111;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.weapon-prompt {
+  width: min(900px, 94vw);
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+.weapon.is-inferred {
+  border-style: dashed;
+}
+
+.weapon__meta em {
+  color: var(--c-amber);
+  font-style: normal;
+  font-size: 0.72rem;
+}
+
+.weapon__lock {
+  display: inline-flex;
+  padding: 0.1rem 0.3rem;
+  margin-right: 0.35rem;
+  color: var(--c-ok);
+  border-color: var(--c-ok);
+}
+
+.weapon.is-locked {
+  border-color: var(--c-ok);
+}

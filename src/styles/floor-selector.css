@@ -1,0 +1,67 @@
+/* Sélecteur d'étage */
+
+.floor-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 1rem;
+  background: #161a22;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.floor-selector__label {
+  color: var(--c-text-muted);
+  font-size: 0.85rem;
+}
+
+.floor-selector button {
+  width: 2rem;
+  height: 2rem;
+  background: var(--c-border);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.floor-selector button.is-active {
+  background: var(--c-danger);
+  border-color: var(--c-danger);
+}
+
+.floor-selector__add {
+  width: auto !important;
+  padding: 0 0.6rem;
+  font-size: 0.8rem;
+}
+
+.floor-selector__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.floor-selector__remove {
+  width: 1.2rem !important;
+  height: 1.2rem !important;
+  padding: 0 !important;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--c-text-muted);
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.floor-selector__remove:hover {
+  color: var(--c-danger);
+}
+
+.floor-selector__ghost-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}

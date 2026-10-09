@@ -1,0 +1,108 @@
+/* Onglet Analyse : calque de vision sur la vidéo */
+
+.vision {
+  display: block;
+}
+
+.vision__zone {
+  fill: rgba(77, 163, 255, 0.08);
+  stroke: #4da3ff;
+  stroke-width: 1.5;
+}
+
+.vision__zone--kill {
+  stroke: #c084fc;
+  fill: rgba(192, 132, 252, 0.06);
+}
+
+.vision__banner {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 1;
+}
+
+.vision__icon {
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.vision__icon--arme1 {
+  stroke: var(--c-ok);
+}
+
+.vision__icon--arme2 {
+  stroke: var(--c-warn);
+}
+
+.vision__icon--gadget {
+  stroke: #ff7ad9;
+}
+
+.vision__label {
+  fill: #fff;
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: 3px;
+}
+
+.vision__eq {
+  font-size: 10px;
+}
+
+.vision__eq--0 {
+  fill: var(--c-ok);
+}
+
+.vision__eq--1 {
+  fill: var(--c-warn);
+}
+
+.vision__eq--2 {
+  fill: #ff7ad9;
+}
+
+.vision__num {
+  font-size: 14px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: 3px;
+}
+
+.vision-bar {
+  background: #151a24;
+  border-radius: 8px 8px 0 0;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.vision-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+}
+
+.vision-bar__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.vision-bar__toggle.is-on {
+  background: #1f6f43;
+  border-color: var(--c-ok);
+}
+
+.vision-bar__layers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+
+.vision-bar__layers label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}

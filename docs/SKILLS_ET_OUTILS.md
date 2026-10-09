@@ -121,3 +121,10 @@ Points d'UX connus à traiter : état de l'analyse lancée en ligne de commande 
 - Pas d'agent quand on peut faire la tâche dans la session : un agent recharge le contexte et consomme des crédits et de la mémoire.
 - Un seul calcul lourd à la fois (l'analyse, un agent, un navigateur de test) : le PC de développement a 8 Go de mémoire.
 - Un skill n'est pas une preuve : après un `/code-review` ou un audit, vérifier chaque remarque (certaines sont plausibles sans être vraies) avant de la corriger.
+
+## 10. Économie de tokens en entrée et en sortie
+
+- Un fichier = une fonctionnalité, pas trop long, avec un découpage clair des fonctions, bien commentées comme par un développeur senior.
+- CSS : un en-tête global pour les couleurs (`src/styles/tokens.css`) afin de les changer facilement, et un fichier par zone pour simplifier les corrections.
+- Un agent de cartographie avec un modèle rapide et économique fait l'inventaire de tous les fichiers et de leur fonction dans `ARCHITECTURE.md` ; à chaque demande qui modifie ou crée un fichier, on passe d'abord par ce fichier.
+- Tout a un nom clair et facile à reconnaître au premier coup d'œil, qui donne une idée de ce que fait le fichier.
