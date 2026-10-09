@@ -112,7 +112,8 @@ CREATE TABLE IF NOT EXISTS kills_meta (
 CREATE TABLE IF NOT EXISTS samples_meta (
   game_id INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
   params_version INTEGER NOT NULL,
-  with_kills INTEGER NOT NULL DEFAULT 0  -- 1 : les morts du killfeed étaient connues quand les positions ont été lues
+  with_kills INTEGER NOT NULL DEFAULT 0,  -- 1 : les morts du killfeed étaient connues quand les positions ont été lues
+  zone_key TEXT  -- zone de la minimap utilisée à la lecture : si la calibration change ensuite, les positions sont relues
 );
 
 -- Remplie au chantier 2.

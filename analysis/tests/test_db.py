@@ -101,3 +101,33 @@ def test_old_calibrations_table_is_rebuilt_to_accept_new_zones(tmp_path):
     conn.execute("INSERT INTO calibrations VALUES ('Silva', 'capture_pct_a', 0.4, 0.06, 0.05, 0.03)")  # refusée avant la migration
     conn.commit()
     assert conn.execute("SELECT COUNT(*) AS n FROM calibrations").fetchone()["n"] == 2
+
+
+def test_positions_are_read_again_when_the_minimap_zone_is_recalibrated(tmp_path):
+    conn = db.connect(tmp_path / "eva.db")
+    vid = db.upsert_video(conn, "/v.mp4", None, 600.0, 30.0, 1920, 1080)
+    conn.execute("INSERT INTO games (video_id, start_s, end_s, map) VALUES (?, 10, 200, 'Polaris')", (vid,))
+    gid = conn.execute("SELECT id FROM games").fetchone()["id"]
+    rows = [(0, 10.0, 1, "A", 0.5, 0.5, 0.0, 1, 1.0), (1, 10.2, 1, "A", 0.5, 0.5, 0.0, 1, 1.0)]
+    db.replace_samples(conn, gid, rows, 4, with_kills=False)
+    assert db.games_without_samples(conn, vid, 0.2, 4) == []  # rien n'a changé
+    conn.execute("INSERT INTO calibrations (map, zone, x, y, w, h) VALUES ('Polaris', 'minimap', 0.004, 0.75, 0.23, 0.25)")
+    conn.commit()
+    assert [g["id"] for g in db.games_without_samples(conn, vid, 0.2, 4)] == [gid]  # recalibrée depuis la lecture : à relire
+    db.replace_samples(conn, gid, rows, 4, with_kills=False)
+    assert db.games_without_samples(conn, vid, 0.2, 4) == []  # relue avec la nouvelle zone
+
+
+def test_old_readings_without_a_zone_key_are_only_redone_for_maps_with_a_calibration(tmp_path):
+    conn = db.connect(tmp_path / "eva.db")
+    vid = db.upsert_video(conn, "/v.mp4", None, 600.0, 30.0, 1920, 1080)
+    for name in ("Ceres", "Silva"):
+        conn.execute("INSERT INTO games (video_id, start_s, end_s, map) VALUES (?, 10, 200, ?)", (vid, name))
+    conn.execute("INSERT INTO calibrations (map, zone, x, y, w, h) VALUES ('Silva', 'minimap', 0.003, 0.74, 0.19, 0.25)")
+    rows = [(0, 10.0, 1, "A", 0.5, 0.5, 0.0, 1, 1.0), (1, 10.2, 1, "A", 0.5, 0.5, 0.0, 1, 1.0)]
+    for r in conn.execute("SELECT id FROM games").fetchall():
+        db.replace_samples(conn, r["id"], rows, 4, with_kills=False)
+    conn.execute("UPDATE samples_meta SET zone_key = NULL")  # lectures d'avant l'empreinte de zone
+    conn.commit()
+    stale = [conn.execute("SELECT map FROM games WHERE id = ?", (g["id"],)).fetchone()["map"] for g in db.games_without_samples(conn, vid, 0.2, 4)]
+    assert stale == ["Silva"]

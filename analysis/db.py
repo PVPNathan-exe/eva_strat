@@ -26,6 +26,8 @@ def connect(db_path):
         conn.execute("ALTER TABLE kills ADD COLUMN kind TEXT")
     if "headshot" not in {row["name"] for row in conn.execute("PRAGMA table_info(kills)")}:
         conn.execute("ALTER TABLE kills ADD COLUMN headshot INTEGER NOT NULL DEFAULT 0")
+    if "zone_key" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
+        conn.execute("ALTER TABLE samples_meta ADD COLUMN zone_key TEXT")
     if "with_kills" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
         conn.execute("ALTER TABLE samples_meta ADD COLUMN with_kills INTEGER NOT NULL DEFAULT 0")
     # Version 2 : suivi global des joueurs. Les positions lues avec l'ancien algorithme sont à refaire.
@@ -166,6 +168,20 @@ def _sample_step(conn, game_id):
     return (row["hi"] - row["lo"]) / (row["n"] - 1) if row["n"] > 1 else 0.0
 
 
+def minimap_zone_key(conn, map_name):
+    """Empreinte de la zone de la minimap d'une carte (calibration ou zone par défaut) : elle change si on recalibre."""
+    z = zone_for(conn, map_name, "minimap")
+    return f"{z['x']:.4f},{z['y']:.4f},{z['w']:.4f},{z['h']:.4f}"
+
+
+def _zone_changed(conn, game, stored_key):
+    """Vrai si la zone de la minimap n'est plus celle avec laquelle les positions ont été lues. Sans empreinte enregistrée (lectures
+    anciennes), on ne relit que les cartes qui ont une calibration propre : la zone par défaut n'a pas changé."""
+    if stored_key is not None:
+        return stored_key != minimap_zone_key(conn, game["map"])
+    return bool(game["map"]) and conn.execute("SELECT 1 FROM calibrations WHERE map = ? AND zone = 'minimap'", (game["map"],)).fetchone() is not None
+
+
 def games_without_samples(conn, video_id, step_s=None, params_version=None, use_kills=False):
     """Games dont les positions sont à lire : aucune lecture, lues à une autre cadence que step_s, ou avec d'autres réglages
     du suivi que params_version (si donnés)."""
@@ -174,8 +190,10 @@ def games_without_samples(conn, video_id, step_s=None, params_version=None, use_
         have = _sample_step(conn, g["id"])
         stale = False
         if params_version is not None:
-            meta = conn.execute("SELECT params_version, with_kills FROM samples_meta WHERE game_id = ?", (g["id"],)).fetchone()
+            meta = conn.execute("SELECT params_version, with_kills, zone_key FROM samples_meta WHERE game_id = ?", (g["id"],)).fetchone()
             stale = (meta["params_version"] if meta else 0) != params_version
+            if meta and have is not None:
+                stale = stale or _zone_changed(conn, g, meta["zone_key"])
             if use_kills and conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (g["id"],)).fetchone():
                 stale = stale or not (meta and meta["with_kills"])
         if have is None or stale or (step_s is not None and abs(have - step_s) > 0.15 * step_s):
@@ -191,7 +209,11 @@ def replace_samples(conn, game_id, rows, params_version=0, with_kills=False):
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(game_id, *r) for r in rows],
     )
-    conn.execute("INSERT OR REPLACE INTO samples_meta (game_id, params_version, with_kills) VALUES (?, ?, ?)", (game_id, params_version, int(with_kills)))
+    game = conn.execute("SELECT map FROM games WHERE id = ?", (game_id,)).fetchone()
+    conn.execute(
+        "INSERT OR REPLACE INTO samples_meta (game_id, params_version, with_kills, zone_key) VALUES (?, ?, ?, ?)",
+        (game_id, params_version, int(with_kills), minimap_zone_key(conn, game["map"] if game else None)),
+    )
     conn.commit()
 
 
