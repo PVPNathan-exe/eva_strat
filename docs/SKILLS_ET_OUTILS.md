@@ -10,7 +10,7 @@ Relevé fait dans les historiques de session du projet (9 fichiers), pas de mém
 
 | Outil | Appels | Pour quoi |
 |---|---|---|
-| Skill `superpowers:brainstorming` | 1 | cadrer l'onglet Analyse au début (le résultat est dans `docs/superpowers/specs/`) |
+| Skill `superpowers:brainstorming` | 1 | cadrer l'onglet Analyse au début (le résultat est dans `docs/superpowers/specs/2026-10-07-onglet-analyse-design.md`) |
 | Skill `superpowers:writing-plans` | 1 | écrire le plan en chantiers (`docs/superpowers/plans/2026-10-07-onglet-analyse.md`) |
 | Skill `superpowers:subagent-driven-development` | 1 | exécuter une partie du plan avec des sous-agents |
 | Skill `gstack` | 1 | navigateur headless (essai) |
@@ -31,8 +31,8 @@ aucun passage de design/UX structuré, et le débogage de l'analyse bloquée s'e
 | `superpowers:writing-plans` / `executing-plans` | découper un chantier en étapes vérifiables | tout chantier de plus de 5 fichiers |
 | `claude-mem:make-plan` puis `claude-mem:do` | plan par phases puis exécution par sous-agents | chantier long et découpable |
 | `gstack:plan-eng-review` | revue d'architecture d'un plan avant de coder | avant le classifieur appris ou le décodage unique multi-recadrages |
-| `gstack:plan-design-review`, `plan-devex-review` | revue d'un plan d'interface ou d'usage | avant le calque « vue filtrée » ou l'ancrage manuel |
-| `gstack:office-hours` | remettre en question le besoin | quand une idée change l'orientation du produit |
+| `gstack:plan-design-review` | revue d'un plan d'interface, note de 0 à 10 par dimension | avant le calque « vue filtrée » ou l'ancrage manuel (`plan-devex-review` vise des produits pour développeurs : sans objet ici) |
+| `gstack:office-hours` | questions pour tester un besoin (modes « startup » et « builder ») | quand une idée change l'orientation du produit ; plutôt pensé pour un produit commercial |
 | `superpowers:using-git-worktrees` | travailler sur une autre branche **sans toucher** au dossier où une analyse tourne | utile : plusieurs fois un calcul long a empêché de changer de branche |
 
 ## 3. Analyse et qualité du code
@@ -66,7 +66,7 @@ peut envoyer des requêtes à `localhost`. Surface à examiner, d'après le code
 | Données désérialisées | caches de `evaluate.py` | JSON seulement (le `pickle` a été écarté) |
 | Fichiers écrits | `analysis/weapon_icons/` (noms, avis), `data/` | écriture limitée aux identifiants valides |
 
-Outils : `security-review` (skill intégré, revue de la branche), `gstack:cso` (revue de sécurité), le plugin `security-guidance` (hook automatique, il a déjà signalé le `pickle`),
+Outils : `security-review` (skill intégré, revue de la branche), `gstack:cso` (audit de sécurité « infrastructure d'abord » : secrets, dépendances, chaîne d'approvisionnement, pipeline), le plugin `security-guidance` (hook automatique, il a déjà signalé le `pickle`),
 et `superpowers:requesting-code-review` avec une consigne centrée sécurité. Un audit complet n'a **jamais** été lancé sur ce projet.
 
 ## 5. Interface et expérience utilisateur
@@ -76,9 +76,11 @@ et `superpowers:requesting-code-review` avec une consigne centrée sécurité. U
 | `frontend-design:frontend-design` | direction visuelle cohérente pour les nouveaux écrans | refonte du replay agrandi, calque « vue filtrée » |
 | `anthropic-skills:design-taste-frontend` | règles de composition et de qualité d'interface | relecture d'un composant (`ReplayPanel`, `WeaponsTab`) |
 | `anthropic-skills:redesign-existing-projects` | améliorer un écran existant sans casser les fonctions | page Analyse déjà chargée (vidéo, replay, commentaires, liste des games) |
-| `gstack:design-review`, `design-consultation`, `design-shotgun`, `design-html` | critique visuelle, variantes, maquettes HTML | choisir entre plusieurs dispositions avant de coder |
+| `gstack:design-review` | critique visuelle (espacements, hiérarchie, incohérences) **puis corrections itératives** | relecture d'un écran fini |
+| `gstack:design-consultation`, `design-shotgun`, `design-html` | système de design, variantes de maquettes à comparer, HTML/CSS final à partir d'une maquette validée | choisir une disposition avant de coder |
 | `dataviz` | graphiques lisibles (couleurs, axes, légendes) | courbe de capture, futurs graphiques de points de vie ou de recharge du sonar |
-| `gstack:qa`, `qa-only`, navigateur headless | parcours réel des écrans, captures d'écran, bugs avec preuve | après chaque changement d'interface (à la place de scripts CDP écrits à la main) |
+| `gstack:qa-only` | parcours réel du site, rapport avec captures et étapes de reproduction, **sans rien modifier** | après un changement d'interface, à la place de scripts CDP écrits à la main |
+| `gstack:qa` | même parcours, puis **corrige les bugs et les commite un par un** | seulement si on accepte des commits automatiques |
 | `anthropic-skills:built-in-browser`, `chrome-browser` | piloter un vrai navigateur | essais interactifs, avec les précautions du `CLAUDE.md` (ne fermer que ses propres processus) |
 | `run` (intégré) | lancer l'application et vérifier un changement en vrai | vérification de fin de chantier |
 
@@ -86,7 +88,7 @@ Points d'UX connus à traiter : état de l'analyse lancée en ligne de commande 
 
 ## 6. Performance, mesures et suivi des calculs longs
 
-- `gstack:benchmark` et `canary` : comparer des mesures entre deux versions ; en complément `python analysis/benchmark.py` et `python analysis/evaluate.py` (déjà dans le dépôt).
+- `python analysis/benchmark.py` et `python analysis/evaluate.py` (dans le dépôt) mesurent la vitesse et la qualité de l'analyse. `gstack:benchmark` mesure autre chose (temps de chargement et poids des pages du site) ; `canary` surveille une application déjà déployée : sans objet tant qu'il n'y a pas de déploiement.
 - `loop` et `schedule` : surveiller une analyse de plusieurs dizaines de minutes ou la relancer à heure fixe.
 - `Monitor` (outil de base) : attendre une condition (fin de calcul) sans boucle de sommeil.
 - Pistes de vitesse : `docs/PLAN_OPTIMISATIONS.md`.
@@ -107,7 +109,7 @@ Points d'UX connus à traiter : état de l'analyse lancée en ligne de commande 
 
 1. **`/code-review` (niveau `high`)** sur toute la branche : c'est le trou principal de la méthode actuelle.
 2. **`security-review`** : un tour sur le serveur local (section 4).
-3. **`gstack:qa`** sur le site complet après les derniers changements d'interface, à la place des scripts CDP écrits à la main.
+3. **`gstack:qa-only`** sur le site complet après les derniers changements d'interface, à la place des scripts CDP écrits à la main.
 4. **`superpowers:test-driven-development`** pour tout nouveau morceau pur de l'analyse (masque de déplacement, états de gadgets).
 5. **`superpowers:systematic-debugging`** au premier comportement inexpliqué, avant de corriger.
 6. **`superpowers:using-git-worktrees`** dès qu'un calcul long doit tourner pendant qu'on code sur une autre branche.
