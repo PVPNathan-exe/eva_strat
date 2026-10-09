@@ -6,7 +6,7 @@
 //   GET  /api/weapons             catalogue des icônes d'armes ; PUT /api/weapons/:id nomme une arme ; GET /api/weapons/:id/icon l'image
 //   le reste                      handleApi (games, calibrations, vidéos)
 
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -18,7 +18,7 @@ import { pickVideoFile } from './filePicker.ts';
 import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
 import { parseRange } from './range.ts';
-import { effectiveNames, iconFile, isWeaponId, listWeapons, setReview, setWeaponName, type ReviewPatch } from './weapons.ts';
+import { effectiveNames, iconFile, isWeaponId, listWeapons, readNames, readReviews, setReview, setWeaponName, type ReviewPatch } from './weapons.ts';
 
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -69,6 +69,34 @@ function streamVideo(req: IncomingMessage, res: ServerResponse, path: string) {
   pipeline(createReadStream(path, { start: range.start, end: range.end }), res, () => {});
 }
 
+/**
+ * Interpréteur Python à utiliser : EVA_PYTHON s'il est défini, sinon le premier qui répond vraiment.
+ * Sous Windows, `python` peut être le raccourci du Microsoft Store (il affiche « Python est introuvable » et ne lance rien),
+ * et il passe parfois avant la vraie installation dans le PATH.
+ */
+function findPython(): string {
+  if (process.env.EVA_PYTHON) return process.env.EVA_PYTHON;
+  const candidates = process.platform === 'win32' ? ['python', 'python3', 'py'] : ['python3', 'python'];
+  const where = process.platform === 'win32' ? 'where' : 'which';
+  for (const name of candidates) {
+    let paths: string[];
+    try {
+      paths = execFileSync(where, [name], { encoding: 'utf-8' }).split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
+    } catch {
+      continue;
+    }
+    for (const path of paths) {
+      try {
+        execFileSync(path, ['-c', 'import sys'], { stdio: 'ignore', timeout: 10000 });
+        return path;
+      } catch {
+        // raccourci du Store ou installation cassée : on essaie le suivant
+      }
+    }
+  }
+  return 'python';
+}
+
 export function analysisPlugin(): Plugin {
   return {
     name: 'eva-analysis',
@@ -77,7 +105,7 @@ export function analysisPlugin(): Plugin {
       const dbPath = join(root, 'data', 'eva.db');
       const cacheDir = join(root, 'data', 'cache');
       const script = join(root, 'analysis', 'analyze.py');
-      const python = process.env.EVA_PYTHON ?? 'python';
+      const python = findPython();
       const weaponsDir = join(root, 'analysis', 'weapon_icons');
       const iconFixScript = join(root, 'analysis', 'icon_fix.py');
       let iconFixQueue: Promise<unknown> = Promise.resolve();
@@ -117,9 +145,17 @@ export function analysisPlugin(): Plugin {
           });
         return work;
       };
+      // Netteté de chaque modèle (largeur de contour en pixels, mesurée par icon_fix.py audit) : en mémoire, refaite à la demande.
+      let blur: Record<string, number | null> = {};
+      let blurLimit = 2;
+      const runAudit = async () => {
+        const result = (await runIconFix(['audit'])) as { widths?: Record<string, number | null>; sharp_max?: number };
+        blur = result.widths ?? {};
+        blurLimit = result.sharp_max ?? blurLimit;
+      };
       const runIconFixNow = (args: string[]) =>
         new Promise<Record<string, unknown>>((resolve, reject) => {
-          execFile(python, [iconFixScript, ...args, '--db', dbPath], { timeout: 240000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, cwd: root }, (err, stdout, stderr) => {
+          execFile(python, [iconFixScript, ...args, '--db', dbPath], { timeout: 900000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, cwd: root }, (err, stdout, stderr) => {
             const last = stdout.trim().split('\n').pop() ?? '';
             try {
               const json = JSON.parse(last) as Record<string, unknown>;
@@ -176,7 +212,18 @@ export function analysisPlugin(): Plugin {
             }
           }
 
-          if (url.pathname === '/api/weapons' && method === 'GET') return sendJson(res, 200, listWeapons(ctx.db, weaponsDir));
+          if (url.pathname === '/api/weapons' && method === 'GET') {
+            if (Object.keys(blur).length === 0) void runAudit().catch(() => undefined); // première mesure en tâche de fond
+            return sendJson(res, 200, listWeapons(ctx.db, weaponsDir).map((w) => ({ ...w, blur: blur[w.id] ?? null, blurry: (blur[w.id] ?? 0) > blurLimit })));
+          }
+          if (url.pathname === '/api/weapons/audit' && method === 'POST') {
+            try {
+              await runAudit();
+              return sendJson(res, 200, { ok: true });
+            } catch (err) {
+              return sendJson(res, 500, { error: (err as Error).message });
+            }
+          }
           const weapon = /^\/api\/weapons\/([A-Z]\d+)(\/icon)?$/.exec(url.pathname);
           if (weapon && weapon[2] && method === 'GET') {
             const png = iconFile(weaponsDir, weapon[1]);
@@ -197,7 +244,7 @@ export function analysisPlugin(): Plugin {
 
           const review = /^\/api\/weapons\/([A-Z]\d+)\/review$/.exec(url.pathname);
           if (review && method === 'POST') {
-            const body = (await readJson(req)) as { verdict?: unknown; reported?: unknown; reason?: unknown } | undefined;
+            const body = (await readJson(req)) as { verdict?: unknown; reported?: unknown; reason?: unknown; locked?: unknown } | undefined;
             const patch: ReviewPatch = {};
             const entry = listWeapons(ctx.db, weaponsDir).find((w) => w.id === review[1]);
             if (body?.verdict === 'ok' || body?.verdict === 'bad' || body?.verdict === null) {
@@ -206,7 +253,17 @@ export function analysisPlugin(): Plugin {
               if (body.verdict === 'ok' && entry?.inferred && entry.name) setWeaponName(weaponsDir, review[1], entry.name);
               if (body.verdict === 'bad' && entry?.inferred && entry.name) patch.rejectName = entry.name;
             }
-            if (typeof body?.reported === 'boolean') {
+            if (typeof body?.locked === 'boolean') {
+              if (body.locked && !entry?.name) return sendJson(res, 400, { error: "Nomme d'abord l'arme : un modèle verrouillé doit avoir un nom" });
+              patch.locked = body.locked;
+              if (body.locked) {
+                // Verrouiller = valider l'icône et son nom : le nom (même deviné) devient un nom saisi, le signalement tombe.
+                if (entry?.inferred) setWeaponName(weaponsDir, review[1], entry.name);
+                patch.reported = false;
+                patch.guess = null;
+              }
+            }
+            if (typeof body?.reported === 'boolean' && !patch.locked) {
               patch.reported = body.reported;
               if (typeof body.reason === 'string') patch.reason = body.reason;
             }
@@ -218,12 +275,35 @@ export function analysisPlugin(): Plugin {
             return sendJson(res, 200, { ok: true });
           }
 
+          // Devine le nom des icônes de bandeau sans nom par ressemblance avec les icônes verrouillées (modèles validés).
+          if (url.pathname === '/api/weapons/guess' && method === 'POST') {
+            const all = listWeapons(ctx.db, weaponsDir).filter((w) => w.kind !== 'killfeed');
+            const locked = all.filter((w) => w.locked && w.name);
+            const manual = readNames(weaponsDir);
+            const targets = all.filter((w) => !w.locked && !manual[w.id]);
+            if (locked.length === 0 || targets.length === 0) return sendJson(res, 200, { guessed: 0, locked: locked.length });
+            try {
+              const result = (await runIconFix(['guess', `--ids=${targets.map((w) => w.id).join(',')}`, `--locked=${locked.map((w) => w.id).join(',')}`])) as { guesses?: Record<string, { model: string }> };
+              let guessed = 0;
+              for (const t of targets) {
+                const model = result.guesses?.[t.id]?.model;
+                const name = locked.find((w) => w.id === model)?.name;
+                setReview(weaponsDir, t.id, { guess: name ?? null });
+                if (name) guessed++;
+              }
+              return sendJson(res, 200, { guessed, locked: locked.length });
+            } catch (err) {
+              return sendJson(res, 500, { error: (err as Error).message });
+            }
+          }
+
           if (url.pathname === '/api/weapons/work' && method === 'GET') return sendJson(res, 200, Object.fromEntries(iconWork));
           const work = /^\/api\/weapons\/([A-Z]\d+)\/work$/.exec(url.pathname);
           if (work && method === 'GET') return sendJson(res, 200, iconWork.get(work[1]) ?? { state: 'none' });
           if (work && method === 'POST') {
             const body = (await readJson(req)) as { action?: unknown; token?: unknown } | undefined;
             if (body?.action !== 'candidates' && body?.action !== 'rebuild') return sendJson(res, 400, { error: 'Action inconnue' });
+            if (body.action === 'rebuild' && readReviews(weaponsDir)[work[1]]?.locked) return sendJson(res, 409, { error: 'Icône verrouillée : déverrouille-la pour la recalculer' });
             const token = typeof body.token === 'string' && /^\d+_\d+_\d+$/.test(body.token) ? body.token : undefined;
             return sendJson(res, 202, startIconWork(work[1], body.action, token));
           }

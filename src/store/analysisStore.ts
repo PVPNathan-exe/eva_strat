@@ -8,6 +8,8 @@ import { canonicalName } from '../lib/weaponCatalog';
 
 // Icônes pour lesquelles l'invite de nom a déjà été fermée (« Plus tard ») : on ne redemande pas avant la prochaine analyse qui en trouve de nouvelles.
 const dismissedWeapons = new Set<string>();
+// Arrêt demandé avant que le serveur ait donné l'identifiant de l'analyse : exécuté dès qu'il arrive.
+let stopBeforeStart = false;
 
 export interface JobState {
   running: boolean;
@@ -65,6 +67,9 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
         void get()
           .loadVideos()
           .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined))
+          // Les nouvelles icônes sont nommées d'après les modèles verrouillés ; seules celles de forme inconnue sont demandées à l'utilisateur.
+          .then(() => analysisApi.auditWeapons().catch(() => undefined))
+          .then(() => analysisApi.guessWeapons().catch(() => undefined))
           .then(() => get().loadWeapons(true))
           .catch((err: Error) => set({ job: { ...idleJob, error: err.message } }));
       } else {
@@ -168,7 +173,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
 
   controlJob: async (action) => {
     const { jobId, running } = get().job;
-    if (!jobId || !running) return;
+    if (!running) return;
+    if (!jobId) {
+      if (action === 'stop') stopBeforeStart = true;
+      return;
+    }
     try {
       await analysisApi.jobControl(jobId, action);
       if (action !== 'stop') set({ job: { ...get().job, paused: action === 'pause' } });
@@ -187,9 +196,16 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
   },
 
   startIngest: async (source, { preRoll, postRoll, skipIfOk, withPositions, posEvery } = {}) => {
+    stopBeforeStart = false;
     set({ job: { ...idleJob, running: true } });
     try {
       const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions, posEvery });
+      if (stopBeforeStart) {
+        stopBeforeStart = false;
+        await analysisApi.jobControl(jobId, 'stop').catch(() => undefined);
+        set({ job: { ...idleJob, error: 'Analyse arrêtée' } });
+        return;
+      }
       set({ job: { ...get().job, jobId } });
       watchJob(jobId);
     } catch (err) {

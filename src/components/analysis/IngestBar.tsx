@@ -141,10 +141,10 @@ export function IngestBar() {
           ) : (
             <span>Lecture du fichier…</span>
           )}
-          <button onClick={() => void controlJob(job.paused ? 'resume' : 'pause')}>
+          <button disabled={!job.jobId} onClick={() => void controlJob(job.paused ? 'resume' : 'pause')}>
             {job.paused ? <Play className="ic" /> : <Pause className="ic" />} {job.paused ? 'Reprendre' : 'Pause'}
           </button>
-          <button onClick={() => void controlJob('stop')}>
+          <button className="ingest__stop" onClick={() => void controlJob('stop')}>
             <Square className="ic" /> Arrêter
           </button>
         </div>

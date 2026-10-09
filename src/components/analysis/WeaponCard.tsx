@@ -1,7 +1,7 @@
 // Une icône d'arme à nommer : son logo, son usage, et un champ de nom avec les propositions de l'onglet Stratégie.
 
 import { useState } from 'react';
-import { Check, Flag, X } from 'lucide-react';
+import { Check, Flag, Lock, X } from 'lucide-react';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { analysisApi, weaponIconUrl } from '../../lib/analysisApi';
 import { SUGGESTIONS } from '../../lib/weaponCatalog';
@@ -30,12 +30,14 @@ export function WeaponCard({
   onName,
   selected,
   onSelect,
+  onUnlock,
 }: {
   weapon: Weapon;
   onName: (id: string, name: string) => void;
-  /** Sélection pour un recalcul par lots (armes et gadgets des bandeaux seulement). */
+  /** Case à cocher pour verrouiller l'icône comme modèle (armes et gadgets des bandeaux seulement). */
   selected?: boolean;
   onSelect?: (id: string) => void;
+  onUnlock?: (id: string) => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const openAt = useAnalysisStore((s) => s.openAt);
@@ -48,13 +50,20 @@ export function WeaponCard({
     setDraft(null);
   };
   return (
-    <div className={`weapon${weapon.name ? ' is-named' : ''}${weapon.inferred ? ' is-inferred' : ''}`}>
+    <div className={`weapon${weapon.name ? ' is-named' : ''}${weapon.inferred ? ' is-inferred' : ''}${weapon.locked ? ' is-locked' : ''}`}>
       <img src={weaponIconUrl(weapon.id)} alt={`Icône ${weapon.id}`} />
       <div className="weapon__meta">
-        {onSelect && (
-          <input type="checkbox" className="weapon__select" checked={!!selected} onChange={() => onSelect(weapon.id)} aria-label={`Sélectionner ${weapon.id} pour le recalcul`} title="Sélectionner pour le recalcul par lots" />
+        {weapon.locked ? (
+          <button type="button" className="weapon__lock" onClick={() => onUnlock?.(weapon.id)} title="Modèle verrouillé (jamais recalculé, sert à deviner les autres icônes). Cliquer pour déverrouiller.">
+            <Lock className="ic" />
+          </button>
+        ) : (
+          onSelect && (
+            <input type="checkbox" className="weapon__select" checked={!!selected} onChange={() => onSelect(weapon.id)} aria-label={`Cocher ${weapon.id} comme modèle`} title="Cocher pour en faire un modèle verrouillé (l'icône doit être nommée et bien lue)" />
+          )
         )}
         <b>{weapon.id}</b>
+        {weapon.blurry && !weapon.locked && <em title={`Icône floue (contour de ${weapon.blur?.toFixed(1)} px, une icône nette en a 1 à 1,6) : elle sera refaite au prochain recalcul`}>floue</em>}
         {weapon.inferred && <em title="Déduit de l'équipement des joueurs qui ont fait ces kills. Modifie-le si c'est faux.">deviné</em>}
         <span title="Nombre de kills ou de joueurs où cette icône a été vue">
           {weapon.uses} {weapon.kind === 'killfeed' ? 'kill' : 'joueur'}
@@ -96,7 +105,7 @@ export function WeaponCard({
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
-      <button type="button" className={`weapon__report${weapon.reported ? ' is-reported' : ''}`} onClick={() => setReporting(true)} title="Cette icône ne représente pas la bonne arme, ou plusieurs icônes sont superposées">
+      <button type="button" disabled={weapon.locked} className={`weapon__report${weapon.reported ? ' is-reported' : ''}`} onClick={() => setReporting(true)} title="Cette icône ne représente pas la bonne arme, ou plusieurs icônes sont superposées">
         <Flag className="ic" /> {weapon.reported ? 'Signalée' : 'Signaler'}
       </button>
       {reporting && <WeaponReport weapon={weapon} onClose={() => setReporting(false)} />}

@@ -56,6 +56,12 @@ export interface Weapon {
   reported: boolean;
   /** Avis de l'utilisateur sur le nom deviné. */
   verdict: 'ok' | 'bad' | null;
+  /** Largeur du contour du modèle en pixels (1 : net, 2 et plus : flou), null si pas encore mesurée. */
+  blur?: number | null;
+  /** Le modèle est flou : le programme le recalcule en élargissant sa marge de lecture. */
+  blurry?: boolean;
+  /** Verrouillée : modèle de référence validé, jamais recalculé, qui sert à deviner les noms des autres icônes. */
+  locked: boolean;
   /** Où l'icône a été vue (vidéo, game, instant, joueur). */
   sources: { videoId: number; gameId: number; video: string; game: number; map: string | null; t: number; player: string | null }[];
 }

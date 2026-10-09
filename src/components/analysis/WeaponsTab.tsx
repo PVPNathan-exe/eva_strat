@@ -3,7 +3,7 @@
 // quand une icône est inconnue (voir WeaponPrompt) ; cet onglet sert à les revoir ou les corriger.
 
 import { useEffect, useRef, useState } from 'react';
-import { Layers, Loader2 } from 'lucide-react';
+import { Layers, Loader2, Lock } from 'lucide-react';
 import { analysisApi, bumpIconVersion } from '../../lib/analysisApi';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { IconWork, WeaponKind } from '../../types/analysis';
@@ -21,9 +21,10 @@ export function WeaponsTab() {
   const nameWeapon = useAnalysisStore((s) => s.nameWeapon);
   const [onlyUnnamed, setOnlyUnnamed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Recalcul par lots : on sélectionne des icônes de bandeau, le serveur les traite l'une après l'autre (file d'attente).
+  // Cases à cocher = icônes proposées comme modèles de référence, à verrouiller. Le recalcul par lots (icônes signalées) est lancé d'un clic.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batch, setBatch] = useState<string[]>([]);
+  const [guessInfo, setGuessInfo] = useState<string | null>(null);
   const [works, setWorks] = useState<Record<string, IconWork>>({});
   const polling = useRef(0);
 
@@ -42,13 +43,29 @@ export function WeaponsTab() {
   const finished = batch.filter((id) => works[id]?.state === 'done' || works[id]?.state === 'error');
   const running = batch.length > 0 && finished.length < batch.length;
 
+  // À recalculer : les icônes signalées et celles que le programme juge floues (contour épais). Les modèles verrouillés ne bougent pas.
+  const toRebuild = rebuildable.filter((w) => (w.reported || w.blurry) && !w.locked);
+
+  /** Devine le nom des icônes sans nom par ressemblance avec les modèles verrouillés. */
+  const guess = async () => {
+    try {
+      const r = await analysisApi.guessWeapons();
+      setGuessInfo(r.locked === 0 ? "Aucun modèle verrouillé : verrouille d'abord des icônes nommées." : `${r.guessed} nom(s) deviné(s) d'après ${r.locked} modèle(s) verrouillé(s)`);
+      await loadWeapons();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const startBatch = async () => {
-    const ids = [...selected].filter((id) => rebuildable.some((w) => w.id === id));
-    if (ids.length === 0) return;
     setError(null);
+    await analysisApi.auditWeapons().catch(() => undefined); // mesure la netteté de tous les modèles avant de choisir lesquels refaire
+    await loadWeapons();
+    const ids = (useAnalysisStore.getState().weapons ?? []).filter((w) => (w.id[0] === 'B' || w.id[0] === 'G') && (w.reported || w.blurry) && !w.locked).map((w) => w.id);
+    if (ids.length === 0) return;
+    setGuessInfo(null);
     const mine = ++polling.current;
     setBatch(ids);
-    setSelected(new Set());
     try {
       // Tout est mis en file tout de suite (réponses immédiates) ; le serveur recalcule ensuite une icône après l'autre.
       for (const id of ids) await analysisApi.startIconWork(id, 'rebuild');
@@ -61,10 +78,25 @@ export function WeaponsTab() {
       }
       bumpIconVersion();
       await loadWeapons();
+      await guess(); // une fois recalculées, le programme essaie de nommer les icônes d'après les modèles verrouillés
     } catch (err) {
       setError((err as Error).message);
     }
   };
+
+  const lockSelected = async () => {
+    setError(null);
+    try {
+      for (const id of selected) await analysisApi.reviewWeapon(id, { locked: true });
+      setSelected(new Set());
+      await loadWeapons();
+    } catch (err) {
+      setError((err as Error).message);
+      await loadWeapons();
+    }
+  };
+
+  const unlock = (id: string) => void analysisApi.reviewWeapon(id, { locked: false }).then(() => loadWeapons()).catch((err: Error) => setError(err.message));
 
   const unnamed = (weapons ?? []).filter((w) => !w.name).length;
   const save = (id: string, name: string) => void nameWeapon(id, name).catch((err: Error) => setError(err.message));
@@ -89,25 +121,27 @@ export function WeaponsTab() {
         <div className="weapons__batch">
           <Layers className="ic" />
           <span>
-            Recalcul par lots : coche des icônes de bandeau (case à gauche de leur numéro), le serveur les recalcule une par une, tu peux continuer à
-            utiliser l'application.
+            <b>Recalcul :</b> un clic mesure la netteté de chaque icône, garde celles qui sont nettes et refait les floues et les signalées, une par une (tu peux continuer à utiliser l'application). Si une icône reste floue, le programme élargit tout seul sa marge de lecture (plus d'images, d'autres games, d'autres joueurs). Puis le programme nomme tout seul celles qui
+            ressemblent à un modèle verrouillé. Une forme qu'il ne connaît pas reste à nommer par toi (une arme peut venir d'un autre practice). <b>Cases à cocher :</b> coche les icônes bien nommées et bien lues pour en faire des modèles verrouillés : elles ne sont plus
+            recalculées et servent de référence pour deviner les autres.
           </span>
-          <button type="button" onClick={() => setSelected(new Set(rebuildable.filter((w) => w.reported).map((w) => w.id)))} disabled={running || !rebuildable.some((w) => w.reported)}>
-            Cocher les signalées
+          <button type="button" className="weapons__batch-go" onClick={() => void startBatch()} disabled={toRebuild.length === 0 || running}>
+            {running ? <Loader2 className="ic ic--spin" /> : null} Recalculer les floues et signalées ({toRebuild.length})
+          </button>
+          <button type="button" onClick={() => void lockSelected()} disabled={selected.size === 0 || running}>
+            <Lock className="ic" /> Verrouiller les cochées ({selected.size})
           </button>
           <button type="button" onClick={() => setSelected(new Set())} disabled={selected.size === 0}>
             Tout décocher
           </button>
-          <button type="button" className="weapons__batch-go" onClick={() => void startBatch()} disabled={selected.size === 0 || running}>
-            {running ? <Loader2 className="ic ic--spin" /> : null} Recalculer la sélection ({selected.size})
-          </button>
           {batch.length > 0 && (
             <strong>
               {finished.length} / {batch.length} terminées
-              {running ? ` · en cours : ${batch.find((id) => works[id]?.state === 'running') ?? 'file d\'attente'}` : ''}
+              {running ? ` · en cours : ${batch.find((id) => works[id]?.state === 'running') ?? "file d'attente"}` : ''}
               {finished.some((id) => works[id]?.state === 'error') ? ` · ${finished.filter((id) => works[id]?.state === 'error').length} en erreur` : ''}
             </strong>
           )}
+          {guessInfo && <strong>{guessInfo}</strong>}
         </div>
       )}
       {error && <p className="games__error">{error}</p>}
@@ -126,7 +160,7 @@ export function WeaponsTab() {
             <p className="weapons__hint">{hint}</p>
             <div className="weapons__grid">
               {list.map((w) => (
-                <WeaponCard key={w.id} weapon={w} onName={save} selected={selected.has(w.id)} onSelect={w.id[0] === 'B' || w.id[0] === 'G' ? toggle : undefined} />
+                <WeaponCard key={w.id} weapon={w} onName={save} selected={selected.has(w.id)} onSelect={w.id[0] === 'B' || w.id[0] === 'G' ? toggle : undefined} onUnlock={unlock} />
               ))}
             </div>
           </section>

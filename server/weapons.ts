@@ -17,6 +17,8 @@ export interface WeaponEntry {
   reported: boolean;
   /** Avis de l'utilisateur sur le nom deviné par le programme : bon ou pas bon (null : pas d'avis). */
   verdict: 'ok' | 'bad' | null;
+  /** Icône verrouillée par l'utilisateur : modèle de référence, jamais recalculée, qui sert à deviner le nom des icônes voisines. */
+  locked: boolean;
   /** Où l'icône a été vue (pour la reconnaître : vidéo, game, instant). Au plus MAX_SOURCES, les premières. */
   sources: WeaponSource[];
 }
@@ -61,6 +63,10 @@ export interface Review {
   reported?: boolean;
   reason?: string;
   verdict?: 'ok' | 'bad';
+  /** Verrouillée : modèle validé (elle a un nom), exclue des recalculs. */
+  locked?: boolean;
+  /** Nom proposé par ressemblance avec une icône verrouillée. */
+  guess?: string;
   /** Noms devinés que l'utilisateur a refusés : le programme ne les reproposera pas pour cette icône. */
   rejected?: string[];
 }
@@ -79,6 +85,8 @@ export interface ReviewPatch {
   reason?: string;
   verdict?: 'ok' | 'bad' | null;
   rejectName?: string;
+  locked?: boolean;
+  guess?: string | null;
 }
 
 export function setReview(dir: string, id: string, patch: ReviewPatch): void {
@@ -97,6 +105,14 @@ export function setReview(dir: string, id: string, patch: ReviewPatch): void {
   if (patch.verdict !== undefined) {
     if (patch.verdict) cur.verdict = patch.verdict;
     else delete cur.verdict;
+  }
+  if (patch.locked !== undefined) {
+    if (patch.locked) cur.locked = true;
+    else delete cur.locked;
+  }
+  if (patch.guess !== undefined) {
+    if (patch.guess) cur.guess = patch.guess.trim().slice(0, 60);
+    else delete cur.guess;
   }
   if (patch.rejectName) cur.rejected = [...new Set([...(cur.rejected ?? []), patch.rejectName.trim().toUpperCase()])];
   if (Object.keys(cur).length) all[id] = cur;
@@ -181,10 +197,21 @@ export function inferKillfeedNames(db: DatabaseSync, names: Record<string, strin
   return out;
 }
 
+/** Noms proposés par ressemblance avec une icône verrouillée (hors icônes déjà nommées à la main et noms refusés). */
+function guessedNames(reviews: Record<string, Review>, manual: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [id, r] of Object.entries(reviews)) {
+    if (!r.guess || manual[id] || r.locked) continue;
+    if (r.rejected?.includes(r.guess.trim().toUpperCase())) continue;
+    out[id] = r.guess;
+  }
+  return out;
+}
+
 /** Noms effectifs : saisis par l'utilisateur, sinon déduits. */
 export function effectiveNames(db: DatabaseSync, dir: string): Record<string, string> {
   const manual = readNames(dir);
-  return { ...inferKillfeedNames(db, manual, dir), ...manual };
+  return { ...guessedNames(readReviews(dir), manual), ...inferKillfeedNames(db, manual, dir), ...manual };
 }
 
 function sourcesOf(db: DatabaseSync): Map<string, WeaponSource[]> {
@@ -218,11 +245,11 @@ function sourcesOf(db: DatabaseSync): Map<string, WeaponSource[]> {
 export function listWeapons(db: DatabaseSync, dir: string): WeaponEntry[] {
   if (!existsSync(dir)) return [];
   const manual = readNames(dir);
-  const auto = inferKillfeedNames(db, manual, dir);
+  const reviews = readReviews(dir);
+  const auto = { ...guessedNames(reviews, manual), ...inferKillfeedNames(db, manual, dir) };
   const names = { ...auto, ...manual };
   const uses = new Map<string, number>();
   const sources = sourcesOf(db);
-  const reviews = readReviews(dir);
   const add = (rows: unknown) => {
     for (const r of rows as { id: string | null; n: number }[]) if (r.id) uses.set(r.id, (uses.get(r.id) ?? 0) + r.n);
   };
@@ -233,7 +260,7 @@ export function listWeapons(db: DatabaseSync, dir: string): WeaponEntry[] {
   return readdirSync(dir)
     .filter((f) => f.endsWith('.png') && isWeaponId(f.slice(0, -4)))
     .map((f) => f.slice(0, -4))
-    .map((id) => ({ id, kind: KIND[id[0]], name: names[id] ?? '', inferred: !manual[id] && !!auto[id], uses: uses.get(id) ?? 0, reported: !!reviews[id]?.reported, verdict: reviews[id]?.verdict ?? null, sources: sources.get(id) ?? [] }))
+    .map((id) => ({ id, kind: KIND[id[0]], name: names[id] ?? '', inferred: !manual[id] && !!auto[id], uses: uses.get(id) ?? 0, reported: !!reviews[id]?.reported, verdict: reviews[id]?.verdict ?? null, locked: !!reviews[id]?.locked, sources: sources.get(id) ?? [] }))
     // Le logo de grenade du killfeed est le même pour toutes les grenades : rien à nommer, on ne le montre pas.
     .filter((w) => !(w.kind === 'killfeed' && squash(w.name) === 'grenade'))
     // L'arme d'un kill se lit maintenant sur le bandeau du tueur : une icône de killfeed que plus aucun kill n'utilise n'est plus à nommer.

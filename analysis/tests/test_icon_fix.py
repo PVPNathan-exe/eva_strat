@@ -41,3 +41,17 @@ def test_replace_template_keeps_the_id_and_updates_the_preview(tmp_path):
     assert preview.shape[1] > preview.shape[0] * 3  # l'aperçu est maintenant long et fin
     weapons._cache.clear()
     assert weapons.identify(better, folder=tmp_path, prefix="B", create=False) == icon_id  # le nouveau modèle est reconnu
+
+
+def test_edge_width_tells_sharp_from_blurry():
+    sharp = np.zeros((30, 80), np.uint8)
+    sharp[8:22, 10:70] = 255
+    blurry = cv2.GaussianBlur(sharp, (0, 0), 3)
+    assert weapons.edge_width(sharp) < weapons.SHARP_MAX < weapons.edge_width(blurry)
+    assert weapons.edge_width(np.zeros((5, 5), np.uint8)) is None
+
+
+def test_choose_best_prefers_thinnest_edges():
+    a, b = _cand("sharp", 40), _cand("soft", 40)
+    a["width"], b["width"] = 1.1, 2.5
+    assert [c["token"] for c in icon_fix.choose_best([b, a], best=1)] == ["sharp"]

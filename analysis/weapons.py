@@ -75,6 +75,30 @@ def _write_preview(folder, name, icon, tone):
     cv2.imwrite(str(Path(folder) / "previews" / f"{name}.png"), big)
 
 
+SHARP_MAX = 2.0  # largeur de contour (pixels) au-delà de laquelle une icône est jugée floue : nettes 1 à 1,6, floues 2,1 à 3,2
+
+
+def edge_width(tone):
+    """Largeur moyenne du contour de l'icône, en pixels de la lecture d'origine : environ 1 pour une icône nette, 2 à 3 pour une icône floue.
+    C'est la surface des demi-teintes divisée par la longueur du contour (elle ne dépend pas de la taille de l'icône). None si l'image est vide."""
+    t = np.asarray(tone, dtype=np.float32)
+    if t.size == 0 or t.max() <= 0:
+        return None
+    t = t * (255.0 / t.max())
+    contours, _ = cv2.findContours((t > 128).astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    perimeter = sum(len(c) for c in contours)
+    return float(((t > 40) & (t < 215)).sum() / perimeter) if perimeter else None
+
+
+def template_width(icon_id, folder=ICON_DIR):
+    """edge_width du modèle enregistré, relu depuis son aperçu agrandi 8 fois (None s'il n'a que la forme binaire ou pas d'aperçu)."""
+    path = Path(folder) / "previews" / f"{icon_id}.png"
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if path.exists() else None
+    if img is None or _is_binary_preview(folder, icon_id):
+        return None
+    return edge_width(cv2.resize(img, (img.shape[1] // 8, img.shape[0] // 8), interpolation=cv2.INTER_AREA))
+
+
 def _is_binary_preview(folder, name):
     path = Path(folder) / "previews" / f"{name}.png"
     img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if path.exists() else None

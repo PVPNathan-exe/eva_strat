@@ -28,8 +28,10 @@ export const analysisApi = {
   games: (videoId: number) => fetch(`/api/games?video=${videoId}`).then(parse<Game[]>),
   weapons: () => fetch('/api/weapons', { cache: 'no-store' }).then(parse<Weapon[]>),
   nameWeapon: (id: string, name: string) => fetch(`/api/weapons/${id}`, jsonInit('PUT', { name })).then(parse<{ ok: true }>),
-  reviewWeapon: (id: string, review: { verdict?: 'ok' | 'bad' | null; reported?: boolean; reason?: string }) =>
+  reviewWeapon: (id: string, review: { verdict?: 'ok' | 'bad' | null; reported?: boolean; reason?: string; locked?: boolean }) =>
     fetch(`/api/weapons/${id}/review`, jsonInit('POST', review)).then(parse<{ ok: true }>),
+  auditWeapons: () => fetch('/api/weapons/audit', jsonInit('POST', {})).then(parse<{ ok: true }>),
+  guessWeapons: () => fetch('/api/weapons/guess', jsonInit('POST', {})).then(parse<{ guessed: number; locked: number }>),
   // Travail de fond sur une icône (images candidates, recalcul) : on le lance, puis on consulte son avancement par de courtes requêtes.
   startIconWork: (id: string, action: 'candidates' | 'rebuild', token?: string) =>
     fetch(`/api/weapons/${id}/work`, jsonInit('POST', { action, token })).then(parse<IconWork>),
