@@ -250,22 +250,29 @@ def confirmed_deaths(deaths, dead, times, step_s):
 
 def anchor_spectated(frames, states):
     """Le cadre blanc du bandeau dit quel joueur est observé : la pastille blanche de la minimap est donc ce joueur, quel que soit son
-    numéro lu (souvent illisible sur cette pastille). Les autres pastilles blanches (joueurs qui attendent leur réapparition) gardent le leur."""
-    if not states:
-        return frames
+    numéro lu (souvent illisible sur cette pastille). Les autres pastilles blanches (joueurs qui attendent leur réapparition) gardent le leur.
+
+    Un disque blanc dans la zone de départ (`waiting`) est un joueur mort qui attend OU le joueur observé qui n'a pas encore quitté sa zone. Les bandeaux
+    tranchent : s'il y a plus de disques que de joueurs morts dans l'équipe, le disque en trop est le joueur observé (sûr seulement si un seul est en trop,
+    ou si son numéro est lu). Les disques d'attente non retenus sont retirés : ils ne sont pas des joueurs en jeu."""
     out = []
     for fi, t, dets in frames:
-        watched = [s for s, v in states.get(fi, {}).items() if v["spectated"]]
-        if len(watched) != 1:
+        waits = [d for d in dets if d.get("waiting")]
+        dets = [d for d in dets if not d.get("waiting")]
+        watched = [s for s, v in (states or {}).get(fi, {}).items() if v["spectated"]]
+        if not states or len(watched) != 1:
             out.append((fi, t, dets))
             continue
         slot = watched[0]
         team = "A" if slot <= 4 else "B"
         cands = [d for d in dets if d.get("spectated") and d["team"] == team and d.get("alive", True)]
         pick = next((d for d in cands if d.get("number") == _number_of(slot)), None) or (max(cands, key=lambda d: d.get("area", 0)) if len(cands) == 1 else None)
-        if pick is None:
-            out.append((fi, t, dets))
-            continue
+        if pick is None and not cands:
+            mine = [d for d in waits if d["team"] == team]
+            dead = sum(1 for s, v in states[fi].items() if (s <= 4) == (team == "A") and not v["alive"])
+            pick = next((d for d in mine if d.get("number") == _number_of(slot)), None) or (mine[0] if len(mine) == dead + 1 and dead == 0 else None)
+            if pick is not None:
+                dets = dets + [pick]
         out.append((fi, t, [({**d, "number": _number_of(slot), "slot": slot} if d is pick else d) for d in dets]))
     return out
 
@@ -655,9 +662,16 @@ SPECT_STATIC_WINDOWS = 4  # ...réparties sur au moins ce nombre de périodes de
 SPECT_WINDOW_S = 15.0
 
 
-def drop_static_spectated(frames):
+def _confirmed_by_banner(d, observed):
+    """Vrai si la pastille blanche porte le numéro du joueur que le bandeau dit observé (dans la bonne équipe) : c'est bien lui, même sur une station."""
+    return observed is not None and d["team"] == ("A" if observed <= 4 else "B") and d.get("number") == _number_of(observed)
+
+
+def drop_static_spectated(frames, states=None):
     """Les disques blancs à flèche de certaines cartes (stations de tyrolienne) sont parfois lus comme le joueur observé, avec un numéro. Ils ne bougent
-    jamais et reviennent tout au long de la game, alors que le joueur observé ne reste immobile au même pixel que quelques secondes de suite."""
+    jamais et reviennent tout au long de la game, alors que le joueur observé ne reste immobile au même pixel que quelques secondes de suite.
+    Mais le joueur observé passe réellement par ces stations (il les emprunte) : une pastille blanche dans une de ces cases est gardée quand son
+    numéro est celui du joueur que le bandeau dit observé à cet instant (sans cela, un tiers des lectures de Polaris était perdu)."""
     if len(frames) < STATIC_MIN_FRAMES:
         return frames
     hits, spread = {}, {}
@@ -673,10 +687,15 @@ def drop_static_spectated(frames):
     banned = {c for c, n in hits.items() if n > SPECT_STATIC_SHARE * len(frames) and len(spread[c]) >= SPECT_STATIC_WINDOWS}
     if not banned:
         return frames
-    return [
-        (fi, t, [d for d in dets if not (d.get("spectated") and (round(d["x"] / STATIC_CELL), round(d["y"] / STATIC_CELL)) in banned)])
-        for fi, t, dets in frames
-    ]
+    out = []
+    for fi, t, dets in frames:
+        watched = [s for s, v in (states or {}).get(fi, {}).items() if v["spectated"]]
+        observed = watched[0] if len(watched) == 1 else None
+        out.append((fi, t, [
+            d for d in dets
+            if not (d.get("spectated") and (round(d["x"] / STATIC_CELL), round(d["y"] / STATIC_CELL)) in banned) or _confirmed_by_banner(d, observed)
+        ]))
+    return out
 
 
 def solve(frames, step_s, deaths=None, states=None):
@@ -688,7 +707,7 @@ def solve(frames, step_s, deaths=None, states=None):
         return []
     frames = anchor_spectated(frames, states)
     dead = dead_frames(states, step_s)
-    frames = drop_static_spectated(drop_static_noise(frames))
+    frames = drop_static_spectated(drop_static_noise(frames), states)
     times = {fi: t for fi, t, _ in frames}
     deaths = confirmed_deaths(deaths, dead, times, step_s)
     alive_tracks, dead_tracks = _link(frames, step_s)
@@ -794,7 +813,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 5  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 6  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

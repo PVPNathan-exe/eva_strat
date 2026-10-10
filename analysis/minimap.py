@@ -403,9 +403,14 @@ def find_markers(crop, templates=None):
             add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT)  # halo pâle : le numéro doit être lisible
     # Le joueur observé fusionné avec une zone claire de la carte (Polaris) : cherché par son chiffre noir sur disque blanc, hors zones de départ.
     for disc, team in _glyph_discs(hsv, scale, found):
-        if not _is_waiting_circle(disc, spawn_colors):
-            add(disc, team, alive=True, spectated=True)  # numéro lu si possible ; sinon le bandeau dit quel joueur est observé
-    noise = [d for d in found if d["spectated"] and not d["number"]]
+        waiting = _is_waiting_circle(disc, spawn_colors)
+        before = len(found)
+        add(disc, team, alive=True, spectated=True)  # numéro lu si possible ; sinon le bandeau dit quel joueur est observé
+        for d in found[before:]:
+            d["verified"] = True  # chiffre noir sur disque blanc et liseré de la couleur d'équipe : pas un symbole du décor
+            if waiting:
+                d["waiting"] = True  # disque blanc dans la zone de départ : joueur mort qui attend, OU joueur observé qui y est encore (le suivi tranche avec les bandeaux)
+    noise = [d for d in found if d["spectated"] and not d["number"] and not d.get("verified")]
     if len(noise) > WHITE_MAX_UNNUMBERED:
-        found = [d for d in found if not (d["spectated"] and not d["number"])]
+        found = [d for d in found if not (d["spectated"] and not d["number"] and not d.get("verified"))]
     return found

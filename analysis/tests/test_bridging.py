@@ -119,3 +119,38 @@ def test_a_white_marker_that_never_moves_and_comes_back_all_game_is_a_zipline_st
     kept = tracking.drop_static_spectated(frames)
     assert not any(d for _, _, dets in kept for d in dets if d["team"] == "B")  # la station est retirée
     assert sum(1 for _, _, dets in kept for d in dets if d["team"] == "A") == 3  # le joueur immobile 3 s reste
+
+
+def _white(team, x, y, number=None, waiting=False):
+    d = det(team, x, y, number=number, spectated=True)
+    d["waiting"] = waiting
+    return d
+
+
+def _watch(slot, dead=()):
+    return {s: {"alive": s not in dead, "spectated": s == slot} for s in range(1, 9)}
+
+
+def test_observed_player_still_in_his_spawn_is_the_extra_white_disc():
+    frame = [(0, 0.0, [_white("A", 0.10, 0.60, waiting=True)])]
+    out = tracking.anchor_spectated(frame, {0: _watch(2)})
+    assert [(d["slot"], d["number"]) for d in out[0][2]] == [(2, 2)]  # tous vivants : l'unique disque blanc de la zone de départ est le joueur observé
+
+
+def test_waiting_discs_of_dead_players_are_never_taken_for_the_observed_player():
+    frame = [(0, 0.0, [_white("A", 0.10, 0.60, waiting=True)])]
+    assert tracking.anchor_spectated(frame, {0: _watch(2, dead=(3,))})[0][2] == []  # un mort attend : le disque est peut-être le sien, on ne devine pas
+    assert tracking.anchor_spectated(frame, None)[0][2] == []  # sans bandeau, les disques d'attente ne sont pas des joueurs en jeu
+    elsewhere = [(0, 0.0, [_white("A", 0.50, 0.30), _white("A", 0.10, 0.60, waiting=True)])]
+    kept = tracking.anchor_spectated(elsewhere, {0: _watch(2)})[0][2]
+    assert [(d["slot"], round(d["x"], 2)) for d in kept] == [(2, 0.5)]  # la pastille hors zone de départ est le joueur observé, le disque d'attente disparaît
+
+
+def test_a_numbered_white_marker_on_a_zipline_station_is_kept_for_the_observed_player_only():
+    station = (0.22, 0.62)
+    frames = [(k, k * 1.0, [det("A", *station, number=2, spectated=True)] if k % 6 == 0 else []) for k in range(200)]  # revient toute la game : « station »
+    states = {k: _watch(2) for k in range(200)}
+    kept = tracking.drop_static_spectated(frames, states)
+    assert sum(1 for _, _, dets in kept for d in dets) == 34  # le numéro 2 est bien celui du joueur observé (joueur 2) : conservée
+    other = {k: _watch(3) for k in range(200)}
+    assert not any(d for _, _, dets in tracking.drop_static_spectated(frames, other) for d in dets)  # joueur 3 observé : ce « 2 » est la station
