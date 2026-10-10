@@ -36,7 +36,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 - `AnalysisTab.tsx` : conteneur de l'onglet Analyse.
 - `IngestBar.tsx` : source (chemin ou URL), « Détecter les games » (étape 1), options, progression (game en cours), pause et arrêt.
 - `AnalysisPlan.tsx` : panneau « Analyse détaillée » : confirmation des bornes, games à analyser et leur ordre, lancement (étape 2).
-- `GameList.tsx` : games d'une vidéo, bornes, carte, confirmation, suppression.
+- `GameList.tsx` : games d'une vidéo, bornes, carte, confirmation, suppression. `GameTeams.tsx` : noms des équipes orange et bleue d'une game (saisis, avec proposition tirée des pseudos).
 - `SegmentTimeline.tsx` : frise des games. `VideoPlayer.tsx` : lecteur sur `/api/videos/:id/stream`. `PlayerControls.tsx` : barre de lecture.
 - `VisionOverlay.tsx` : calques « ce que voit le programme ». `CalibrationEditor.tsx` : zones du HUD par carte.
 - `ReplayPanel.tsx` (549 lignes) : rejeu des positions sur le plan de la carte.
@@ -46,7 +46,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 
 ### src/lib, src/store, src/types
 
-- `lib/analysisApi.ts` : client HTTP de l'onglet Analyse et `subscribeJob` (SSE). `lib/timeline.ts` : fonctions pures de temps. `lib/comments.ts` : catégories et export.
+- `lib/analysisApi.ts` : client HTTP de l'onglet Analyse et `subscribeJob` (SSE). `lib/timeline.ts` : fonctions pures de temps. `lib/comments.ts` : catégories et export. `lib/teams.ts` : diminutif d'équipe proposé par les pseudos.
 - `lib/builtinMaps.ts`, `lib/storage.ts` (export JSON d'une carte), `lib/videoRef.ts` (référence au `<video>`), `lib/vision.ts` (calques).
 - `lib/stuffs.ts` (371 lignes) : données des armes de l'onglet Stratégie. `lib/weaponCatalog.ts` : suggestions de noms. `lib/weaponNames.ts` : `canonicalName`.
 - `store/mapStore.ts` (284 lignes) : état Stratégie, persisté. `store/analysisStore.ts` : état Analyse (vidéos, games, analyse en cours, armes, commentaires), non persisté.
@@ -133,6 +133,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 | PATCH, DELETE | `/api/comments/:id` | modifier ou supprimer |
 | GET, POST, DELETE | `/api/corrections`, `/api/corrections/:id` | corrections de joueurs |
 | GET, PUT | `/api/calibrations` | zones du HUD d'une carte |
+| GET, PUT | `/api/teams` | diminutifs d'équipe et leur nom complet (ex. SNV : nom saisi) |
 
 ## Fichiers à surveiller (plus de 400 lignes)
 
