@@ -110,7 +110,7 @@ def iter_crops(video, zone, width, height, step_s=1.0, t0=0.0, t1=None):
         "-vf", f"fps=1/{step_s},crop={w}:{h}:{x}:{y}",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     size = w * h * 3
     i = 0
     try:

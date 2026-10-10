@@ -26,7 +26,7 @@ def read_images(paths):
     try:
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT), "-ListFile", listing],
-            capture_output=True,
+            capture_output=True, stdin=subprocess.DEVNULL,
         )
     except FileNotFoundError as exc:
         raise OcrUnavailable("PowerShell est introuvable : la reconnaissance de texte nécessite Windows.") from exc

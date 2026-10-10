@@ -131,7 +131,7 @@ def _grab(video, t, zone, width, height):
         "ffmpeg", "-v", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(video),
         "-frames:v", "1", "-vf", f"crop={w}:{h}:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
-    data = subprocess.run(cmd, capture_output=True).stdout
+    data = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL).stdout
     if len(data) < w * h * 3:
         return None
     return np.frombuffer(data[: w * h * 3], np.uint8).reshape(h, w, 3)

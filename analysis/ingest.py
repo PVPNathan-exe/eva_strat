@@ -22,7 +22,7 @@ def probe(path):
             "-show_entries", "format=duration",
             "-of", "json", str(path),
         ],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, check=True, stdin=subprocess.DEVNULL,
     ).stdout
     data = json.loads(out)
     stream = data["streams"][0]

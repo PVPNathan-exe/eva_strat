@@ -110,3 +110,16 @@ def test_same_weapon_is_recognised_at_its_real_size_even_when_blurry():
     d_other = weapons._native_desc(weapons._native_mask(other.astype(np.float32) * 130))
     assert weapons._score(d_sharp[0], d_blurry[0]) >= weapons.NATIVE_MATCH
     assert weapons._score(d_sharp[0], d_other[0]) < weapons.NATIVE_MATCH
+
+
+def test_only_unnamed_unlocked_unused_icons_are_purged(tmp_path):
+    import reread_loadouts
+
+    for icon in ("B1", "B2", "B3", "B4", "B5", "G1"):
+        cv2.imwrite(str(tmp_path / f"{icon}.png"), np.full((12, 32), 255, np.uint8))
+    names = {"B1": "SPECTRE"}  # nommée : gardée
+    reviews = {"B2": {"locked": True}, "B3": {"reported": True}}  # verrouillée, signalée : gardées
+    gone = reread_loadouts.unused_icons(tmp_path, used={"B4"}, names=names, reviews=reviews)  # B4 utilisée : gardée
+    assert gone == ["B5", "G1"]
+    reread_loadouts.purge(tmp_path, gone)
+    assert not (tmp_path / "B5.png").exists() and (tmp_path / "B4.png").exists()

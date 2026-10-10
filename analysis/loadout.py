@@ -81,17 +81,25 @@ def identify(shape, kind, folder=weapons.ICON_DIR, create=True, tone=None, exclu
     return weapons.identify(shape, folder=folder, create=create, prefix=PREFIX[kind], tone=tone, exclude=exclude)
 
 
+def sharp_enough(tone):
+    """Vrai si l'icône est assez nette pour que l'utilisateur puisse la reconnaître et la nommer (contour fin, voir weapons.edge_width)."""
+    width = weapons.edge_width(tone)
+    return width is not None and width <= weapons.SHARP_MAX
+
+
 def resolve_loadout(reads, folder=weapons.ICON_DIR):
     """Équipement d'un joueur {« arme1 », « arme2 », « gadget »} -> identifiant, à partir de [(forme, relief)] par case.
 
+    Une icône déjà connue est reconnue même si elle est un peu floue ; une icône INCONNUE n'est créée (pour être nommée par l'utilisateur) que si elle est
+    nette : sinon la case reste vide, plutôt que d'ajouter une icône illisible à nommer.
     Un joueur n'a jamais deux fois la même arme : si les deux cases sont reconnues comme la même icône, celle qui ressemble le moins
     au modèle est relue sans pouvoir prendre ce modèle (autre icône connue, sinon nouvelle icône)."""
-    out = {kind: identify(shape, kind, folder=folder, tone=tone) for kind, (shape, tone) in reads.items()}
+    out = {kind: identify(shape, kind, folder=folder, tone=tone, create=sharp_enough(tone)) for kind, (shape, tone) in reads.items()}
     a, b = out.get("arme1"), out.get("arme2")
     if a is not None and a == b:
         weaker = min(("arme1", "arme2"), key=lambda k: weapons.similarity(reads[k][0], a, folder))
         shape, tone = reads[weaker]
-        out[weaker] = identify(shape, weaker, folder=folder, tone=tone, exclude=(a,))
+        out[weaker] = identify(shape, weaker, folder=folder, tone=tone, exclude=(a,), create=sharp_enough(tone))
     return out
 
 
@@ -113,30 +121,44 @@ def usable_weapon_read(shape, tone):
     return area >= ICON_MIN_AREA and area <= ICON_MAX_SHARE * h * w and (xs.max() - xs.min() + 1) >= ICON_MIN_ASPECT * (ys.max() - ys.min() + 1)
 
 
+BEST_READS = 6  # lectures les plus nettes fusionnées pour obtenir l'icône d'une case
+MAX_ROUNDS = 3  # séries d'images lues au plus : on en relit une autre tant qu'un joueur n'a aucune arme exploitable
+
+
 def read_loadouts(video, game, team_zones, width, height, frames=12, folder=weapons.ICON_DIR):
-    """Équipement {slot: {"arme1", "arme2", "gadget"}} d'une game (slots 1 à 8 dans l'ordre des bandeaux)."""
+    """Équipement {slot: {"arme1", "arme2", "gadget"}} d'une game (slots 1 à 8 dans l'ordre des bandeaux).
+
+    On lit une série d'images réparties dans la game ; seules les images où l'arme est tenue, entière et nette comptent (sinon on change d'image). Si un
+    joueur n'a encore aucune arme exploitable, on lit une autre série (décalée) avant de renoncer. Les lectures les plus nettes sont fusionnées."""
     import names  # évite un import circulaire au chargement
 
     start, end = game["start_s"], game["end_s"]
     span = max(end - start - 6, 1)
-    times = [start + 3 + span * k / max(frames - 1, 1) for k in range(frames)]
     acc = {}
-    for key, slots in names.TEAM_SLOTS.items():
-        zone = team_zones[key]
-        for t in times:
-            crop = names._grab(video, t, zone, width, height)
-            if crop is None:
-                continue
-            for i, row in enumerate(icons_of_banners(crop, tones=True)):
-                for kind, (mask, tone) in row.items():
-                    # Armes : seules les images où l'arme est tenue comptent (sinon on change de frame). Gadgets : toutes.
-                    if kind == "gadget" or usable_weapon_read(mask, tone):
-                        acc.setdefault((slots[i], kind), []).append((mask, tone))
+    for round_ in range(MAX_ROUNDS):
+        shift = round_ / (MAX_ROUNDS * max(frames - 1, 1))  # décale la série pour tomber sur d'autres images
+        times = [start + 3 + span * (k / max(frames - 1, 1) + shift) for k in range(frames)]
+        times = [t for t in times if t < end - 1]
+        for key, slots in names.TEAM_SLOTS.items():
+            zone = team_zones[key]
+            for t in times:
+                crop = names._grab(video, t, zone, width, height)
+                if crop is None:
+                    continue
+                for i, row in enumerate(icons_of_banners(crop, tones=True)):
+                    for kind, (mask, tone) in row.items():
+                        # Armes : seules les images où l'arme est tenue comptent. Gadgets : toutes.
+                        if kind == "gadget" or usable_weapon_read(mask, tone):
+                            acc.setdefault((slots[i], kind), []).append((mask, tone))
+        slots_all = [s_ for slots in names.TEAM_SLOTS.values() for s_ in slots]
+        if all(any(acc.get((slot, k)) for k in ("arme1", "arme2")) for slot in slots_all):
+            break
     merged = {}
     for (slot, kind), reads in acc.items():
-        shape = merge_masks([m for m, _ in reads])
+        best = sorted(reads, key=lambda r: weapons.edge_width(r[1]) or 99.0)[:BEST_READS]  # les plus nettes d'abord
+        shape = merge_masks([m for m, _ in best])
         if shape is not None:
-            merged.setdefault(slot, {})[kind] = (shape, np.mean([t.astype(np.float32) for _, t in reads], axis=0).astype(np.uint8))
+            merged.setdefault(slot, {})[kind] = (shape, np.mean([t.astype(np.float32) for _, t in best], axis=0).astype(np.uint8))
     return {slot: resolve_loadout(reads, folder) for slot, reads in merged.items()}
 
 

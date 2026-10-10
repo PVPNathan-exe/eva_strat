@@ -18,7 +18,12 @@ SIZE = (160, 24)  # largeur, hauteur des modèles normalisés
 BRIGHT = 205  # niveau de gris minimal d'un pixel de texte
 MIN_SCORE = 0.80
 MIN_MARGIN = 0.06
-SAMPLE_OFFSETS_S = (12.0, 25.0, 45.0)  # instants testés après le début d'une game
+# Une autre vidéo (qualité différente) lit le même nom à 0,70-0,79 seulement, mais avec une avance énorme sur la carte suivante (0,73 contre 0,20) :
+# un score plus bas est accepté quand l'écart avec la deuxième carte est grand.
+LOW_SCORE = 0.65
+WIDE_MARGIN = 0.30
+SAMPLE_OFFSETS_S = (12.0, 25.0, 45.0, 70.0, 100.0, 140.0, 190.0)  # instants testés après le début d'une game, dans l'ordre : on s'arrête dès que le vote est net
+VOTES_NEEDED = 3  # lectures concordantes qui suffisent
 
 
 def name_mask(crop):
@@ -73,9 +78,10 @@ def recognize(mask, templates):
     per_map = sorted(((max(_score(v, t) for t in ts), name) for name, ts in templates.items()), reverse=True)
     best = per_map[0]
     second = per_map[1][0] if len(per_map) > 1 else -1.0
-    if best[0] < MIN_SCORE or best[0] - second < MIN_MARGIN:
-        return None, best[0]
-    return best[1], best[0]
+    margin = best[0] - second
+    if (best[0] >= MIN_SCORE and margin >= MIN_MARGIN) or (best[0] >= LOW_SCORE and margin >= WIDE_MARGIN):
+        return best[1], best[0]
+    return None, best[0]
 
 
 def grab_crop(video, t, width, height):
@@ -88,7 +94,7 @@ def grab_crop(video, t, width, height):
         "ffmpeg", "-v", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(video),
         "-frames:v", "1", "-vf", f"crop={w}:{h}:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
-    data = subprocess.run(cmd, capture_output=True).stdout
+    data = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL).stdout
     if len(data) < w * h * 3:
         return None
     return np.frombuffer(data[: w * h * 3], np.uint8).reshape(h, w, 3)
@@ -109,12 +115,20 @@ def game_masks(video, game, width, height):
 
 
 def recognize_game(video, game, width, height, templates):
-    """Nom de carte d'une game (vote entre plusieurs instants), ou None."""
+    """Nom de carte d'une game (vote entre plusieurs instants), ou None. Une image illisible ou ambiguë est passée : on regarde l'instant suivant,
+    jusqu'à ce que VOTES_NEEDED lectures concordent ou qu'il n'y ait plus d'instant dans la game."""
     votes = {}
-    for mask in game_masks(video, game, width, height):
+    for off in SAMPLE_OFFSETS_S:
+        t = game["start_s"] + off
+        if t >= game["end_s"] - 1:
+            break
+        crop = grab_crop(video, t, width, height)
+        mask = name_mask(crop) if crop is not None else None
         name, _ = recognize(mask, templates)
         if name:
             votes[name] = votes.get(name, 0) + 1
+            if votes[name] >= VOTES_NEEDED:
+                break
     if not votes:
         return None
     name, n = max(votes.items(), key=lambda kv: kv[1])

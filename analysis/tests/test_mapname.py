@@ -28,3 +28,18 @@ def test_save_template_numbers_variants(tmp_path):
     mapname.save_template(mask, "Silva", tmp_path)
     assert sorted(p.name for p in tmp_path.glob("*.png")) == ["Silva.png", "Silva__2.png"]
     assert list(mapname.load_templates(tmp_path)) == ["Silva"]
+
+
+def test_a_lower_score_is_accepted_when_the_next_map_is_far_behind():
+    """Autre vidéo, qualité différente : 0,73 pour la bonne carte contre 0,20 pour la suivante suffit ; 0,73 contre 0,60 ne suffit pas."""
+    near = np.zeros(mapname.SIZE[::-1], np.uint8)
+    cv2.putText(near, "REEF", (4, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 255, 2)
+    blurry = cv2.GaussianBlur(near, (0, 0), 2.6)
+    unrelated = np.zeros(mapname.SIZE[::-1], np.uint8)
+    cv2.rectangle(unrelated, (90, 3), (150, 20), 255, -1)
+    templates = {"Reef Point": [mapname._vec(near)], "Silva": [mapname._vec(unrelated)]}
+    score = mapname._score(mapname._vec(blurry), templates["Reef Point"][0])
+    assert mapname.LOW_SCORE <= score < mapname.MIN_SCORE, score  # lecture dégradée : sous l'ancien seuil
+    assert mapname.recognize(blurry, templates)[0] == "Reef Point"
+    close = {"Reef Point": templates["Reef Point"], "Autre": [mapname._vec(np.roll(near, 1, axis=1))]}
+    assert mapname.recognize(blurry, close)[0] is None  # deux cartes qui se ressemblent : on ne devine pas
