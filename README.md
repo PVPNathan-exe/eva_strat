@@ -58,6 +58,8 @@ src/
 
 ## Onglet Analyse
 
+**Parcours** : (1) « Détecter les games » repère les games par le chrono (environ 3 minutes pour une vidéo de 83 minutes) ; elle n'est refaite que si la vidéo n'a encore aucune game ou si on clique « Refaire la détection », et les games dont les bornes ne changent pas gardent leur analyse ; (2) on vérifie les bornes dans la liste des games et la vidéo ; (3) dans « Analyse détaillée », on coche les games à analyser et on choisit leur ordre (flèches, ou « Une carte d'abord »), puis « Analyser la sélection dans cet ordre » ou « Analyser toute la vidéo ». Lancer l'analyse confirme les bornes des games cochées. Chaque game est analysée en entier avant la suivante, et ce qui est déjà lu et à jour est sauté (rien n'est recalculé sauf si les réglages ou l'algorithme ont changé).
+
 On charge un .mp4 (bouton « Parcourir… » ou chemin collé) ou une URL YouTube, puis on pose soi-même les marqueurs de début et de fin de chaque game.
 
 **Démarrage** : après un clone ou un `git pull`, `npm start` installe ce qui manque (paquets npm, bibliothèques Python, ffmpeg par winget sous Windows) puis lance le site sur http://localhost:5173. `npm run setup` fait l'installation sans lancer le site. Seuls Node 22+ et Python 3.10+ sont à installer soi-même.

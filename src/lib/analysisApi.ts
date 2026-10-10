@@ -59,7 +59,7 @@ export const analysisApi = {
   saveCalibration: (map: string, zones: Zones) =>
     fetch('/api/calibrations', jsonInit('PUT', { map, zones })).then(parse<{ ok: true }>),
   currentJob: () => fetch('/api/jobs/current', { cache: 'no-store' }).then(parse<{ jobId: string | null; paused: boolean }>),
-  ingest: (source: string, options: { detect?: boolean; preRoll?: number; postRoll?: number; skipIfOk?: boolean; positions?: boolean; posEvery?: number } = {}) =>
+  ingest: (source: string, options: { detect?: boolean; preRoll?: number; postRoll?: number; skipIfOk?: boolean; positions?: boolean; posEvery?: number; detectOnly?: boolean; redetect?: boolean; games?: number[] } = {}) =>
     fetch('/api/ingest', jsonInit('POST', { source, ...options })).then(parse<{ jobId: string }>),
   jobControl: (jobId: string, action: 'pause' | 'resume' | 'stop') =>
     fetch(`/api/jobs/${jobId}/${action}`, jsonInit('POST', {})).then(parse<{ ok: true }>),

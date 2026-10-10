@@ -1,0 +1,83 @@
+/* Onglet Analyse : panneau « Analyse détaillée » (choix et ordre des games à analyser) */
+
+.plan {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+}
+
+.plan > summary {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.plan > summary span {
+  color: var(--c-text-muted);
+  font-size: 0.85rem;
+}
+
+.plan__hint {
+  margin: 0.4rem 0;
+  color: var(--c-text-muted);
+  font-size: 0.85rem;
+}
+
+.plan__tools,
+.plan__go {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.4rem 0;
+}
+
+.plan__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.plan__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.3rem;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.plan__row.is-checked {
+  background: var(--c-surface-2);
+}
+
+.plan .plan__name {
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--c-text);
+}
+
+.plan__state {
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+
+.plan__move {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.plan .plan__move button {
+  padding: 0.15rem 0.3rem;
+}
+
+.plan .plan__run {
+  background: #1f6f43;
+  border-color: var(--c-ok);
+}

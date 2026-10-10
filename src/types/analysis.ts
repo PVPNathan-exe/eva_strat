@@ -154,4 +154,7 @@ export interface JobEvent {
   pct?: number;
   video_id?: number;
   message?: string;
+  /** Analyse détaillée : rang de la game en cours (à partir de 1) et nombre de games demandées. */
+  gameIndex?: number;
+  gameCount?: number;
 }

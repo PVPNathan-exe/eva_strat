@@ -17,6 +17,9 @@ export interface JobState {
   paused: boolean;
   stage: 'download' | 'detect' | 'maps' | 'names' | 'loadout' | 'capture' | 'kills' | 'positions' | null;
   pct: number;
+  /** Analyse détaillée : game en cours sur le nombre de games demandées. */
+  gameIndex: number;
+  gameCount: number;
   error: string | null;
   message: string | null;
 }
@@ -52,16 +55,21 @@ interface AnalysisState {
   viewRequest: { view: 'analyse'; nonce: number } | null;
   controlJob: (action: 'pause' | 'resume' | 'stop') => Promise<void>;
   resumeJob: () => Promise<void>;
-  startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean; withPositions?: boolean; posEvery?: number }) => Promise<void>;
+  startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean; withPositions?: boolean; posEvery?: number; detectOnly?: boolean; redetect?: boolean; games?: number[] }) => Promise<void>;
+  /** Réglages communs à la détection et à l'analyse détaillée. */
+  options: { preRoll: number; postRoll: number; posEvery: number };
+  setOptions: (patch: Partial<{ preRoll: number; postRoll: number; posEvery: number }>) => void;
+  /** Analyse détaillée des games choisies, dans l'ordre donné (ce qui est déjà lu et à jour est sauté). */
+  startAnalysis: (gameIds: number[]) => Promise<void>;
 }
 
-const idleJob: JobState = { running: false, jobId: null, paused: false, stage: null, pct: 0, error: null, message: null };
+const idleJob: JobState = { running: false, jobId: null, paused: false, stage: null, pct: 0, gameIndex: 0, gameCount: 0, error: null, message: null };
 
 export const useAnalysisStore = create<AnalysisState>((set, get) => {
   const watchJob = (jobId: string) =>
     subscribeJob(jobId, (e: JobEvent) => {
       if (e.event === 'progress') {
-        set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, error: null, message: null } });
+        set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, gameIndex: e.gameIndex ?? 0, gameCount: e.gameCount ?? 0, error: null, message: null } });
       } else if (e.event === 'done') {
         set({ job: { ...idleJob, message: e.message ?? 'Vidéo chargée' } });
         void get()
@@ -195,11 +203,21 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
     }
   },
 
-  startIngest: async (source, { preRoll, postRoll, skipIfOk, withPositions, posEvery } = {}) => {
+  options: { preRoll: 3, postRoll: 1, posEvery: 6 },
+  setOptions: (patch) => set({ options: { ...get().options, ...patch } }),
+
+  startAnalysis: async (gameIds) => {
+    const video = get().videos.find((v) => v.id === get().videoId);
+    if (!video || gameIds.length === 0) return;
+    const { preRoll, postRoll, posEvery } = get().options;
+    await get().startIngest(video.path, { preRoll, postRoll, withPositions: true, posEvery, games: gameIds });
+  },
+
+  startIngest: async (source, { preRoll, postRoll, skipIfOk, withPositions, posEvery, detectOnly, redetect, games } = {}) => {
     stopBeforeStart = false;
     set({ job: { ...idleJob, running: true } });
     try {
-      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions, posEvery });
+      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions, posEvery, detectOnly, redetect, games });
       if (stopBeforeStart) {
         stopBeforeStart = false;
         await analysisApi.jobControl(jobId, 'stop').catch(() => undefined);

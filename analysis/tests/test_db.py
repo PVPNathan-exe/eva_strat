@@ -141,3 +141,34 @@ def test_zone_priority_is_user_calibration_then_known_map_then_default(tmp_path)
     assert db.zone_for(conn, "Carte inconnue", "minimap") == default
     conn.execute("INSERT INTO calibrations (map, zone, x, y, w, h) VALUES ('Outlaw', 'minimap', 0.1, 0.2, 0.3, 0.4)")
     assert db.zone_for(conn, "Outlaw", "minimap") == {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
+
+
+def _video_with_analysed_game(conn):
+    vid = db.upsert_video(conn, "C:/v.mp4", None, 600.0, 30.0, 1920, 1080)
+    db.replace_detected_games(conn, vid, [{"start_s": 10.0, "end_s": 200.0, "doubts": []}, {"start_s": 300.0, "end_s": 500.0, "doubts": []}])
+    ids = [r["id"] for r in conn.execute("SELECT id FROM games WHERE video_id = ? ORDER BY start_s", (vid,))]
+    conn.execute("INSERT INTO samples (game_id, frame, t, slot, team, x, y, alive) VALUES (?, 0, 10.0, 1, 'A', 0.5, 0.5, 1)", (ids[0],))
+    conn.commit()
+    return vid, ids
+
+
+def test_detecting_again_keeps_an_analysed_game_whose_bounds_did_not_change(tmp_path):
+    conn = make_conn(tmp_path)
+    vid, ids = _video_with_analysed_game(conn)
+    again = [{"start_s": 10.5, "end_s": 199.5, "doubts": [{"start_s": 50, "end_s": 60, "label": "x"}]}, {"start_s": 900.0, "end_s": 1000.0, "doubts": []}]
+    db.replace_detected_games(conn, vid, again)
+    now = [r["id"] for r in conn.execute("SELECT id FROM games WHERE video_id = ? ORDER BY start_s", (vid,))]
+    assert now[0] == ids[0]  # même game : gardée, avec ses positions
+    assert conn.execute("SELECT COUNT(*) AS n FROM samples WHERE game_id = ?", (ids[0],)).fetchone()["n"] == 1
+    assert ids[1] not in now and len(now) == 2  # la game dont les bornes ont disparu est remplacée par la nouvelle
+    assert conn.execute("SELECT doubts FROM games WHERE id = ?", (ids[0],)).fetchone()["doubts"]  # les doutes sont mis à jour
+
+
+def test_confirm_games_and_clean_games_only_touch_the_chosen_ones(tmp_path):
+    conn = make_conn(tmp_path)
+    vid, ids = _video_with_analysed_game(conn)
+    db.confirm_games(conn, [ids[1]])
+    status = {r["id"]: r["status"] for r in conn.execute("SELECT id, status FROM games WHERE video_id = ?", (vid,))}
+    assert status == {ids[0]: "detected", ids[1]: "confirmed"}
+    db.confirm_clean_games(conn, vid, only=[ids[0]])
+    assert conn.execute("SELECT status FROM games WHERE id = ?", (ids[0],)).fetchone()["status"] == "confirmed"

@@ -190,7 +190,7 @@ export function analysisPlugin(): Plugin {
           }
 
           if (url.pathname === '/api/ingest' && method === 'POST') {
-            const body = (await readJson(req)) as { source?: unknown; detect?: unknown; preRoll?: unknown; postRoll?: unknown; skipIfOk?: unknown; positions?: unknown; posEvery?: unknown } | undefined;
+            const body = (await readJson(req)) as { source?: unknown; detect?: unknown; preRoll?: unknown; postRoll?: unknown; skipIfOk?: unknown; positions?: unknown; posEvery?: unknown; detectOnly?: unknown; redetect?: unknown; games?: unknown } | undefined;
             const source = typeof body?.source === 'string' ? body.source.trim() : '';
             if (!source) return sendJson(res, 400, { error: 'Indique un chemin de fichier ou une URL' });
             try {
@@ -204,6 +204,10 @@ export function analysisPlugin(): Plugin {
               }
               if (body?.skipIfOk === true) extra.push('--skip-if-ok');
               if (body?.positions === true) extra.push('--positions');
+              if (body?.detectOnly === true) extra.push('--detect-only');
+              if (body?.redetect === true) extra.push('--redetect');
+              // Games à analyser en détail, dans l'ordre voulu (identifiants entiers seulement : jamais de texte libre dans la ligne de commande).
+              if (Array.isArray(body?.games) && body.games.length > 0 && body.games.length <= 200 && body.games.every((g) => Number.isInteger(g) && g > 0)) extra.push(`--games=${body.games.join(',')}`);
               if (Number.isInteger(body?.posEvery) && (body?.posEvery as number) >= 1 && (body?.posEvery as number) <= 60) extra.push(`--pos-every=${body?.posEvery}`);
               const controlPath = join(root, 'data', 'job.control');
               const job = jobs.start(python, [script, `--source=${source}`, '--db', dbPath, '--cache', cacheDir, `--control=${controlPath}`, ...extra], controlPath);

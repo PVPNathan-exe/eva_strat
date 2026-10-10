@@ -34,7 +34,8 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 ### src/components/analysis (onglets Analyse et Armes)
 
 - `AnalysisTab.tsx` : conteneur de l'onglet Analyse.
-- `IngestBar.tsx` : source (chemin ou URL), bouton Analyser, options, progression, pause et arrêt.
+- `IngestBar.tsx` : source (chemin ou URL), « Détecter les games » (étape 1), options, progression (game en cours), pause et arrêt.
+- `AnalysisPlan.tsx` : panneau « Analyse détaillée » : confirmation des bornes, games à analyser et leur ordre, lancement (étape 2).
 - `GameList.tsx` : games d'une vidéo, bornes, carte, confirmation, suppression.
 - `SegmentTimeline.tsx` : frise des games. `VideoPlayer.tsx` : lecteur sur `/api/videos/:id/stream`. `PlayerControls.tsx` : barre de lecture.
 - `VisionOverlay.tsx` : calques « ce que voit le programme ». `CalibrationEditor.tsx` : zones du HUD par carte.
@@ -54,7 +55,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 ### src/styles
 
 Point d'entrée `index.css` (l'ordre des imports est l'ordre de la cascade). **Les couleurs sont dans `tokens.css`** : les changer là pour tout le site.
-`layout`, `tabs`, `toolbar`, `canvas`, `draw-toolbar`, `floor-selector`, `weapon-panel`, `icons`, `comments`, `replay`, `weapons-tab` (372 lignes), puis `analysis-shell`, `analysis-ingest`, `analysis-games`, `analysis-player`, `analysis-timeline`, `analysis-vision`, `analysis-calibration`.
+`layout`, `tabs`, `toolbar`, `canvas`, `draw-toolbar`, `floor-selector`, `weapon-panel`, `icons`, `comments`, `replay`, `weapons-tab` (372 lignes), puis `analysis-shell`, `analysis-ingest`, `analysis-games`, `analysis-plan`, `analysis-player`, `analysis-timeline`, `analysis-vision`, `analysis-calibration`.
 
 ## server/
 
@@ -88,7 +89,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 ## Flux principaux
 
 **Analyse vidéo**
-1. `IngestBar.tsx` (Analyser) appelle `analysisStore.startIngest` puis `POST /api/ingest`.
+1. `IngestBar.tsx` (« Détecter les games », étape 1) puis `AnalysisPlan.tsx` (étape 2, `analysisStore.startAnalysis`) appellent `POST /api/ingest`.
 2. `server/analysisPlugin.ts` valide et lance `analysis/analyze.py` par `server/jobs.ts` (réponse 202 avec `jobId`).
 3. `analyze.py` : source, games, carte, pseudos, équipements, capture, kills, positions. Une vidéo sans aucune game s'arrête avec une erreur et n'est pas gardée.
 4. Chaque étape écrit dans `data/eva.db` et émet une ligne JSON ; `jobs.ts` les relaie en SSE (`GET /api/jobs/:id/events`) vers `store.job`.
@@ -106,7 +107,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 | Méthode | Route | Rôle |
 |---|---|---|
 | GET | `/api/videos/:id/stream` | vidéo locale (Range) |
-| POST | `/api/ingest` | lance l'analyse, renvoie `{ jobId }` |
+| POST | `/api/ingest` | lance `analyze.py` (`detectOnly`, `redetect`, `games` = identifiants dans l'ordre voulu), renvoie `{ jobId }` |
 | POST | `/api/pick-file` | boîte de fichier Windows |
 | GET | `/api/jobs/current` | analyse en cours et pause |
 | POST | `/api/jobs/:id/pause`, `/resume`, `/stop` | contrôle |

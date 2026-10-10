@@ -1,5 +1,5 @@
-// Barre du haut : source (chemin .mp4 ou URL YouTube), bouton Analyser, progression,
-// et choix de la vidéo déjà analysée.
+// Barre du haut : source (chemin .mp4 ou URL YouTube), bouton « Détecter les games » (première étape : repérer les games par le chrono),
+// progression, et choix de la vidéo déjà chargée. L'analyse détaillée se lance ensuite depuis le panneau « Analyse détaillée » (AnalysisPlan).
 
 import { useState } from 'react';
 import { Pause, Play, Square } from 'lucide-react';
@@ -11,9 +11,11 @@ const STAGE_LABEL = { download: 'Téléchargement', detect: 'Détection des game
 export function IngestBar() {
   const [source, setSource] = useState('');
   const [picking, setPicking] = useState(false);
-  const [preRoll, setPreRoll] = useState(3);
-  const [postRoll, setPostRoll] = useState(1);
-  const [posEvery, setPosEvery] = useState(6);
+  const { preRoll, postRoll, posEvery } = useAnalysisStore((st) => st.options);
+  const setOptions = useAnalysisStore((st) => st.setOptions);
+  const setPreRoll = (v: number) => setOptions({ preRoll: v });
+  const setPostRoll = (v: number) => setOptions({ postRoll: v });
+  const setPosEvery = (v: number) => setOptions({ posEvery: v });
   const [pickError, setPickError] = useState<string | null>(null);
   const videos = useAnalysisStore((s) => s.videos);
   const videoId = useAnalysisStore((s) => s.videoId);
@@ -23,12 +25,12 @@ export function IngestBar() {
   const startIngest = useAnalysisStore((s) => s.startIngest);
   const controlJob = useAnalysisStore((s) => s.controlJob);
 
-  // Champ vide : on réanalyse la vidéo choisie dans le sélecteur.
+  // Champ vide : on reprend la vidéo choisie dans le sélecteur. Un champ rempli désigne toujours un NOUVEAU fichier (ou un autre déjà connu).
   const target = source.trim() || currentVideo?.path || '';
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (target && !job.running) void startIngest(target, { preRoll, postRoll, skipIfOk: true, withPositions: true, posEvery });
+    if (target && !job.running) void startIngest(target, { preRoll, postRoll, skipIfOk: true, detectOnly: true });
   };
 
   const browse = async () => {
@@ -60,9 +62,9 @@ export function IngestBar() {
         <button
           type="submit"
           disabled={job.running || !target}
-          title="Détecte les games (rien n'est relu si elles sont déjà vérifiées), puis extrait les positions des joueurs. Champ vide : vidéo choisie."
+          title="Repère les games par le chrono. Rien n'est relu si la vidéo a déjà ses games : tu confirmes ensuite les bornes et tu choisis quoi analyser dans « Analyse détaillée ». Champ vide : vidéo choisie."
         >
-          Analyser
+          Détecter les games
         </button>
       </form>
 
@@ -112,11 +114,11 @@ export function IngestBar() {
 
       {videoId !== null && currentVideo && (
         <button
-          title="Relit le chrono de la vidéo choisie et propose les games (tes games confirmées ne sont jamais modifiées)"
+          title="Refait la détection de cette vidéo avec les réglages Avant / Après ci-contre. Les games dont les bornes ne changent pas gardent leur analyse ; tes games confirmées ne sont jamais modifiées."
           disabled={job.running}
-          onClick={() => void startIngest(currentVideo.path, { preRoll, postRoll, skipIfOk: true })}
+          onClick={() => void startIngest(currentVideo.path, { preRoll, postRoll, skipIfOk: true, detectOnly: true, redetect: true })}
         >
-          Détecter les games
+          Refaire la détection
         </button>
       )}
 
@@ -135,7 +137,10 @@ export function IngestBar() {
         <div className="ingest__progress">
           {job.stage ? (
             <>
-              <span>{job.paused ? 'En pause' : `${STAGE_LABEL[job.stage]}…`} {Math.round(job.pct)} %</span>
+              <span>
+                {job.gameCount > 0 ? `Game ${job.gameIndex} sur ${job.gameCount} · ` : ''}
+                {job.paused ? 'En pause' : `${STAGE_LABEL[job.stage]}…`} {Math.round(job.pct)} %
+              </span>
               <progress value={job.pct} max={100} />
             </>
           ) : (

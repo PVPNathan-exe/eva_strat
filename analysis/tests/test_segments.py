@@ -58,3 +58,21 @@ def test_post_roll_extends_end_to_victory_screen():
     assert games[0]["end_s"] == 100 + 1 + 8
     games = segments.detect_games(clock(600, 5, 100), duration=102, post_roll=8)
     assert games[0]["end_s"] == 102  # jamais au-delà de la vidéo
+
+
+def test_start_is_where_the_clock_really_starts_to_run_when_it_first_shows_other_values():
+    """Replay brut (vu sur NCT vs SNV) : l'horloge affiche 12:00 figée, 11:00, puis 10:00 et ne descend vraiment qu'à partir de là."""
+    intro = [(100 + k, 720) for k in range(25)] + [(125, 660)]
+    run = [(126 + k, 600 - k) for k in range(80)]  # 10:00 à t = 126 s, puis une seconde par seconde
+    games = segments.detect_games(intro + run, duration=400, pre_roll=1.0, post_roll=1.0)
+    assert len(games) == 1
+    assert 123.5 <= games[0]["start_s"] <= 126.5  # et non une minute trop tôt (le départ ne peut pas être à 12:00)
+
+
+def test_a_clock_frozen_twice_before_it_runs_starts_after_the_last_freeze():
+    """Replay brut : 12:00 figé, 11:00, puis 10:00 figé 80 s (pause) avant de descendre : le départ est la fin de la dernière pause."""
+    intro = [(100 + k, 720) for k in range(25)] + [(125, 660)] + [(126 + k, 600) for k in range(80)]
+    run = [(206 + k, 599 - k) for k in range(80)]
+    games = segments.detect_games(intro + run, duration=500, pre_roll=1.0, post_roll=1.0)
+    assert len(games) == 1
+    assert 203 <= games[0]["start_s"] <= 207

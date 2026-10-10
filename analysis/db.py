@@ -116,29 +116,44 @@ def _check_confirmed(conn, confirmed, games):
 
 
 def replace_detected_games(conn, video_id, games, keep_ok=False):
-    """Remplace les games détectées d'une vidéo. Les games confirmées ne sont jamais touchées ni chevauchées :
-    on vérifie seulement leurs bornes contre la détection."""
-    conn.execute("DELETE FROM games WHERE video_id = ? AND status = 'detected'", (video_id,))
-    confirmed = conn.execute("SELECT id, start_s, end_s FROM games WHERE video_id = ?", (video_id,)).fetchall()
+    """Met à jour les games détectées d'une vidéo. Les games confirmées ne sont jamais touchées ni chevauchées : on vérifie seulement leurs bornes
+    contre la détection. Une game détectée qui a les mêmes bornes (à BOUNDS_TOLERANCE_S près) qu'une détection précédente est GARDÉE telle quelle,
+    avec ses pseudos, kills et positions : relancer la détection ne détruit pas une analyse déjà faite. Seules les games dont les bornes ont
+    changé (autres réglages, autre détection) sont remplacées."""
+    previous = [dict(r) for r in conn.execute("SELECT id, start_s, end_s FROM games WHERE video_id = ? AND status = 'detected' ORDER BY start_s", (video_id,))]
+    confirmed = conn.execute("SELECT id, start_s, end_s FROM games WHERE video_id = ? AND status = 'confirmed'", (video_id,)).fetchall()
     skipped = {r["id"] for r in ok_games(conn, video_id)} if keep_ok else set()
     _check_confirmed(conn, [c for c in confirmed if c["id"] not in skipped], games)
-    added = 0
+    kept, added = set(), 0
     for g in games:
         if any(g["start_s"] < c["end_s"] and g["end_s"] > c["start_s"] for c in confirmed):
             continue
-        conn.execute(
-            "INSERT INTO games (video_id, start_s, end_s, status, doubts) VALUES (?, ?, ?, 'detected', ?)",
-            (video_id, g["start_s"], g["end_s"], json.dumps(g["doubts"], ensure_ascii=False) if g["doubts"] else None),
-        )
+        doubts = json.dumps(g["doubts"], ensure_ascii=False) if g["doubts"] else None
+        same = next((p for p in previous if p["id"] not in kept and abs(p["start_s"] - g["start_s"]) <= BOUNDS_TOLERANCE_S and abs(p["end_s"] - g["end_s"]) <= BOUNDS_TOLERANCE_S), None)
+        if same:
+            kept.add(same["id"])
+            conn.execute("UPDATE games SET doubts = ? WHERE id = ?", (doubts, same["id"]))
+            continue
+        conn.execute("INSERT INTO games (video_id, start_s, end_s, status, doubts) VALUES (?, ?, ?, 'detected', ?)", (video_id, g["start_s"], g["end_s"], doubts))
         added += 1
+    for p in previous:
+        if p["id"] not in kept:
+            conn.execute("DELETE FROM games WHERE id = ?", (p["id"],))
     conn.commit()
     return added
 
 
-def confirm_clean_games(conn, video_id):
+def confirm_games(conn, game_ids):
+    """Confirme des games (lancer l'analyse d'une game vaut confirmation de ses bornes)."""
+    conn.executemany("UPDATE games SET status = 'confirmed', checked = 1 WHERE id = ? AND status = 'detected'", [(i,) for i in game_ids])
+    conn.commit()
+
+
+def confirm_clean_games(conn, video_id, only=None):
     """Confirme les games détectées sans aucun doute : l'analyse complète les a lues, inutile de redemander les bornes.
-    Celles qui ont une zone à vérifier restent « détectées » pour que l'utilisateur les regarde."""
-    conn.execute("UPDATE games SET status = 'confirmed', checked = 1 WHERE video_id = ? AND status = 'detected' AND doubts IS NULL", (video_id,))
+    Celles qui ont une zone à vérifier restent « détectées » pour que l'utilisateur les regarde. only : identifiants concernés (sinon toute la vidéo)."""
+    extra = f" AND id IN ({','.join('?' * len(only))})" if only else ""
+    conn.execute("UPDATE games SET status = 'confirmed', checked = 1 WHERE video_id = ? AND status = 'detected' AND doubts IS NULL" + extra, (video_id, *(only or [])))
     conn.commit()
 
 

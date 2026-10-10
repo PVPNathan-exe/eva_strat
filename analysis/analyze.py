@@ -49,6 +49,14 @@ def gaps_around(ok, duration):
     return gaps
 
 
+def only_games(todo, only):
+    """Restreint une liste de games à lire aux identifiants demandés (dans l'ordre demandé). only=None : toutes, dans l'ordre de la vidéo."""
+    if only is None:
+        return todo
+    order = {gid: i for i, gid in enumerate(only)}
+    return sorted((g for g in todo if g["id"] in order), key=lambda g: order[g["id"]])
+
+
 def wait_if_paused(control):
     """Bloque tant que le fichier de contrôle existe (pause demandée par l'interface)."""
     while control and Path(control).exists():
@@ -97,9 +105,9 @@ def fill_maps(conn, video_id, path, meta, emit, control=None):
     conn.commit()
 
 
-def extract_names(conn, video_id, path, meta, emit, control=None):
+def extract_names(conn, video_id, path, meta, emit, control=None, only=None):
     """Pseudos des joueurs des games qui n'en ont pas encore (lus sur les bandeaux). Renvoie (games lues, message d'échec ou None)."""
-    todo = db.games_without_players(conn, video_id)
+    todo = only_games(db.games_without_players(conn, video_id), only)
     done = 0
     for i, g in enumerate(todo):
         wait_if_paused(control)
@@ -115,9 +123,9 @@ def extract_names(conn, video_id, path, meta, emit, control=None):
     return done, None
 
 
-def extract_capture(conn, video_id, path, meta, emit, control=None):
+def extract_capture(conn, video_id, path, meta, emit, control=None, only=None):
     """Score de capture (% de chaque équipe) des games qui n'en ont pas encore, lu de part et d'autre du chrono."""
-    todo = db.games_without_capture(conn, video_id)
+    todo = only_games(db.games_without_capture(conn, video_id), only)
     for i, g in enumerate(todo):
         def progress(pct, i=i):
             emit({"event": "progress", "stage": "capture", "pct": round((i + pct / 100) / len(todo) * 100, 1)})
@@ -128,9 +136,9 @@ def extract_capture(conn, video_id, path, meta, emit, control=None):
     return len(todo)
 
 
-def extract_loadouts(conn, video_id, path, meta, emit, control=None):
+def extract_loadouts(conn, video_id, path, meta, emit, control=None, only=None):
     """Équipement (armes et gadget) des joueurs des games qui n'en ont pas encore, lu sur les bandeaux."""
-    todo = db.games_without_loadouts(conn, video_id)
+    todo = only_games(db.games_without_loadouts(conn, video_id), only)
     for i, g in enumerate(todo):
         wait_if_paused(control)
         emit({"event": "progress", "stage": "loadout", "pct": round(100 * i / len(todo), 1)})
@@ -193,13 +201,13 @@ def infer_killer(candidates, hint_name, weapon_name_of):
     return None
 
 
-def infer_killers(conn, video_id, path, meta, emit, control=None):
+def infer_killers(conn, video_id, path, meta, emit, control=None, only=None):
     """Kills dont le tueur n'a pas pu être lu : on cherche par élimination parmi les adversaires en vie (positions de la minimap),
     avec l'arme tenue sur leur bandeau à ce moment et leur distance à la victime. Le programme n'accepte que ce qui est cohérent ;
     le reste garde « tueur ? ». Un tueur déduit est marqué kind = « inferred »."""
     disp = weapons.display_names()
     name_of = lambda i: str(disp.get(i, "")).strip().upper() or None
-    todo = db.games_with_unknown_killers(conn, video_id)
+    todo = only_games(db.games_with_unknown_killers(conn, video_id), only)
     for i, g in enumerate(todo):
         wait_if_paused(control)
         emit({"event": "progress", "stage": "kills", "pct": round(100 * i / len(todo), 1)})
@@ -235,9 +243,9 @@ def _bar_zones(conn, g):
     return {key: db.zone_for(conn, g["map"], key) for key in ("team_a_bar", "team_b_bar")}
 
 
-def upgrade_kill_weapons(conn, video_id, path, meta, emit, control=None):
+def upgrade_kill_weapons(conn, video_id, path, meta, emit, control=None, only=None):
     """Kills déjà lus avec une icône de killfeed (« W… ») : l'arme est relue sur le bandeau du tueur, sans relire le killfeed."""
-    todo = db.games_with_icon_kills(conn, video_id)
+    todo = only_games(db.games_with_icon_kills(conn, video_id), only)
     for i, g in enumerate(todo):
         wait_if_paused(control)
         emit({"event": "progress", "stage": "kills", "pct": round(100 * i / len(todo), 1)})
@@ -253,9 +261,9 @@ def upgrade_kill_weapons(conn, video_id, path, meta, emit, control=None):
     return len(todo)
 
 
-def extract_kills(conn, video_id, path, meta, emit, control=None):
+def extract_kills(conn, video_id, path, meta, emit, control=None, only=None):
     """Killfeed des games qui ont leurs pseudos et pas encore de kills lus. Renvoie le nombre de games lues, ou (n, erreur)."""
-    todo = db.games_without_kills(conn, video_id)
+    todo = only_games(db.games_without_kills(conn, video_id), only)
     done = 0
     for i, g in enumerate(todo):
         def progress(pct, i=i):
@@ -279,9 +287,9 @@ def extract_kills(conn, video_id, path, meta, emit, control=None):
     return done, None
 
 
-def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=positions.STEP_S):
+def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=positions.STEP_S, only=None):
     """Positions des joueurs des games qui n'en ont pas encore. Chaque game est enregistrée d'un seul bloc."""
-    todo = db.games_without_samples(conn, video_id, step_s, tracking.PARAMS_VERSION, use_kills=True)
+    todo = only_games(db.games_without_samples(conn, video_id, step_s, tracking.PARAMS_VERSION, use_kills=True), only)
     for i, g in enumerate(todo):
         def progress(pct, i=i):
             emit({"event": "progress", "stage": "positions", "pct": round((i + pct / 100) / len(todo) * 100, 1), "game": i + 1, "games": len(todo)})
@@ -296,7 +304,13 @@ def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=pos
     return len(todo)
 
 
-def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False, control=None, with_positions=False, pos_every=positions.EVERY_FRAMES):
+def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=segments.PRE_ROLL_S, post_roll=segments.POST_ROLL_S, skip_if_ok=False, control=None, with_positions=False, pos_every=positions.EVERY_FRAMES, detect_only=False, redetect=False, games=None):
+    """Analyse une vidéo en deux temps que l'utilisateur sépare :
+      1. détection des games (chrono) et de leur carte ; elle n'est refaite que si la vidéo n'a encore aucune game ou si redetect est demandé,
+         et elle conserve les games déjà analysées dont les bornes n'ont pas changé ;
+      2. lecture détaillée (pseudos, équipements, score, kills, positions) game par game, dans l'ordre de `games` (identifiants) ou dans celui de la vidéo.
+         Ce qui est déjà lu et à jour est sauté : rien n'est recalculé sauf si les réglages ou l'algorithme ont changé.
+    detect_only : s'arrêter après l'étape 1 (l'utilisateur confirme les bornes avant l'analyse détaillée)."""
     conn = db.connect(db_path)
     source_url = None
 
@@ -314,13 +328,10 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
 
     meta = ingest.probe(path)
     video_id = db.upsert_video(conn, str(path.resolve()), source_url, **meta)
+    known = conn.execute("SELECT COUNT(*) AS n FROM games WHERE video_id = ?", (video_id,)).fetchone()["n"]
 
-    verified = skip_if_ok and db.all_verified(conn, video_id)
-    if verified and not with_positions:
-        emit({"event": "done", "video_id": video_id, "message": "Toutes les games sont déjà vérifiées : rien à relancer"})
-        return
-
-    if do_detect and not verified:
+    detected_now = do_detect and (redetect or known == 0)
+    if detected_now:
         emit({"event": "progress", "stage": "detect", "pct": 0})
         ok = db.ok_games(conn, video_id) if skip_if_ok else []
         ranges = gaps_around(ok, meta["duration_s"]) if ok else None
@@ -329,32 +340,39 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
         if not conn.execute("SELECT 1 FROM games WHERE video_id = ?", (video_id,)).fetchone():
             db.drop_video_if_empty(conn, video_id)
             raise ValueError("Aucune game trouvée dans cette vidéo (chrono introuvable) : ce n'est pas une rediff EVA exploitable. Analyse arrêtée.")
-    if not verified:
-        fill_maps(conn, video_id, path, meta, emit, control)
+    fill_maps(conn, video_id, path, meta, emit, control)  # ne lit que les games sans carte
 
-    message = "Games déjà vérifiées" if verified else None
-    if with_positions:
-        n_names, names_error = extract_names(conn, video_id, path, meta, emit, control)
+    total = conn.execute("SELECT COUNT(*) AS n FROM games WHERE video_id = ?", (video_id,)).fetchone()["n"]
+    if detect_only or not with_positions:
+        message = f"{total} game(s) détectée(s)" if detected_now else f"{total} game(s) déjà détectée(s) : rien à relire"
+        emit({"event": "done", "video_id": video_id, "message": message + (" : vérifie les bornes, puis lance l'analyse" if detect_only else "")})
+        return
+
+    all_ids = [r["id"] for r in conn.execute("SELECT id FROM games WHERE video_id = ? ORDER BY start_s", (video_id,))]
+    order = [i for i in (games if games is not None else all_ids) if i in all_ids]
+    db.confirm_games(conn, order)  # lancer l'analyse d'une game vaut confirmation de ses bornes
+    step_s = pos_every / meta["fps"] if meta.get("fps") else positions.STEP_S
+    problems, positions_read = [], 0
+    for n, gid in enumerate(order, 1):
+        def tag(event, n=n):
+            if event.get("event") == "progress":
+                event = {**event, "gameIndex": n, "gameCount": len(order)}
+            emit(event)
+
+        _, names_error = extract_names(conn, video_id, path, meta, tag, control, only=[gid])
         if names_error:
-            message = f"{message} · pseudos non lus ({names_error})" if message else f"Pseudos non lus ({names_error})"
-        extract_loadouts(conn, video_id, path, meta, emit, control)
-        extract_capture(conn, video_id, path, meta, emit, control)
-        n_kills, kills_error = extract_kills(conn, video_id, path, meta, emit, control)
-        upgrade_kill_weapons(conn, video_id, path, meta, emit, control)
+            problems.append(f"pseudos non lus ({names_error})")
+        extract_loadouts(conn, video_id, path, meta, tag, control, only=[gid])
+        extract_capture(conn, video_id, path, meta, tag, control, only=[gid])
+        _, kills_error = extract_kills(conn, video_id, path, meta, tag, control, only=[gid])
+        upgrade_kill_weapons(conn, video_id, path, meta, tag, control, only=[gid])
         if kills_error:
-            message = f"{message} · killfeed non lu ({kills_error})" if message else f"Killfeed non lu ({kills_error})"
-        step_s = pos_every / meta["fps"] if meta.get("fps") else positions.STEP_S
-        n = extract_positions(conn, video_id, path, meta, emit, control, step_s=step_s)
-        infer_killers(conn, video_id, path, meta, emit, control)
-        text = f"positions lues sur {n} game(s)" if n else "positions déjà à jour"
-        message = f"{message} · {text}" if message else text.capitalize()
-
-    if with_positions:
-        db.confirm_clean_games(conn, video_id)  # l'analyse complète a lu ces games : les bornes sans doute n'ont pas à être revalidées
-    event = {"event": "done", "video_id": video_id}
-    if message:
-        event["message"] = message
-    emit(event)
+            problems.append(f"killfeed non lu ({kills_error})")
+        positions_read += extract_positions(conn, video_id, path, meta, tag, control, step_s=step_s, only=[gid])
+        infer_killers(conn, video_id, path, meta, tag, control, only=[gid])
+    db.confirm_clean_games(conn, video_id, only=order)
+    text = f"positions lues sur {positions_read} game(s) sur {len(order)}" if positions_read else "tout est déjà à jour : rien à relire"
+    emit({"event": "done", "video_id": video_id, "message": " · ".join(dict.fromkeys(problems + [text]))})
 
 
 def main(argv=None, emit=print_event):
@@ -369,9 +387,12 @@ def main(argv=None, emit=print_event):
     parser.add_argument("--control", default=None, help="Fichier dont la présence met l'analyse en pause")
     parser.add_argument("--pos-every", type=int, default=positions.EVERY_FRAMES, help="Une lecture de la minimap toutes les N images (positions)")
     parser.add_argument("--positions", action="store_true", help="Lire aussi les positions des joueurs (minimap)")
+    parser.add_argument("--detect-only", action="store_true", help="Détecter les games puis s'arrêter (l'utilisateur confirme les bornes avant l'analyse détaillée)")
+    parser.add_argument("--redetect", action="store_true", help="Refaire la détection des games même si la vidéo en a déjà (les games inchangées sont gardées)")
+    parser.add_argument("--games", default=None, help="Identifiants des games à analyser en détail, dans l'ordre voulu (ex. 12,3,7) ; sinon toutes")
     args = parser.parse_args(argv)
     try:
-        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok, control=args.control, with_positions=args.positions, pos_every=args.pos_every)
+        run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok, control=args.control, with_positions=args.positions, pos_every=args.pos_every, detect_only=args.detect_only, redetect=args.redetect, games=[int(i) for i in args.games.split(",") if i] if args.games else None)
     except Exception as exc:  # noqa: BLE001 - tout échec doit être signalé à l'UI
         emit({"event": "error", "message": str(exc)})
         return 1

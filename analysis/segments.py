@@ -56,6 +56,28 @@ def _split(readings, gap_s):
     return groups
 
 
+ORIGIN_READINGS = 40  # lectures de la suite cohérente examinées pour retrouver l'instant du départ
+RUN_READINGS = 8  # une suite de lectures qui descendent d'une seconde par seconde, sur au moins ce nombre de lectures, est le vrai chrono
+
+
+def _is_run(seg):
+    """Vrai si les lectures descendent d'une seconde par seconde (à une seconde près : une lecture manquante allonge l'écart des deux côtés)
+    ET que le chrono baisse vraiment d'autant que le temps passe : un chrono figé (compte à rebours, pause) n'est pas une suite."""
+    if len(seg) < RUN_READINGS or not all(abs((a[1] - b[1]) - (b[0] - a[0])) <= 1 for a, b in zip(seg, seg[1:])):
+        return False
+    return (seg[0][1] - seg[-1][1]) >= 0.7 * (seg[-1][0] - seg[0][0])
+
+
+def _origin(group, plateau):
+    """Instant où le chrono a commencé à descendre. On cherche la première suite cohérente (une seconde par seconde) après le plateau : sur un replay
+    brut le chrono peut afficher 12:00 (figé), 11:00 puis 10:00 avant de descendre vraiment, et le départ n'est alors pas à 12:00.
+    Si la suite continue la valeur du plateau (normal), on extrapole jusqu'à l'instant où il l'a quittée ; sinon le départ est le début de la suite."""
+    n = len(group)
+    j = next((i for i in range(plateau, n) if _is_run(group[i : i + RUN_READINGS])), plateau)
+    v_ref = group[j - 1][1] if j > 0 and abs(group[j - 1][1] - group[j][1]) <= 2 else group[j][1]
+    return median(t - (v_ref - v) for t, v in group[j : j + ORIGIN_READINGS]) - 0.5
+
+
 def _build_game(group, doubts, duration, pre_roll, post_roll):
     t_first, v_first = group[0]
     t_last, v_last = group[-1]
@@ -66,8 +88,7 @@ def _build_game(group, doubts, duration, pre_roll, post_roll):
         plateau += 1
     if plateau >= 2 and plateau < len(group):
         # Compte à rebours vu : on retrouve l'instant où le chrono a quitté sa valeur de départ.
-        starts = [t - (v_first - v) for t, v in group[plateau : plateau + 10]]
-        origin = median(starts) - 0.5
+        origin = _origin(group, plateau)
         start = max(0.0, origin - pre_roll)
     else:
         start = max(0.0, t_first - pre_roll)

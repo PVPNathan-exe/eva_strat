@@ -40,3 +40,10 @@ def test_gaps_around_games_already_ok():
     # trou de 10 s ignoré ; avant, entre et après les games en ordre sinon
     assert analyze.gaps_around(ok, 1000.0) == [(0.0, 100.0), (500.0, 700.0), (900.0, 1000.0)]
     assert analyze.gaps_around([], 1000.0) == [(0.0, 1000.0)]
+
+
+def test_only_games_keeps_the_requested_order_and_ignores_the_others():
+    todo = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}]
+    assert [g["id"] for g in analyze.only_games(todo, [3, 1])] == [3, 1]
+    assert [g["id"] for g in analyze.only_games(todo, None)] == [1, 2, 3, 4]
+    assert analyze.only_games(todo, [9]) == []
