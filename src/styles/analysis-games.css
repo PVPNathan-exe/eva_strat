@@ -110,3 +110,27 @@
 .analysis__calibrate {
   align-self: flex-start;
 }
+
+.game__teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.3rem 0;
+}
+
+.game__team {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--c-text-muted);
+}
+
+.game__team input {
+  width: 9rem;
+  padding: 0.2rem 0.4rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+}

@@ -15,6 +15,8 @@ export function openDb(path: string, schemaPath: string): DatabaseSync {
   const columns = db.prepare('PRAGMA table_info(games)').all() as { name: string }[];
   if (!columns.some((c) => c.name === 'doubts')) db.exec('ALTER TABLE games ADD COLUMN doubts TEXT');
   if (!columns.some((c) => c.name === 'checked')) db.exec('ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0');
+  if (!columns.some((c) => c.name === 'team_a')) db.exec('ALTER TABLE games ADD COLUMN team_a TEXT');
+  if (!columns.some((c) => c.name === 'team_b')) db.exec('ALTER TABLE games ADD COLUMN team_b TEXT');
   const killCols = db.prepare('PRAGMA table_info(kills)').all() as { name: string }[];
   if (killCols.length && !killCols.some((c) => c.name === 'headshot')) db.exec('ALTER TABLE kills ADD COLUMN headshot INTEGER NOT NULL DEFAULT 0');
   if (killCols.length && !killCols.some((c) => c.name === 'kind')) db.exec('ALTER TABLE kills ADD COLUMN kind TEXT');

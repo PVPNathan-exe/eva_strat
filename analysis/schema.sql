@@ -19,9 +19,17 @@ CREATE TABLE IF NOT EXISTS games (
   winner TEXT,
   checked INTEGER NOT NULL DEFAULT 0,  -- 1 : bornes comparées à la détection automatique (remis à 0 si on les déplace)
   doubts TEXT,  -- JSON : zones à vérifier [{start_s, end_s, label}] posées par la détection automatique
+  team_a TEXT,  -- nom de l'équipe orange (côté gauche, joueurs 1 à 4), saisi par l'utilisateur
+  team_b TEXT,  -- nom de l'équipe bleue (côté droit, joueurs 5 à 8)
   CHECK (end_s > start_s)
 );
 CREATE INDEX IF NOT EXISTS idx_games_video ON games(video_id);
+
+-- Diminutifs d'équipe (préfixe commun des pseudos, ex. SNV) et nom complet saisi par l'utilisateur : le diminutif ne vaut pas pour toutes les équipes.
+CREATE TABLE IF NOT EXISTS teams (
+  tag TEXT PRIMARY KEY,
+  name TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS calibrations (
   map TEXT NOT NULL,

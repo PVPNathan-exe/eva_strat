@@ -39,6 +39,10 @@ interface AnalysisState {
   updateComment: (id: number, patch: Partial<{ text: string; tag: CommentTag; resolved: boolean; slots: number[] }>) => Promise<void>;
   removeComment: (id: number) => Promise<void>;
   weapons: Weapon[] | null;
+  /** Diminutifs d'équipe connus (SNV -> nom complet), retenus quand l'utilisateur nomme une équipe. */
+  teams: Record<string, string>;
+  loadTeams: () => Promise<void>;
+  rememberTeam: (tag: string, name: string) => Promise<void>;
   weaponPromptOpen: boolean;
   loadWeapons: (promptIfNew?: boolean) => Promise<void>;
   nameWeapon: (id: string, name: string) => Promise<void>;
@@ -95,6 +99,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
   seekRequest: null,
   job: idleJob,
   weapons: null,
+  teams: {},
+  loadTeams: async () => set({ teams: await analysisApi.teams() }),
+  rememberTeam: async (tag, name) => {
+    await analysisApi.setTeam(tag, name);
+    set({ teams: { ...get().teams, [tag]: name } });
+  },
   weaponPromptOpen: false,
   comments: [],
 

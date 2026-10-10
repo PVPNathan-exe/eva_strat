@@ -269,3 +269,22 @@ test('un commentaire invalide est refusé : texte vide, catégorie inconnue, ins
   assert.equal(handleApi(ctx, 'POST', '/api/comments', q(), { video_id: 999, t: 1, text: 'ok' }).status, 404);
   assert.equal(handleApi(ctx, 'GET', '/api/comments', q(), undefined).status, 400);
 });
+
+test('les noms des équipes d\'une game se saisissent et se lisent, et un diminutif retient son nom complet', () => {
+  const ctx = testContext();
+  const video = insertVideo(ctx);
+  const created = handleApi(ctx, 'POST', '/api/games', q(), { video_id: video, start_s: 10, end_s: 400 });
+  const id = (created.json as { id: number }).id;
+  assert.equal(handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { team_a: '  Snake Venom ', team_b: 'NCT' }).status, 200);
+  const game = (handleApi(ctx, 'GET', '/api/games', q(`video=${video}`), undefined).json as { team_a: string; team_b: string }[])[0];
+  assert.deepEqual([game.team_a, game.team_b], ['Snake Venom', 'NCT']);
+  handleApi(ctx, 'PATCH', `/api/games/${id}`, q(), { team_a: '' });  // vider efface ; l'autre équipe est conservée
+  const again = (handleApi(ctx, 'GET', '/api/games', q(`video=${video}`), undefined).json as { team_a: string | null; team_b: string }[])[0];
+  assert.deepEqual([again.team_a, again.team_b], [null, 'NCT']);
+
+  assert.equal(handleApi(ctx, 'PUT', '/api/teams', q(), { tag: 'snv', name: 'Snake Venom' }).status, 200);
+  assert.deepEqual(handleApi(ctx, 'GET', '/api/teams', q(), undefined).json, { SNV: 'Snake Venom' });
+  assert.equal(handleApi(ctx, 'PUT', '/api/teams', q(), { tag: 'x', name: 'Trop court' }).status, 400);
+  handleApi(ctx, 'PUT', '/api/teams', q(), { tag: 'SNV', name: '' });
+  assert.deepEqual(handleApi(ctx, 'GET', '/api/teams', q(), undefined).json, {});
+});

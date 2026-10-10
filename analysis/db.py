@@ -21,6 +21,9 @@ def connect(db_path):
         conn.execute("ALTER TABLE games ADD COLUMN doubts TEXT")
     if "checked" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
         conn.execute("ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0")
+    if "team_a" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
+        conn.execute("ALTER TABLE games ADD COLUMN team_a TEXT")
+        conn.execute("ALTER TABLE games ADD COLUMN team_b TEXT")
     _migrate_calibrations(conn)
     if "kind" not in {row["name"] for row in conn.execute("PRAGMA table_info(kills)")}:
         conn.execute("ALTER TABLE kills ADD COLUMN kind TEXT")

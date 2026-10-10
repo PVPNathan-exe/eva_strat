@@ -109,6 +109,9 @@ export interface Game {
   map: string | null;
   status: GameStatus;
   winner: string | null;
+  /** Nom de l'équipe orange (gauche, joueurs 1 à 4) et de l'équipe bleue (droite, joueurs 5 à 8), saisis par l'utilisateur. */
+  team_a: string | null;
+  team_b: string | null;
   doubts: Doubt[];
   samples: number;
   players: { slot: number; name: string; weapon1: string | null; weapon2: string | null; gadget: string | null }[];

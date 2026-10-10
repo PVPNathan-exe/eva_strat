@@ -54,7 +54,7 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const videoId = Number(query.get('video'));
   if (!Number.isInteger(videoId)) return fail('Paramètre video manquant');
   const rows = ctx.db
-    .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples FROM games WHERE video_id = ? ORDER BY start_s')
+    .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, team_a, team_b, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples FROM games WHERE video_id = ? ORDER BY start_s')
     .all(videoId) as Row[];
   type KillOut = { t: number; killer: number | null; victim: number; weapon: string | null; weaponName: string | null; stuff: string | null; headshot: boolean; kind: string | null };
   const kills = new Map<number, KillOut[]>();
@@ -118,6 +118,9 @@ function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
   const status = body.status ?? current.status;
   if (typeof status !== 'string' || !STATUSES.includes(status)) return fail('Statut inconnu');
   const map = 'map' in body ? (typeof body.map === 'string' && body.map ? body.map : null) : (current.map as string | null);
+  const teamName = (key: 'team_a' | 'team_b') => (key in body ? (typeof body[key] === 'string' && body[key].trim() ? body[key].trim().slice(0, 60) : null) : (current[key] as string | null));
+  const teamA = teamName('team_a');
+  const teamB = teamName('team_b');
   const winner = 'winner' in body ? (typeof body.winner === 'string' && body.winner ? body.winner : null) : (current.winner as string | null);
   // Des bornes déplacées rendent les positions déjà lues caduques : elles seront relues à la prochaine analyse.
   if ('start_s' in body || 'end_s' in body) {
@@ -129,8 +132,24 @@ function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
   // Les zones à vérifier ne valent plus rien une fois la game confirmée ou ses bornes déplacées.
   const clearDoubts = status !== current.status || 'start_s' in body || 'end_s' in body;
   ctx.db
-    .prepare('UPDATE games SET start_s = ?, end_s = ?, map = ?, status = ?, winner = ?, doubts = CASE WHEN ? THEN NULL ELSE doubts END, checked = CASE WHEN ? THEN 0 ELSE checked END WHERE id = ?')
-    .run(start as number, end as number, map, status, winner, clearDoubts ? 1 : 0, 'start_s' in body || 'end_s' in body ? 1 : 0, id);
+    .prepare('UPDATE games SET start_s = ?, end_s = ?, map = ?, status = ?, winner = ?, team_a = ?, team_b = ?, doubts = CASE WHEN ? THEN NULL ELSE doubts END, checked = CASE WHEN ? THEN 0 ELSE checked END WHERE id = ?')
+    .run(start as number, end as number, map, status, winner, teamA, teamB, clearDoubts ? 1 : 0, 'start_s' in body || 'end_s' in body ? 1 : 0, id);
+  return reply(200, { ok: true });
+}
+
+/** Diminutifs d'équipe connus : { SNV: 'Nom complet' }. */
+function listTeams(ctx: ApiContext): ApiResult {
+  const rows = ctx.db.prepare('SELECT tag, name FROM teams').all() as { tag: string; name: string }[];
+  return reply(200, Object.fromEntries(rows.map((r) => [r.tag, r.name])));
+}
+
+/** Retient le nom complet d'un diminutif (nom vide : on l'oublie). */
+function putTeam(ctx: ApiContext, body: Row): ApiResult {
+  const tag = typeof body.tag === 'string' ? body.tag.trim().toUpperCase() : '';
+  if (!/^[A-Z0-9]{2,8}$/.test(tag)) return fail('Diminutif invalide (2 à 8 lettres ou chiffres)');
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 60) : '';
+  if (!name) ctx.db.prepare('DELETE FROM teams WHERE tag = ?').run(tag);
+  else ctx.db.prepare('INSERT INTO teams (tag, name) VALUES (?, ?) ON CONFLICT(tag) DO UPDATE SET name = excluded.name').run(tag, name);
   return reply(200, { ok: true });
 }
 
@@ -353,6 +372,10 @@ export function handleApi(
     const id = Number(gameMatch[1]);
     if (method === 'PATCH') return patchGame(ctx, id, payload);
     if (method === 'DELETE') return deleteGame(ctx, id);
+  }
+  if (pathname === '/api/teams') {
+    if (method === 'GET') return listTeams(ctx);
+    if (method === 'PUT') return putTeam(ctx, payload);
   }
   if (pathname === '/api/calibrations') {
     if (method === 'GET') return getCalibration(ctx, query);

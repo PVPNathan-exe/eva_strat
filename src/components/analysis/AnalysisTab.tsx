@@ -11,6 +11,7 @@ import { VideoPlayer } from './VideoPlayer';
 
 export function AnalysisTab() {
   const loadVideos = useAnalysisStore((s) => s.loadVideos);
+  const loadTeams = useAnalysisStore((s) => s.loadTeams);
   const videoId = useAnalysisStore((s) => s.videoId);
   const video = useAnalysisStore((s) => s.videos.find((v) => v.id === s.videoId));
 
@@ -22,7 +23,8 @@ export function AnalysisTab() {
 
   useEffect(() => {
     void loadVideos();
-  }, [loadVideos]);
+    void loadTeams().catch(() => undefined);
+  }, [loadVideos, loadTeams]);
 
   return (
     <div className="analysis">

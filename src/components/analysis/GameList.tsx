@@ -8,6 +8,7 @@ import { builtinMaps } from '../../lib/builtinMaps';
 import { formatTime } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game } from '../../types/analysis';
+import { GameTeams } from './GameTeams';
 
 export function GameList({ videoId, duration }: { videoId: number; duration: number }) {
   const games = useAnalysisStore((s) => s.games);
@@ -75,6 +76,7 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
         </div>
       )}
       {g.samples > 0 && <div className="game__positions">Positions lues ({g.samples} points)</div>}
+      <GameTeams game={g} />
       <div className="game__actions">
         <select value={g.map ?? ''} onChange={(e) => void act(() => analysisApi.patchGame(g.id, { map: e.target.value || null }))}>
           <option value="">Carte ?</option>

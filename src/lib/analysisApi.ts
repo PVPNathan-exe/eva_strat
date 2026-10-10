@@ -31,6 +31,8 @@ export const analysisApi = {
   reviewWeapon: (id: string, review: { verdict?: 'ok' | 'bad' | null; reported?: boolean; reason?: string; locked?: boolean }) =>
     fetch(`/api/weapons/${id}/review`, jsonInit('POST', review)).then(parse<{ ok: true }>),
   auditWeapons: () => fetch('/api/weapons/audit', jsonInit('POST', {})).then(parse<{ ok: true }>),
+  teams: () => fetch('/api/teams', { cache: 'no-store' }).then(parse<Record<string, string>>),
+  setTeam: (tag: string, name: string) => fetch('/api/teams', jsonInit('PUT', { tag, name })).then(parse<{ ok: true }>),
   guessWeapons: () => fetch('/api/weapons/guess', jsonInit('POST', {})).then(parse<{ guessed: number; locked: number }>),
   // Travail de fond sur une icône (images candidates, recalcul) : on le lance, puis on consulte son avancement par de courtes requêtes.
   startIconWork: (id: string, action: 'candidates' | 'rebuild', token?: string) =>
@@ -51,7 +53,7 @@ export const analysisApi = {
   samples: (gameId: number) => fetch(`/api/samples?game=${gameId}`).then(parse<Sample[]>),
   createGame: (videoId: number, start: number, end: number, map?: string) =>
     fetch('/api/games', jsonInit('POST', { video_id: videoId, start_s: start, end_s: end, map })).then(parse<{ id: number }>),
-  patchGame: (id: number, patch: Partial<Pick<Game, 'start_s' | 'end_s' | 'map' | 'status' | 'winner'>>) =>
+  patchGame: (id: number, patch: Partial<Pick<Game, 'start_s' | 'end_s' | 'map' | 'status' | 'winner' | 'team_a' | 'team_b'>>) =>
     fetch(`/api/games/${id}`, jsonInit('PATCH', patch)).then(parse<{ ok: true }>),
   deleteGame: (id: number) => fetch(`/api/games/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
   calibration: (map: string) =>
