@@ -290,7 +290,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
               className={`replay__dot${p.alive ? '' : ' is-dead'}${(p.confidence ?? 1) < 0.5 ? ' is-unsure' : ''}${fixing ? ' is-pickable' : ''}${p.slot === pickA || p.slot === pickB ? ' is-picked' : ''}`}
               onClick={fixing ? () => pick(p.slot) : undefined}
               style={{ left: `${x}%`, top: `${y}%`, ['--c' as string]: TEAM_COLOR[p.team] }}
-              title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.confidence !== null && p.confidence < 1 ? ` · identité ${Math.round(p.confidence * 100)} %` : ''}`}
+              title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.confidence !== null && p.confidence < 1 ? ` · fiabilité ${Math.round(p.confidence * 100)} %` : ''}`}
             >
               {p.alive && p.angle !== null && <i className="replay__dir" style={{ transform: `rotate(${p.angle}deg)` }} />}
               <b>{p.alive ? numberOfSlot(p.slot) : <X className="ic" strokeWidth={3} />}</b>

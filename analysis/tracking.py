@@ -6,7 +6,10 @@ l'ensemble de la game :
   2. chaque trajectoire reçoit un joueur par vote de tous ses numéros lus, sans que deux trajectoires qui se chevauchent
      dans le temps aient le même joueur ; sans numéro, on prend le joueur libre qui prolonge le mieux une autre trajectoire ;
   3. une croix (joueur mort) est rattachée au joueur dont la trajectoire s'est arrêtée à cet endroit juste avant ;
-  4. les petits trous sont comblés par interpolation et les directions lissées (médiane circulaire).
+  4. les petits trous sont comblés par interpolation et les directions lissées (médiane circulaire) ;
+  5. les bandeaux disent qui est vivant : un joueur vivant n'a jamais de trou. Une pastille que personne n'a prise est d'abord cherchée près de
+     l'endroit attendu, puis les trous restants sont comblés en reliant les deux points visibles (recover_from_unused, bridge_gaps) ;
+     un joueur mort n'a aucune position vivante, et une mort du killfeed que le bandeau contredit est ignorée.
 """
 
 import json
@@ -187,19 +190,61 @@ def _number_of(slot):
     return slot if slot <= 4 else slot + 1
 
 
-def dead_frames(states):
-    """{slot: ensemble d'indices d'images} où le bandeau du joueur est grisé (mort). Un état isolé sur une seule image est ignoré,
-    et un bandeau qui paraît mort presque toute la game (mal lu) n'est pas utilisé."""
+MIN_STATE_S = 1.5  # un état du bandeau (vivant ou mort) plus court que cela, entre deux périodes de l'état opposé, est un parasite
+# (autour d'une mort le bandeau clignote : une mort réelle dure environ 17 s, et on a mesuré plus de mille « vies » de moins d'une seconde)
+
+
+def _debounce(dead, min_len):
+    """dead : liste de booléens (mort). Une « vie » de moins de min_len images entre deux morts est un clignotement du bandeau (on ne
+    réapparaît pas en une seconde) : elle redevient une mort. Ensuite, une « mort » de moins de min_len images entre deux vies est un parasite."""
+    dead = list(dead)
+    for blink in (False, True):  # d'abord les vies parasites, puis les morts parasites
+        i = 0
+        while i < len(dead):
+            j = i
+            while j < len(dead) and dead[j] == dead[i]:
+                j += 1
+            if dead[i] == blink and 0 < i and j < len(dead) and j - i < min_len:
+                dead[i:j] = [not blink] * (j - i)
+            i = j
+    return dead
+
+
+def dead_frames(states, step_s=0.1):
+    """{slot: ensemble d'indices d'images} où le bandeau du joueur est grisé (mort), après avoir retiré les clignotements de moins de
+    MIN_STATE_S. Un bandeau qui paraît mort presque toute la game (mal lu) n'est pas utilisé."""
     if not states:
         return {}
     keys = sorted(states)
     out = {}
+    min_len = max(2, round(MIN_STATE_S / step_s))
     for slot in range(1, 9):
-        raw = {k: (slot in states[k] and not states[k][slot]["alive"]) for k in keys}
         alive_share = sum(1 for k in keys if slot in states[k] and states[k][slot]["alive"]) / max(len(keys), 1)
         if alive_share < MIN_ALIVE_SHARE:
             continue
-        out[slot] = {k for k in keys if raw[k] and (raw.get(k - 1) or raw.get(k + 1))}
+        raw = [slot in states[k] and not states[k][slot]["alive"] for k in keys]
+        out[slot] = {k for k, d in zip(keys, _debounce(raw, min_len)) if d}
+    return out
+
+
+DEATH_CONFIRM_BEFORE_S = 1.5  # le bandeau d'un joueur tué doit être grisé au plus tôt cette durée avant la ligne du killfeed...
+DEATH_CONFIRM_AFTER_S = 3.0  # ...et au plus tard cette durée après
+
+
+def confirmed_deaths(deaths, dead, times, step_s):
+    """Les morts du killfeed que le bandeau confirme. Une ligne mal lue (victime ou tueur illisible, mort « environnement » alors que le joueur
+    est plein de vie) ne doit pas faire mourir un joueur que son bandeau montre vivant. Sans bandeau exploitable pour ce joueur, la mort est gardée."""
+    if not deaths or not dead or not times:
+        return deaths or []
+    ordered = sorted(times)
+    out = []
+    for t_death, slot in deaths:
+        if slot not in dead:
+            out.append((t_death, slot))
+            continue
+        lo, hi = t_death - DEATH_CONFIRM_BEFORE_S, t_death + DEATH_CONFIRM_AFTER_S
+        if any(lo <= times[k] <= hi and k in dead[slot] for k in ordered):
+            out.append((t_death, slot))
     return out
 
 
@@ -223,6 +268,23 @@ def anchor_spectated(frames, states):
             continue
         out.append((fi, t, [({**d, "number": _number_of(slot), "slot": slot} if d is pick else d) for d in dets]))
     return out
+
+
+ELIM_MIN_S = 2.0  # une trajectoire sans numéro lu attribuée par élimination doit durer au moins cela, ou être plausible (ci-dessous)
+ELIM_BASE = 0.08  # distance (relative à la minimap) qu'on accepte entre deux trajectoires du même joueur, plus...
+ELIM_SPEED = 0.35  # ...cette vitesse maximale (par seconde) × temps écoulé entre elles
+
+
+def _elimination_ok(t, same_slot, step_s):
+    """Une trajectoire sans numéro ne reçoit le seul joueur libre « par élimination » que si c'est plausible : assez longue pour ne pas être
+    du bruit (reflet bleu de l'eau, tache du décor), ou assez proche, au regard du temps écoulé, de la dernière position connue de ce joueur."""
+    if (t.last - t.first + 1) * step_s >= ELIM_MIN_S or not same_slot:
+        return True
+    near = min(same_slot, key=lambda o: min(abs(t.first - o.last), abs(o.first - t.last)))
+    a, b = (near, t) if near.last <= t.first else (t, near)
+    gap_s = max(b.first - a.last, 0) * step_s
+    dist = math.hypot(a.pos[0] - b.pts[b.first]["x"], a.pos[1] - b.pts[b.first]["y"])
+    return dist <= ELIM_BASE + ELIM_SPEED * gap_s
 
 
 def _assign(alive_tracks, step_s, dead=None):
@@ -265,7 +327,7 @@ def _assign(alive_tracks, step_s, dead=None):
                 good = sorted((c, s) for c, s in scored if c is not None)
                 if good:
                     t.slot, t.how = good[0][1], CONF_CONTINUITY
-                elif len(cands) == 1:
+                elif len(cands) == 1 and _elimination_ok(t, assigned[cands[0]], step_s):
                     t.slot, t.how = cands[0], CONF_ELIM
                 else:
                     continue
@@ -312,6 +374,124 @@ def _attach_crosses(dead_tracks, alive_tracks, step_s, deaths=None, times=None):
             continue
         kept.append(x)
     return kept
+
+
+CONF_BRIDGE = 0.3  # confiance d'une position reconstruite (trou comblé entre deux lectures, ou position gardée)
+LEAD_MAX_S = 15.0  # un joueur qui vient de réapparaître est gardé à sa première position connue jusqu'à cette durée avant sa première lecture
+TRAIL_MAX_S = 10.0  # ...et à sa dernière position connue jusqu'à cette durée après sa dernière lecture, tant que son bandeau dit qu'il vit
+RECOVER_BASE = 0.06  # une détection inutilisée peut combler un trou si elle est à cette distance de la position attendue...
+RECOVER_GROWTH = 0.12  # ...plus cette distance par seconde écoulée depuis la lecture connue la plus proche
+RECOVER_MAX = 0.30
+
+
+def alive_runs(states, dead):
+    """{slot: [(première image, dernière image)]} : périodes où le bandeau du joueur dit « vivant », pour les joueurs dont le bandeau est exploitable.
+    C'est le témoin de ce qu'on doit pouvoir montrer : tout joueur vivant doit avoir une position."""
+    keys = sorted(states)
+    out = {}
+    for slot in dead:
+        runs, start, prev = [], None, None
+        for k in keys:
+            alive = slot in states[k] and states[k][slot]["alive"] and k not in dead[slot]
+            if alive and start is None:
+                start = k
+            elif not alive and start is not None:
+                runs.append((start, prev))
+                start = None
+            prev = k
+        if start is not None:
+            runs.append((start, keys[-1]))
+        out[slot] = runs
+    return out
+
+
+def _expected(rows, slot, k, run, step_s):
+    """Position attendue d'un joueur vivant à l'image k sans lecture : interpolation entre les lectures voisines de sa période vivante,
+    ou dernière/première position connue. Renvoie (x, y, secondes jusqu'à la lecture connue la plus proche) ou None."""
+    s, e = run
+    before = next((j for j in range(k - 1, s - 1, -1) if rows.get((j, slot)) and rows[(j, slot)][7]), None)
+    after = next((j for j in range(k + 1, e + 1) if rows.get((j, slot)) and rows[(j, slot)][7]), None)
+    if before is None and after is None:
+        return None
+    if before is None or after is None:
+        j = after if before is None else before
+        r = rows[(j, slot)]
+        return r[4], r[5], abs(k - j) * step_s
+    a, b = rows[(before, slot)], rows[(after, slot)]
+    f = (k - before) / (after - before)
+    return a[4] + (b[4] - a[4]) * f, a[5] + (b[5] - a[5]) * f, min(k - before, after - k) * step_s
+
+
+def recover_from_unused(rows, runs, frames, states, step_s, put):
+    """« Mieux regarder » : à chaque image, un joueur vivant (bandeau) sans position est cherché parmi les pastilles que personne n'a prises,
+    près de l'endroit où il devrait être. Une pastille blanche (joueur observé ou station de tyrolienne) n'est acceptée que pour le joueur
+    que le bandeau dit observé. Plusieurs trous dans la même équipe : on prend les paires les plus proches d'abord."""
+    dets = {fi: d for fi, _, d in frames}
+    placed = 0
+    for fi in sorted(dets):
+        missing = []
+        for slot, rs in runs.items():
+            run = next((r for r in rs if r[0] <= fi <= r[1]), None)
+            if run and not rows.get((fi, slot)):
+                exp = _expected(rows, slot, fi, run, step_s)
+                if exp:
+                    missing.append((slot, exp))
+        if not missing:
+            continue
+        taken = [(r[4], r[5]) for (k, _), r in rows.items() if k == fi]
+        free = [d for d in dets[fi] if d["alive"] and all(math.hypot(d["x"] - x, d["y"] - y) > 0.02 for x, y in taken)]
+        watched = {s for s, v in states.get(fi, {}).items() if v["spectated"]}
+        pairs = []
+        for slot, (ex, ey, gap) in missing:
+            team = "A" if slot <= 4 else "B"
+            reach = min(RECOVER_BASE + RECOVER_GROWTH * gap, RECOVER_MAX)
+            for i, d in enumerate(free):
+                if d["team"] != team or (d.get("spectated") and slot not in watched):
+                    continue
+                if d.get("number") and d["number"] != _number_of(slot) and d["number"] in {_number_of(s) for s in SLOTS[team]}:
+                    continue  # un autre joueur de l'équipe, lu avec certitude
+                dist = math.hypot(d["x"] - ex, d["y"] - ey)
+                if dist <= reach:
+                    pairs.append((dist, slot, i))
+        used_slots, used_dets = set(), set()
+        for dist, slot, i in sorted(pairs):
+            if slot in used_slots or i in used_dets:
+                continue
+            used_slots.add(slot)
+            used_dets.add(i)
+            d = free[i]
+            put(fi, slot, d["team"], d["x"], d["y"], d.get("angle"), True, CONF_BRIDGE + 0.1)
+            placed += 1
+    return placed
+
+
+def bridge_gaps(rows, runs, step_s, put):
+    """Aucun joueur vivant ne disparaît : dans chaque période vivante, un trou entre deux lectures est comblé en reliant les deux points
+    visibles, le début est rempli par la première position connue (réapparition) et la fin par la dernière (jusqu'à la mort)."""
+    lead, trail = max(1, round(LEAD_MAX_S / step_s)), max(1, round(TRAIL_MAX_S / step_s))
+    for slot, rs in runs.items():
+        for s, e in rs:
+            seen = [k for k in range(s, e + 1) if rows.get((k, slot)) and rows[(k, slot)][7]]
+            if not seen:
+                continue
+            first, last = rows[(seen[0], slot)], rows[(seen[-1], slot)]
+            for k in range(max(s, seen[0] - lead), seen[0]):
+                put(k, slot, first[3], first[4], first[5], first[6], True, CONF_BRIDGE)
+            for k in range(seen[-1] + 1, min(e, seen[-1] + trail) + 1):
+                put(k, slot, last[3], last[4], last[5], last[6], True, CONF_BRIDGE)
+            for a, b in zip(seen, seen[1:]):
+                if b - a <= 1:
+                    continue
+                ra, rb = rows[(a, slot)], rows[(b, slot)]
+                for k in range(a + 1, b):
+                    if rows.get((k, slot)):
+                        continue
+                    f = (k - a) / (b - a)
+                    if ra[6] is not None and rb[6] is not None:
+                        ang = (ra[6] + (((rb[6] - ra[6] + 180) % 360) - 180) * f) % 360
+                    else:
+                        ang = ra[6] if ra[6] is not None else rb[6]
+                    put(k, slot, ra[3], ra[4] + (rb[4] - ra[4]) * f, ra[5] + (rb[5] - ra[5]) * f, ang, True, CONF_BRIDGE)
 
 
 SKEW_FULL = 0.25  # asymétrie à partir de laquelle le sens est considéré comme sûr
@@ -478,9 +658,10 @@ def solve(frames, step_s, deaths=None, states=None):
     if not frames:
         return []
     frames = anchor_spectated(frames, states)
-    dead = dead_frames(states)
+    dead = dead_frames(states, step_s)
     frames = drop_static_noise(frames)
     times = {fi: t for fi, t, _ in frames}
+    deaths = confirmed_deaths(deaths, dead, times, step_s)
     alive_tracks, dead_tracks = _link(frames, step_s)
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
     _assign(alive_tracks, step_s, dead)
@@ -555,6 +736,10 @@ def solve(frames, step_s, deaths=None, states=None):
     # Un joueur dont le bandeau est grisé n'a pas de pastille vivante (les croix restent : elles montrent où il est mort).
     for key in [k for k, r in rows.items() if r[7] and k[0] in dead.get(k[1], ())]:
         del rows[key]
+    if states and dead:
+        runs = alive_runs(states, dead)
+        recover_from_unused(rows, runs, frames, states, step_s, put)
+        bridge_gaps(rows, runs, step_s, put)
     _add_known_deaths(rows, deaths or [], times, step_s, put)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
 
@@ -580,7 +765,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 4  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 5  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

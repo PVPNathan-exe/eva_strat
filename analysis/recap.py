@@ -16,6 +16,7 @@ import tracking
 import weapons
 
 # Seuils des contrôles
+DEATH_S = 17.0  # durée d'une mort mesurée sur les bandeaux (réapparition)
 MIN_COVERAGE = 0.6  # part des images où un joueur a une ligne (vivant ou croix) ; en dessous, il est souvent perdu
 MAX_FILLED = 0.25  # part des lignes vivantes comblées par interpolation ou élimination (confiance <= 0,5)
 JUMP = 0.3  # saut de position (relatif à la minimap) d'une ligne à la suivante, en dessous d'une seconde : suspect
@@ -68,11 +69,19 @@ def game_report(conn, g, names, current_version):
         for r in rows:
             by_slot[r["slot"]].append(r)
         weak, jumpy, frozen = [], {}, []
+        step = (rows[-1]["t"] - rows[0]["t"]) / max(frames - 1, 1) if len(rows) > 1 else 0.1
+        game_s = max(g["end_s"] - g["start_s"], 1)
+        deaths = defaultdict(list)
+        for k in db.kills_of(conn, gid):
+            deaths[k["victim_slot"]].append(k["t"])
         filled_total = alive_total = 0
         for slot, rs in by_slot.items():
-            if len(rs) / max(frames, 1) < MIN_COVERAGE:
-                weak.append((slot, round(len(rs) / frames, 2)))
             alive = [r for r in rs if r["alive"]]
+            # un joueur mort n'a pas de position vivante : on compare à sa durée de vie probable (la mort dure environ DEATH_S secondes)
+            expected_s = max(game_s - sum(min(DEATH_S, g["end_s"] - t) for t in deaths[slot]), 1)
+            share = len({r["frame"] for r in alive}) * step / expected_s
+            if share < MIN_COVERAGE:
+                weak.append((slot, round(share, 2)))
             alive_total += len(alive)
             filled_total += sum(1 for r in alive if r["confidence"] is not None and r["confidence"] <= 0.5)
             jumps = 0
@@ -94,7 +103,7 @@ def game_report(conn, g, names, current_version):
         if missing:
             problems.append(f"aucune position pour les joueurs {missing}")
         if weak:
-            problems.append("joueurs souvent perdus (part des images avec une ligne) : " + ", ".join(f"{s} ({c})" for s, c in weak))
+            problems.append("joueurs souvent perdus (part de leur vie probable avec une position) : " + ", ".join(f"{s} ({c})" for s, c in weak))
         if alive_total and filled_total / alive_total > MAX_FILLED:
             problems.append(f"{round(100 * filled_total / alive_total)} % des positions vivantes sont comblées (interpolées ou par élimination)")
         if jumpy:

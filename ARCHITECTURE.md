@@ -74,8 +74,9 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 - `minimap.py` : pastilles sur la minimap. `positions.py` : lectures régulières. `tracking.py` (598 lignes) : suivi dans le temps et attribution des joueurs 1 à 8.
 - `ocr.py` et `ocr_win.ps1` : reconnaissance de texte de Windows. `recap.py` : bilan de qualité par game.
 - `icon_fix.py` : recalcul des icônes (`candidates`, `rebuild` avec marge élargie, `audit`, `guess`).
-- Outils : `tune.py` (réglage du suivi), `evaluate.py` (accord avec les bandeaux), `benchmark.py` (vitesse), `build_templates.py` (chiffres du chrono).
-- Données : `default_zones.json`, `tracking_params.json` (versionné), `*.npz` (modèles de chiffres et de croix), `weapon_icons/` (`names.json`, `reviews.json`, images), `map_names/`.
+- Outils : `tune.py` (réglage du suivi), `evaluate.py` (accord avec les bandeaux, positions manquantes, sauts, test de trous simulés `--gap-test`), `benchmark.py` (vitesse), `build_templates.py` (chiffres du chrono).
+- `resolve.py` : refait le suivi des positions d'une vidéo déjà analysée sans relire la vidéo (lectures en cache de `evaluate.py`).
+- Données : `default_zones.json`, `map_zones.json` (minimap propre à chaque carte, entre la calibration de l'utilisateur et la zone par défaut), `tracking_params.json` (versionné), `*.npz` (modèles de chiffres et de croix), `weapon_icons/` (`names.json`, `reviews.json`, images), `map_names/`.
 - `analysis/tests/` : un `test_<module>.py` par module (`test_kills.py` fait 339 lignes).
 
 ## tests/ et scripts/

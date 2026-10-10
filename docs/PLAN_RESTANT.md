@@ -5,15 +5,32 @@ fiable, ce qui ne l'est pas, et dans quel ordre continuer. Pour changer de PC : 
 
 ## Où on en est
 
-**Objectif demandé** : positions des joueurs fiables à 98 ou 99 % sur toutes les cartes. **Il n'est pas atteint, et il n'est pas encore mesuré
-de bout en bout.** Ce qui existe pour le mesurer :
+**Objectif demandé** : 100 % des joueurs bien placés sur la carte, aucun mort qui réapparaît, aucune perte de position visible (10 octobre 2026).
+Mesuré avec `python analysis/evaluate.py --video 1` sur les 12 games de NCT vs OR (9 cartes), les bandeaux du haut servant de témoin :
 
-- `python analysis/evaluate.py --game 24` ou `--video 2` : compare le suivi aux **bandeaux du haut de l'écran** (vivant, mort, joueur observé),
-  un témoin indépendant de la minimap. Indicateurs : accord, fantômes (vivant sur la minimap alors que le bandeau est grisé), manquants
-  (bandeau vivant mais aucune pastille). Les lectures sont mises en cache dans `data/cache/` ; `--refresh` les refait.
-- `python analysis/recap.py --video 2` : bilan game par game (positions comblées, sauts de position, joueurs perdus, kills sans tueur, icônes sans nom).
-- Mesure faite en fin de session, Ceres seule : accord 83,9 % sans les bandeaux, 96,3 % avec, fantômes de 13,9 % à 0 %. Les 12 games de NCT vs OR
-  n'ont pas encore de mesure avec l'algorithme final (la mesure avait été lancée avec un code qui a changé en cours de route : la refaire avec `--refresh`).
+| | avant | après |
+|---|---|---|
+| joueur vivant sans position (manquant) | 11,2 % | **0,3 %** |
+| joueur affiché vivant alors que son bandeau est grisé (fantôme) | 0 % (déjà retiré) | 0 % |
+| sauts impossibles entre deux positions lues | 338 | **180** |
+| positions réellement lues (le reste est reconstruit) | non mesuré | 85 % |
+
+Ce qui a fait baisser les manquants : (1) **zones de minimap par carte** (`analysis/map_zones.json`) : Outlaw perdait plus d'un tiers de sa carte (21 % de manquants), Artefact
+22 %, avec en plus Silva, Atlantis et Polaris coupées en haut ; (2) **comblement des trous guidé par les bandeaux** : une pastille que personne n'a prise est cherchée près de la
+position attendue (95 % de bons choix en test simulé), puis les trous restants sont comblés en reliant les deux points visibles, début et fin de vie par la position la plus proche ;
+(3) **bandeaux lissés** : un état de moins de 1,5 s est un clignotement (on a mesuré 1 162 « vies » de moins d'une seconde, alors qu'une mort dure environ 17 s) ;
+(4) une mort du killfeed que le bandeau contredit est ignorée ; (5) une trajectoire sans numéro n'est donnée « par élimination » que si c'est plausible (reflets bleus d'Atlantis).
+
+**Limites, à dire clairement** :
+- « 0 % de manquants » est vrai par construction : 15 % des positions vivantes sont reconstruites, pas lues. Leur justesse se mesure par `--gap-test` (on cache des positions
+  sûres, on les reconstruit, on compare) : trou de 1 s, erreur médiane 0,003 ; de 3 s, 0,009 ; de 8 s, 0,022 (90 % des cas sous 0,10, soit un dixième de la largeur de la
+  minimap). Relier les points en suivant les couloirs appris sur la game n'a pas fait mieux que la ligne droite (0,076 contre 0,074) : abandonné.
+- Pas de vérité terrain faite à la main : l'accord (99,7 %) et les fantômes (0 %) sont mesurés contre les bandeaux, qui servent aussi à corriger. L'identité (le bon numéro sur le bon
+  joueur) est mesurée par le chiffre lu sur la pastille quand il est lisible : 93,6 % d'accord (les désaccords sont surtout 9 lu pour 6, 4 pour 2 : lectures de chiffres, pas forcément
+  des échanges).
+- Les « sauts » restants sont en partie réels (tyroliennes d'Artefact, Outlaw, Polaris). Polaris reste la plus difficile (joueur observé en blanc sur fond de neige : 77 à 80 % lus).
+- Les positions déjà en base ont été refaites avec `analysis/resolve.py` (sans relire la vidéo). Les alignements du plan sur la minimap faits dans le navigateur pour Outlaw, Artefact,
+  Silva, Atlantis, Polaris, Engine, Reef Point et The Cliff sont probablement à refaire (non vérifié) : les positions sont normalisées sur la zone, qui a changé.
 
 **Fait dans cette session** (tout est poussé, 92 tests Python et 70 tests JS passent, une seule erreur de lint existait déjà : `MapCanvas.tsx`) :
 

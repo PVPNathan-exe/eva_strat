@@ -35,10 +35,20 @@ def _states(per_frame):
 def test_dead_frames_ignore_a_single_glitch_and_unreadable_banners():
     glitch = [{1: True}] * 5 + [{1: False}] + [{1: True}] * 5
     assert tracking.dead_frames(_states(glitch))[1] == set()  # un seul état mort isolé : ignoré
-    died = [{1: True}] * 5 + [{1: False}] * 4 + [{1: True}] * 5
-    assert tracking.dead_frames(_states(died))[1] == {5, 6, 7, 8}
+    died = [{1: True}] * 5 + [{1: False}] * 30 + [{1: True}] * 30
+    assert tracking.dead_frames(_states(died))[1] == set(range(5, 35))
     broken = [{2: False}] * 20  # grisé toute la game : bandeau mal lu, pas un témoin
     assert 2 not in tracking.dead_frames(_states(broken))
+
+
+def test_a_banner_that_blinks_around_a_death_stays_dead():
+    blink = [{1: True}] * 20 + [{1: False}] * 12 + [{1: True}] * 3 + [{1: False}] * 20 + [{1: True}] * 20  # vivant 0,3 s au milieu d'une mort
+    assert tracking.dead_frames(_states(blink))[1] == set(range(20, 55))
+    brief_death = [{1: True}] * 20 + [{1: False}] * 4 + [{1: True}] * 20  # 0,4 s grisé : parasite, pas une mort
+    assert tracking.dead_frames(_states(brief_death))[1] == set()
+    # à 5 lectures par seconde (0,2 s), 1,5 s font 8 lectures : une mort de 10 lectures est réelle
+    slow = [{1: True}] * 20 + [{1: False}] * 10 + [{1: True}] * 20
+    assert tracking.dead_frames(_states(slow), step_s=0.2)[1] == set(range(20, 30))
 
 
 def test_the_white_marker_is_the_observed_player_whatever_number_was_read():

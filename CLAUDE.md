@@ -30,7 +30,9 @@ npx tsc -b                         # typage
 npm run test:js                    # tests du site et du serveur
 python -m pytest -q                # tests de l'analyse
 python analysis/recap.py --video 2 # bilan de qualité d'une vidéo analysée
-python analysis/evaluate.py --video 2   # accord du suivi avec les bandeaux (témoin indépendant de la minimap)
+python analysis/evaluate.py --video 1   # accord du suivi avec les bandeaux, positions manquantes, sauts, part de positions réellement lues
+python analysis/evaluate.py --video 1 --gap-test   # erreur du comblement de trous sur des positions sûres cachées (vérité simulée)
+python analysis/resolve.py --video 1   # refait le suivi sans relire la vidéo (lectures en cache), après un changement de tracking.py
 python analysis/benchmark.py --video Ceres.mp4   # vitesse des étapes sur cette machine
 ```
 
@@ -38,6 +40,9 @@ Une seule erreur de lint existait avant le travail sur l'onglet Analyse : `MapCa
 
 ## Pièges techniques de l'analyse
 
+- **Zone de minimap par carte** : `analysis/map_zones.json` (la minimap n'a pas la même taille sur toutes les cartes : une zone trop petite coupait le haut d'Outlaw, Artefact, Silva, Atlantis, Polaris). Une nouvelle carte sans entrée prend la zone par défaut : la vérifier à l'œil (planche avec grille) et l'ajouter.
+- **Les disques blancs avec flèche** de certaines cartes (Artefact, Outlaw, Polaris, Atlantis) sont des stations de tyrolienne : un joueur y traverse la carte en une fraction de seconde. Ces sauts sont réels, ne pas les « corriger ».
+- **Bandeaux = témoin des vivants** : un joueur vivant n'a jamais de trou (recover_from_unused puis bridge_gaps), un mort n'a aucune position vivante, un état du bandeau de moins de 1,5 s est un clignotement. Une mort du killfeed que le bandeau contredit est ignorée.
 - **`ALGO_REVISION`** (`analysis/tracking.py`) : l'incrémenter dès que l'algorithme de lecture ou de suivi change, sinon les positions déjà enregistrées ne sont pas relues. La zone de minimap est aussi suivie (`samples_meta.zone_key`).
 - **Vérifier un instant d'une longue vidéo avec ffmpeg** (`names._grab`), jamais avec `cv2.VideoCapture.set(CAP_PROP_POS_MSEC)` : sur la vidéo de 58 minutes il est imprécis et fausse les comparaisons.
 - **Les bandeaux** du haut de l'écran sont un témoin fiable : fond rempli depuis le bas = points de vie (grisé = mort), cadre blanc = joueur observé. Un disque blanc numéroté dans la zone de départ est un **joueur mort qui attend**, pas une pastille en jeu.
