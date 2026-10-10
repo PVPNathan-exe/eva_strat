@@ -168,14 +168,18 @@ def all_verified(conn, video_id):
 
 
 DEFAULT_ZONES_PATH = Path(__file__).with_name("default_zones.json")
+MAP_ZONES_PATH = Path(__file__).with_name("map_zones.json")  # zones propres à une carte (la minimap n'a pas la même taille partout)
 
 
 def zone_for(conn, map_name, zone):
-    """Rectangle relatif d'une zone du HUD : calibration de la carte si elle existe, sinon zone par défaut."""
+    """Rectangle relatif d'une zone du HUD : calibration de l'utilisateur, sinon zone connue de la carte (map_zones.json), sinon zone par défaut."""
     if map_name:
         row = conn.execute("SELECT x, y, w, h FROM calibrations WHERE map = ? AND zone = ?", (map_name, zone)).fetchone()
         if row:
             return dict(row)
+        known = json.loads(MAP_ZONES_PATH.read_text(encoding="utf-8")).get(map_name, {}).get(zone)
+        if known:
+            return known
     return json.loads(DEFAULT_ZONES_PATH.read_text(encoding="utf-8"))[zone]
 
 

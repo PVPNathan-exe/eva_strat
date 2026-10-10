@@ -16,6 +16,8 @@ export type Zones = Record<ZoneName, Zone>;
 export interface ApiContext {
   db: DatabaseSync;
   defaultZones: Zones;
+  /** Zones propres à une carte (analysis/map_zones.json) : entre la zone par défaut et la calibration de l'utilisateur. */
+  mapZones?: Record<string, Partial<Zones>>;
   /** Noms donnés aux icônes d'armes (names.json) ; absent dans les tests qui n'en ont pas besoin. */
   weaponNames?: () => Record<string, string>;
 }
@@ -141,9 +143,10 @@ function getCalibration(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const map = query.get('map');
   if (!map) return fail('Paramètre map manquant');
   const rows = ctx.db.prepare('SELECT zone, x, y, w, h FROM calibrations WHERE map = ?').all(map) as unknown as (Zone & { zone: ZoneName })[];
-  const zones: Zones = { ...ctx.defaultZones };
+  const known = ctx.mapZones?.[map] ?? {};
+  const zones: Zones = { ...ctx.defaultZones, ...known };
   for (const r of rows) zones[r.zone] = { x: r.x, y: r.y, w: r.w, h: r.h };
-  return reply(200, { map, zones, isDefault: rows.length === 0 });
+  return reply(200, { map, zones, isDefault: rows.length === 0 && Object.keys(known).length === 0 });
 }
 
 function validZone(z: unknown): z is Zone {

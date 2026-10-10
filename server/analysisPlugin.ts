@@ -170,6 +170,7 @@ export function analysisPlugin(): Plugin {
       const ctx: ApiContext = {
         db: openDb(dbPath, join(root, 'analysis', 'schema.sql')),
         defaultZones: JSON.parse(readFileSync(join(root, 'analysis', 'default_zones.json'), 'utf-8')) as Zones,
+        mapZones: JSON.parse(readFileSync(join(root, 'analysis', 'map_zones.json'), 'utf-8')) as Record<string, Partial<Zones>>,
         weaponNames: () => effectiveNames(ctx.db, weaponsDir),
       };
       const jobs = new JobManager();

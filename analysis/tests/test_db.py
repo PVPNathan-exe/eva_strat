@@ -131,3 +131,13 @@ def test_old_readings_without_a_zone_key_are_only_redone_for_maps_with_a_calibra
     conn.commit()
     stale = [conn.execute("SELECT map FROM games WHERE id = ?", (g["id"],)).fetchone()["map"] for g in db.games_without_samples(conn, vid, 0.2, 4)]
     assert stale == ["Silva"]
+
+
+def test_zone_priority_is_user_calibration_then_known_map_then_default(tmp_path):
+    conn = make_conn(tmp_path)
+    default = db.zone_for(conn, None, "minimap")
+    known = db.zone_for(conn, "Outlaw", "minimap")
+    assert known != default and known["y"] < default["y"]  # Outlaw est haute : sa minimap commence plus haut que la zone par défaut
+    assert db.zone_for(conn, "Carte inconnue", "minimap") == default
+    conn.execute("INSERT INTO calibrations (map, zone, x, y, w, h) VALUES ('Outlaw', 'minimap', 0.1, 0.2, 0.3, 0.4)")
+    assert db.zone_for(conn, "Outlaw", "minimap") == {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
