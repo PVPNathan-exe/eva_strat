@@ -21,6 +21,11 @@ position attendue (95 % de bons choix en test simulé), puis les trous restants 
 (3) **bandeaux lissés** : un état de moins de 1,5 s est un clignotement (on a mesuré 1 162 « vies » de moins d'une seconde, alors qu'une mort dure environ 17 s) ;
 (4) une mort du killfeed que le bandeau contredit est ignorée ; (5) une trajectoire sans numéro n'est donnée « par élimination » que si c'est plausible (reflets bleus d'Atlantis).
 
+**Polaris (carte la plus difficile, 11 octobre 2026)** : joueur observé réellement lu 44 à 72 % et 33 à 76 % (deux games de NCT vs OR) ; stations de tyrolienne (`analysis/map_teleports.json`, Polaris seulement
+: à relever pour les autres cartes) : sauts non expliqués 25 à 22, 37 à 28 et 12 à 9 ; identité : seulement 0,8 à 2,1 % des lectures de numéro sont dans une trajectoire qui contredit le
+joueur attribué. Lire deux fois plus d'images (une toutes les 3 images) n'améliore pas (78 % lues contre 80 %, plus de sauts) : le problème est le marqueur caché, pas la cadence.
+Killfeed de NCT vs SNV : 7 tueurs lus sur 61 kills (le texte est très mal lu, préfixe d'équipe compris) : piste = apprendre l'aspect visuel des pseudos.
+
 **Limites, à dire clairement** :
 - « 0 % de manquants » est vrai par construction : 15 % des positions vivantes sont reconstruites, pas lues. Leur justesse se mesure par `--gap-test` (on cache des positions
   sûres, on les reconstruit, on compare) : trou de 1 s, erreur médiane 0,003 ; de 3 s, 0,009 ; de 8 s, 0,022 (90 % des cas sous 0,10, soit un dixième de la largeur de la

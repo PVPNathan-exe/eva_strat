@@ -78,7 +78,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 - Outils : `tune.py` (réglage du suivi), `evaluate.py` (accord avec les bandeaux, positions manquantes, sauts, test de trous simulés `--gap-test`), `benchmark.py` (vitesse), `build_templates.py` (chiffres du chrono).
 - `reread_loadouts.py` : relit l'équipement d'une vidéo avec l'algorithme actuel et retire les icônes B et G devenues inutiles (sans nom, ni verrou, ni signalement).
 - `resolve.py` : refait le suivi des positions d'une vidéo déjà analysée sans relire la vidéo (lectures en cache de `evaluate.py`).
-- Données : `default_zones.json`, `map_zones.json` (minimap propre à chaque carte, entre la calibration de l'utilisateur et la zone par défaut), `tracking_params.json` (versionné), `*.npz` (modèles de chiffres et de croix), `weapon_icons/` (`names.json`, `reviews.json`, images), `map_names/`.
+- Données : `default_zones.json`, `map_teleports.json` (paires de stations de tyrolienne par carte : un joueur qui entre dans l'une ressort à l'autre), `map_zones.json` (minimap propre à chaque carte, entre la calibration de l'utilisateur et la zone par défaut), `tracking_params.json` (versionné), `*.npz` (modèles de chiffres et de croix), `weapon_icons/` (`names.json`, `reviews.json`, images), `map_names/`.
 - `analysis/tests/` : un `test_<module>.py` par module (`test_kills.py` fait 339 lignes).
 
 ## tests/ et scripts/

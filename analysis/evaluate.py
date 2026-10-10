@@ -47,10 +47,10 @@ def compare(rows, states, dead_sets=None, step_s=0.1, teleports=()):
             agree += have == banner_alive
             ghost += have and banner_dead
             missing += (not have) and banner_alive
-    return {"n": n, "agree": agree, "ghost": ghost, "missing": missing, "read": read, "alive": alive, "jumps": count_jumps(rows, teleports)}
+    return {"n": n, "agree": agree, "ghost": ghost, "missing": missing, "read": read, "alive": alive, "jumps": count_jumps(rows, teleports, step_s)}
 
 
-def count_jumps(rows, teleports=()):
+def count_jumps(rows, teleports=(), step_s=0.1):
     """Nombre de sauts impossibles : un même joueur vivant qui change de place de plus de JUMP_DIST entre deux images consécutives."""
     tracking._TELEPORTS[:] = teleports or []  # un trajet par une station de tyrolienne est réel, pas un saut
     last, jumps = {}, 0
@@ -58,7 +58,7 @@ def count_jumps(rows, teleports=()):
         if not r[7] or r[8] < JUMP_CONF:
             continue
         prev = last.get(r[2])
-        if prev and r[0] - prev[0] == 1 and ((r[4] - prev[4]) ** 2 + (r[5] - prev[5]) ** 2) ** 0.5 > JUMP_DIST and not tracking._tp_linked((prev[4], prev[5]), (r[4], r[5])):
+        if prev and r[0] - prev[0] == 1 and ((r[4] - prev[4]) ** 2 + (r[5] - prev[5]) ** 2) ** 0.5 > JUMP_DIST * step_s / 0.1 and not tracking._tp_linked((prev[4], prev[5]), (r[4], r[5])):
             jumps += 1
         last[r[2]] = r
     return jumps
@@ -68,6 +68,8 @@ def _load(conn, game, step_s, refresh=False):
     """Détections de la minimap et états des bandeaux d'une game, mis en cache (la lecture de la vidéo est longue)."""
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / f"eval_{game['id']}.json"
+    if abs(step_s - 6 / game["fps"]) > 1e-6:  # autre cadence que celle de l'analyse : cache à part
+        path = CACHE / f"eval_{game['id']}_{round(step_s * game['fps'])}.json"
     zone_key = db.minimap_zone_key(conn, game["map"])
     if path.exists() and not refresh:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -84,13 +86,13 @@ def _load(conn, game, step_s, refresh=False):
     return {"frames": frames, "states": states}
 
 
-def evaluate_game(conn, game_id, refresh=False):
+def evaluate_game(conn, game_id, refresh=False, every=6):
     g = dict(
         conn.execute(
             "SELECT g.*, v.path, v.width, v.height, v.fps FROM games g JOIN videos v ON v.id = g.video_id WHERE g.id = ?", (game_id,)
         ).fetchone()
     )
-    step_s = 6 / g["fps"]
+    step_s = every / g["fps"]
     data = _load(conn, g, step_s, refresh)
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
     out = {}
@@ -153,6 +155,7 @@ def main(argv=None):
     parser.add_argument("--game", type=int, default=None)
     parser.add_argument("--video", type=int, default=None)
     parser.add_argument("--gap-test", action="store_true", help="Mesurer l'erreur du comblement de trous sur des positions sûres cachées")
+    parser.add_argument("--every", type=int, default=6, help="Une lecture de la minimap toutes les N images (6 : cadence de l'analyse)")
     parser.add_argument("--refresh", action="store_true", help="Relire la vidéo au lieu d'utiliser le cache")
     args = parser.parse_args(argv)
     conn = db.connect(args.db)
@@ -161,7 +164,7 @@ def main(argv=None):
     ids = [args.game] if args.game else [r["id"] for r in conn.execute("SELECT id FROM games WHERE video_id = ? ORDER BY start_s", (args.video,))]
     total = {"sans bandeaux": [0, 0, 0, 0, 0, 0, 0], "avec bandeaux": [0, 0, 0, 0, 0, 0, 0]}
     for gid in ids:
-        g, res = evaluate_game(conn, gid, args.refresh)
+        g, res = evaluate_game(conn, gid, args.refresh, args.every)
         for label, c in res.items():
             for i, k in enumerate(("n", "agree", "ghost", "missing", "jumps", "read", "alive")):
                 total[label][i] += c[k]

@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { analysisApi, subscribeJob } from '../lib/analysisApi';
 import type { CommentTag, Game, JobEvent, Video, VideoComment, Weapon } from '../types/analysis';
 import { canonicalName } from '../lib/weaponCatalog';
+import { teamTag } from '../lib/teams';
 
 // Icônes pour lesquelles l'invite de nom a déjà été fermée (« Plus tard ») : on ne redemande pas avant la prochaine analyse qui en trouve de nouvelles.
 const dismissedWeapons = new Set<string>();
@@ -43,6 +44,8 @@ interface AnalysisState {
   teams: Record<string, string>;
   loadTeams: () => Promise<void>;
   rememberTeam: (tag: string, name: string) => Promise<void>;
+  /** Applique les noms d'équipe connus (diminutif -> nom complet) aux games de la vidéo dont l'équipe n'a pas encore de nom : un nom saisi une fois vaut pour toutes les games. */
+  applyKnownTeams: () => Promise<void>;
   weaponPromptOpen: boolean;
   loadWeapons: (promptIfNew?: boolean) => Promise<void>;
   nameWeapon: (id: string, name: string) => Promise<void>;
@@ -104,6 +107,24 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
   rememberTeam: async (tag, name) => {
     await analysisApi.setTeam(tag, name);
     set({ teams: { ...get().teams, [tag]: name } });
+    await get().applyKnownTeams();
+  },
+  applyKnownTeams: async () => {
+    const { games, teams } = get();
+    let changed = false;
+    for (const g of games) {
+      const patch: { team_a?: string; team_b?: string } = {};
+      const sides: ['team_a' | 'team_b', number[]][] = [['team_a', [1, 2, 3, 4]], ['team_b', [5, 6, 7, 8]]];
+      for (const [key, slots] of sides) {
+        const tag = teamTag(g.players.filter((p) => slots.includes(p.slot)).map((p) => p.name));
+        if (!g[key] && tag && teams[tag]) patch[key] = teams[tag];
+      }
+      if (patch.team_a || patch.team_b) {
+        await analysisApi.patchGame(g.id, patch);
+        changed = true;
+      }
+    }
+    if (changed) await get().refreshGames();
   },
   weaponPromptOpen: false,
   comments: [],
@@ -175,7 +196,10 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
     if (requested === null) return;
     const games = await analysisApi.games(requested);
     // Réponse ignorée si l'utilisateur a changé de vidéo entre-temps.
-    if (get().videoId === requested) set({ games });
+    if (get().videoId === requested) {
+      set({ games });
+      void get().applyKnownTeams().catch(() => undefined); // un nom d'équipe retenu s'applique aux games qui n'en ont pas encore
+    }
   },
 
   selectGame: (id) => set({ selectedGameId: id }),
