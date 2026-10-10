@@ -123,8 +123,8 @@ def detect_states(video, game, zone_a, zone_b, width, height, wait=None, step_s=
     return states
 
 
-def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None):
+def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None, teleports=None):
     """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance).
     deaths : [(t, slot)] morts connues par le killfeed. bars : (zone du bandeau gauche, zone du bandeau droit) pour guider le suivi."""
     states = detect_states(video, game, bars[0], bars[1], width, height, wait, step_s) if bars else None
-    return tracking.solve(detect_frames(video, game, zone, width, height, emit, wait, step_s), step_s, deaths, states)
+    return tracking.solve(detect_frames(video, game, zone, width, height, emit, wait, step_s), step_s, deaths, states, teleports)

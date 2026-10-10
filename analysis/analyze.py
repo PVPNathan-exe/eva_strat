@@ -298,7 +298,7 @@ def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=pos
         scanned = conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (g["id"],)).fetchone() is not None
         deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, g["id"])]
         bars = (db.zone_for(conn, g["map"], "team_a_bar"), db.zone_for(conn, g["map"], "team_b_bar"))
-        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s, deaths=deaths, bars=bars)
+        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s, deaths=deaths, bars=bars, teleports=db.teleports_for(g["map"]))
         db.replace_samples(conn, g["id"], rows, tracking.PARAMS_VERSION, with_kills=scanned)
         db.apply_corrections(conn, g["id"])
     return len(todo)

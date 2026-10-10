@@ -33,6 +33,20 @@ VOTE_MISMATCH = 0.08  # pénalité de liaison si le numéro lu contredit celui d
 CONF_VOTE, CONF_CONTINUITY, CONF_ELIM, CONF_FILL = 1.0, 0.7, 0.4, 0.5
 
 
+TP_NEAR = 0.07  # distance (relative à la minimap) à une station de tyrolienne en deçà de laquelle un joueur y est
+TP_MAX_GAP_S = 4.0  # un joueur qui disparaît à une station peut réapparaître à sa sortie jusqu'à cette durée après
+_TELEPORTS = []  # paires de stations de la carte en cours (posées par solve)
+
+
+def _tp_linked(p, q):
+    """Vrai si q est la sortie d'une station de tyrolienne où se trouvait p (ou l'inverse) : un joueur y est instantanément téléporté."""
+    for a, b in _TELEPORTS:
+        for entry, exit_ in ((a, b), (b, a)):
+            if math.hypot(p[0] - entry[0], p[1] - entry[1]) <= TP_NEAR and math.hypot(q[0] - exit_[0], q[1] - exit_[1]) <= TP_NEAR:
+                return True
+    return False
+
+
 class Track:
     def __init__(self, team, fi, det, dead=False):
         self.team = team
@@ -131,7 +145,7 @@ def _link(frames, step_s):
                 row = []
                 for d in living:
                     dist = math.hypot(d["x"] - t.pos[0], d["y"] - t.pos[1])
-                    if dist > gate:
+                    if dist > gate and not _tp_linked(t.pos, (d["x"], d["y"])):
                         row.append(None)
                         continue
                     pen = 0.0
@@ -174,6 +188,8 @@ def _gap_cost(a, b, step_s, max_gap=None, max_dist=None):
     max_gap = ASSIGN_GAP_S if max_gap is None else max_gap
     max_dist = ASSIGN_GAP_DIST if max_dist is None else max_dist
     gap = (b.first - a.last) * step_s
+    if 0 <= gap <= TP_MAX_GAP_S and _tp_linked(a.pos, (b.pts[b.first]["x"], b.pts[b.first]["y"])):
+        return 0.02 + 0.01 * gap  # station de tyrolienne : il ressort à l'autre bout, aussi loin soit-il
     if gap < 0 or gap > max_gap:
         return None
     dist = math.hypot(a.pos[0] - b.pts[b.first]["x"], a.pos[1] - b.pts[b.first]["y"])
@@ -425,6 +441,9 @@ def _expected(rows, slot, k, run, step_s):
         r = rows[(j, slot)]
         return r[4], r[5], abs(k - j) * step_s
     a, b = rows[(before, slot)], rows[(after, slot)]
+    if _tp_linked((a[4], a[5]), (b[4], b[5])):  # il est resté à la station, puis ressort à l'autre bout : on attend la moitié du trou au départ
+        near = a if k - before <= after - k else b
+        return near[4], near[5], min(k - before, after - k) * step_s
     f = (k - before) / (after - before)
     return a[4] + (b[4] - a[4]) * f, a[5] + (b[5] - a[5]) * f, min(k - before, after - k) * step_s
 
@@ -490,8 +509,13 @@ def bridge_gaps(rows, runs, step_s, put):
                 if b - a <= 1:
                     continue
                 ra, rb = rows[(a, slot)], rows[(b, slot)]
+                teleport = _tp_linked((ra[4], ra[5]), (rb[4], rb[5])) and (b - a) * step_s <= TP_MAX_GAP_S
                 for k in range(a + 1, b):
                     if rows.get((k, slot)):
+                        continue
+                    if teleport:  # station de tyrolienne : au départ jusqu'au milieu du trou, puis à la sortie (jamais une droite à travers la carte)
+                        near = ra if k - a <= b - k else rb
+                        put(k, slot, ra[3], near[4], near[5], near[6], True, CONF_BRIDGE)
                         continue
                     f = (k - a) / (b - a)
                     if ra[6] is not None and rb[6] is not None:
@@ -698,13 +722,15 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
+    teleports : [((x, y), (x, y))] paires de stations de tyrolienne de la carte (facultatif).
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
+    _TELEPORTS[:] = teleports or []
     frames = anchor_spectated(frames, states)
     dead = dead_frames(states, step_s)
     frames = drop_static_spectated(drop_static_noise(frames), states)
@@ -733,9 +759,14 @@ def solve(frames, step_s, deaths=None, states=None):
             # trous internes (pastille cachée quelques images) : interpolation
             filled = {}
             for a, b in zip(idx, idx[1:]):
+                pa, pb = t.pts[a], t.pts[b]
+                teleport = _tp_linked((pa["x"], pa["y"]), (pb["x"], pb["y"]))
                 for k in range(a + 1, b):
                     r = (k - a) / (b - a)
-                    pa, pb = t.pts[a], t.pts[b]
+                    if teleport:  # station de tyrolienne : à l'entrée jusqu'au milieu du trou, puis à la sortie
+                        near = pa if k - a <= b - k else pb
+                        filled[k] = (near["x"], near["y"])
+                        continue
                     filled[k] = (pa["x"] + (pb["x"] - pa["x"]) * r, pa["y"] + (pb["y"] - pa["y"]) * r)
             obs = {}
             for k in idx:
@@ -769,8 +800,13 @@ def solve(frames, step_s, deaths=None, states=None):
             ia, ib = a.last, b.first
             pa, pb = a.pts[ia], b.pts[ib]
             ang_a, ang_b = rows[(ia, slot)][6], rows[(ib, slot)][6]
+            teleport = _tp_linked((pa["x"], pa["y"]), (pb["x"], pb["y"]))
             for k in range(ia + 1, ib):
                 r = (k - ia) / (ib - ia)
+                if (k, slot) not in rows and teleport:  # station de tyrolienne : à l'entrée jusqu'au milieu du trou, puis à la sortie
+                    near, ang = (pa, ang_a) if k - ia <= ib - k else (pb, ang_b)
+                    put(k, slot, a.team, near["x"], near["y"], ang, True, CONF_FILL)
+                    continue
                 if (k, slot) not in rows:
                     if ang_a is not None and ang_b is not None:
                         ang = (ang_a + (((ang_b - ang_a + 180) % 360) - 180) * r) % 360

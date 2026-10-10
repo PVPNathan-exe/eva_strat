@@ -154,3 +154,44 @@ def test_a_numbered_white_marker_on_a_zipline_station_is_kept_for_the_observed_p
     assert sum(1 for _, _, dets in kept for d in dets) == 34  # le numéro 2 est bien celui du joueur observé (joueur 2) : conservée
     other = {k: _watch(3) for k in range(200)}
     assert not any(d for _, _, dets in tracking.drop_static_spectated(frames, other) for d in dets)  # joueur 3 observé : ce « 2 » est la station
+
+
+STATIONS = [((0.36, 0.06), (0.36, 0.71))]
+
+
+def _with_stations(fn):
+    def wrapper():
+        tracking._TELEPORTS[:] = STATIONS
+        try:
+            fn()
+        finally:
+            tracking._TELEPORTS[:] = []
+
+    return wrapper
+
+
+@_with_stations
+def test_a_station_links_its_entrance_and_its_exit_only():
+    assert tracking._tp_linked((0.37, 0.70), (0.36, 0.07))  # entrée vers sortie
+    assert tracking._tp_linked((0.36, 0.06), (0.37, 0.72))  # et dans l'autre sens
+    assert not tracking._tp_linked((0.37, 0.70), (0.60, 0.07))  # une autre station n'est pas sa sortie
+    assert not tracking._tp_linked((0.20, 0.40), (0.36, 0.07))  # loin de toute station
+
+
+@_with_stations
+def test_a_player_who_vanishes_at_a_station_is_the_one_who_appears_at_its_exit():
+    a = _track(0, 20, 0.36, 0.70)
+    b = _track(24, 40, 0.36, 0.07)  # 0,4 s plus tard à l'autre bout de la carte
+    far = _track(24, 40, 0.80, 0.30)
+    assert tracking._gap_cost(a, b, STEP) is not None
+    assert tracking._gap_cost(a, far, STEP) is None
+
+
+@_with_stations
+def test_a_gap_across_a_station_waits_at_the_entrance_then_is_at_the_exit():
+    rows = {(k, 1): row(k, 1, 0.36, 0.70) for k in range(0, 5)}
+    rows.update({(k, 1): row(k, 1, 0.36, 0.06) for k in range(15, 20)})
+    tracking.bridge_gaps(rows, {1: [(0, 19)]}, STEP, make_put(rows))
+    ys = [rows[(k, 1)][5] for k in range(5, 15)]
+    assert all(y in (0.70, 0.06) for y in ys)  # jamais un point au milieu de la carte
+    assert ys[:5] == [0.70] * 5 and ys[5:] == [0.06] * 5  # entrée jusqu'au milieu du trou, puis sortie

@@ -28,7 +28,7 @@ JUMP_DIST = 0.08  # distance (relative à la minimap) entre deux images consécu
 CACHE = Path(__file__).resolve().parent.parent / "data" / "cache"
 
 
-def compare(rows, states, dead_sets=None, step_s=0.1):
+def compare(rows, states, dead_sets=None, step_s=0.1, teleports=()):
     """Compare les lignes du suivi {(image, slot): vivant} avec les bandeaux. Renvoie les compteurs."""
     alive_rows = {(r[0], r[2]) for r in rows if r[7]}
     read_rows = {(r[0], r[2]) for r in rows if r[7] and r[8] >= READ_CONF}
@@ -47,17 +47,18 @@ def compare(rows, states, dead_sets=None, step_s=0.1):
             agree += have == banner_alive
             ghost += have and banner_dead
             missing += (not have) and banner_alive
-    return {"n": n, "agree": agree, "ghost": ghost, "missing": missing, "read": read, "alive": alive, "jumps": count_jumps(rows)}
+    return {"n": n, "agree": agree, "ghost": ghost, "missing": missing, "read": read, "alive": alive, "jumps": count_jumps(rows, teleports)}
 
 
-def count_jumps(rows):
+def count_jumps(rows, teleports=()):
     """Nombre de sauts impossibles : un même joueur vivant qui change de place de plus de JUMP_DIST entre deux images consécutives."""
+    tracking._TELEPORTS[:] = teleports or []  # un trajet par une station de tyrolienne est réel, pas un saut
     last, jumps = {}, 0
     for r in sorted(rows, key=lambda r: (r[2], r[0])):
         if not r[7] or r[8] < JUMP_CONF:
             continue
         prev = last.get(r[2])
-        if prev and r[0] - prev[0] == 1 and ((r[4] - prev[4]) ** 2 + (r[5] - prev[5]) ** 2) ** 0.5 > JUMP_DIST:
+        if prev and r[0] - prev[0] == 1 and ((r[4] - prev[4]) ** 2 + (r[5] - prev[5]) ** 2) ** 0.5 > JUMP_DIST and not tracking._tp_linked((prev[4], prev[5]), (r[4], r[5])):
             jumps += 1
         last[r[2]] = r
     return jumps
@@ -94,8 +95,8 @@ def evaluate_game(conn, game_id, refresh=False):
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
     out = {}
     for label, use_states in (("sans bandeaux", False), ("avec bandeaux", True)):
-        rows = tracking.solve(data["frames"], step_s, deaths, data["states"] if use_states else None)
-        out[label] = compare(rows, data["states"], step_s=step_s)
+        rows = tracking.solve(data["frames"], step_s, deaths, data["states"] if use_states else None, db.teleports_for(g["map"]))
+        out[label] = compare(rows, data["states"], step_s=step_s, teleports=db.teleports_for(g["map"]))
     return g, out
 
 
@@ -116,7 +117,7 @@ def gap_test(conn, game_ids):
         step_s = 6 / g["fps"]
         data = _load(conn, g, step_s)
         deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, gid)]
-        rows = tracking.solve(data["frames"], step_s, deaths, data["states"])
+        rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]))
         truth = {(r[0], r[2]): r for r in rows if r[7] and r[8] >= READ_CONF}
         dead = tracking.dead_frames(data["states"], step_s)
         runs = tracking.alive_runs(data["states"], dead)

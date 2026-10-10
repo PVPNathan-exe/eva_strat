@@ -186,7 +186,16 @@ def all_verified(conn, video_id):
 
 
 DEFAULT_ZONES_PATH = Path(__file__).with_name("default_zones.json")
+TELEPORTS_PATH = Path(__file__).with_name("map_teleports.json")  # stations de tyrolienne par carte (paires entrée/sortie)
 MAP_ZONES_PATH = Path(__file__).with_name("map_zones.json")  # zones propres à une carte (la minimap n'a pas la même taille partout)
+
+
+def teleports_for(map_name):
+    """Paires de stations de tyrolienne d'une carte : [((x, y), (x, y))], vide si la carte n'en a pas de connues."""
+    if not map_name or not TELEPORTS_PATH.exists():
+        return []
+    pairs = json.loads(TELEPORTS_PATH.read_text(encoding="utf-8")).get(map_name, [])
+    return [(tuple(a), tuple(b)) for a, b in pairs]
 
 
 def zone_for(conn, map_name, zone):

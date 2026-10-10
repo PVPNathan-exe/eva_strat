@@ -21,7 +21,7 @@ def resolve_game(conn, game_id):
     step_s = 6 / g["fps"]  # même cadence que l'analyse (une lecture toutes les 6 images)
     data = evaluate._load(conn, g, step_s)
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
-    rows = tracking.solve(data["frames"], step_s, deaths, data["states"])
+    rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]))
     scanned = conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (game_id,)).fetchone() is not None
     db.replace_samples(conn, game_id, rows, tracking.PARAMS_VERSION, with_kills=scanned)
     db.apply_corrections(conn, game_id)
