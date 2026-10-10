@@ -97,8 +97,8 @@ def read_candidates(conn, icon_id, root=None, frames=FRAMES_PER_SOURCE, limit=MA
             a, b, c, d = loadout.BOXES[field]
             piece = banner[int(c * h) : int(d * h), int(a * bw) : int(b * bw)]
             shape, tone = loadout._shape(piece), loadout._dark(piece)
-            if int(shape.sum()) < weapons.MIN_PIXELS:
-                continue
+            if int(shape.sum()) < weapons.MIN_PIXELS or (field != "gadget" and not loadout.usable_weapon_read(shape, tone)):
+                continue  # arme rangée (pâle), forme trop petite ou fond mal séparé : on passe à une autre image
             ys, xs = np.nonzero(shape)
             out.append({
                 "token": f"{game_id}_{slot}_{int(round(t * 10))}",

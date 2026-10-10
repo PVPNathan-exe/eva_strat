@@ -20,6 +20,71 @@ MATCH_SCORE = 0.6  # avec le flou ci-dessous : une même arme dépasse 0,62, deu
 # Un seuil plus haut en fait deux icônes distinctes, à nommer une fois ; un seuil bas les confondait.
 MATCH_SCORE_BY_PREFIX = {"B": 0.85}
 _cache = {}
+_native_cache = {}
+
+# Reconnaissance des armes de bandeau à la TAILLE RÉELLE. Une arme est toujours dessinée à la même taille ; écrasée à 32 x 12 (ci-dessus), une même arme lue
+# sur une autre vidéo (qualité différente) ne ressemblait qu'à 0,40 d'elle-même alors que deux armes différentes montaient à 0,78. Mesuré sur les icônes
+# nommées : silhouette alignée sur son centre dans un cadre fixe, flou léger, et écart de taille. Cette règle retrouve 17 paires de même arme sur 18 avec
+# 0 fausse paire sur 235 (la règle ci-dessus retrouvait environ la moitié des paires).
+NATIVE_CANVAS = (64, 32)
+NATIVE_THRESHOLD = 100  # seuil (sur 255) du relief normalisé qui donne la silhouette
+NATIVE_MATCH = 0.93  # ressemblance minimale des silhouettes alignées
+NATIVE_SIZE_GAP = 0.35  # écart relatif maximal de largeur et de hauteur
+NATIVE_MIN_CORR = 0.4  # et ressemblance minimale (écrasée) pour écarter les rapprochements absurdes
+
+
+def _native_mask(tone, icon=None):
+    """Silhouette à taille réelle d'une icône : relief normalisé, seuil fixe (le décor autour de la forme est écarté si on connaît le masque)."""
+    t = tone.astype(np.float32)
+    if icon is not None:
+        t = t * cv2.dilate((icon > 0).astype(np.uint8), np.ones((3, 3), np.uint8))
+    return (t * (255.0 / max(float(t.max()), 1.0)) > NATIVE_THRESHOLD).astype(np.uint8)
+
+
+def _native_desc(mask):
+    """(vecteur, (largeur, hauteur)) d'une silhouette à taille réelle : posée au centre d'un cadre fixe puis légèrement floutée. None si trop petite."""
+    ys, xs = np.nonzero(mask)
+    if xs.size < MIN_PIXELS:
+        return None
+    w, h = NATIVE_CANVAS
+    canvas = np.zeros((h, w), np.float32)
+    yy, xx = ys + int(round(h / 2 - ys.mean())), xs + int(round(w / 2 - xs.mean()))
+    ok = (yy >= 0) & (yy < h) & (xx >= 0) & (xx < w)
+    canvas[yy[ok], xx[ok]] = 1.0
+    return cv2.GaussianBlur(canvas, (0, 0), 1.0).ravel(), (int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1))
+
+
+def _natives(folder):
+    """Silhouettes à taille réelle des modèles d'armes de bandeau, relues de leurs aperçus (agrandis 8 fois). Pas d'aperçu en relief : pas de silhouette."""
+    key = str(folder)
+    if key not in _native_cache:
+        found = {}
+        for path in sorted(Path(folder).glob("previews/B*.png")):
+            img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+            if img is None or np.isin(img, (0, 255)).all():
+                continue
+            desc = _native_desc(_native_mask(cv2.resize(img, (img.shape[1] // 8, img.shape[0] // 8), interpolation=cv2.INTER_AREA)))
+            if desc:
+                found[path.stem] = desc
+        _native_cache[key] = found
+    return _native_cache[key]
+
+
+def _native_match(icon, tone, templates, folder, exclude):
+    """Modèle d'arme de bandeau qui a la même silhouette à taille réelle, ou None."""
+    desc = _native_desc(_native_mask(tone, icon))
+    if desc is None:
+        return None
+    v = _vec(icon)
+    best = None
+    for name, (vec, size) in _natives(folder).items():
+        if name in exclude or name not in templates:
+            continue
+        gap = max(abs(desc[1][k] - size[k]) / max(desc[1][k], size[k]) for k in (0, 1))
+        score = _score(desc[0], vec)
+        if score >= NATIVE_MATCH and gap <= NATIVE_SIZE_GAP and (v is None or _score(v, templates[name]) >= NATIVE_MIN_CORR) and (best is None or score > best[0]):
+            best = (score, name)
+    return best[1] if best else None
 
 
 def _vec(icon):
@@ -64,6 +129,7 @@ def _write_preview(folder, name, icon, tone):
     ys, xs = np.nonzero(icon)
     box = (slice(ys.min(), ys.max() + 1), slice(xs.min(), xs.max() + 1))
     (Path(folder) / "previews").mkdir(exist_ok=True)
+    _native_cache.pop(str(folder), None)
     if tone is not None and tone.shape == icon.shape:
         near = cv2.dilate((icon > 0).astype(np.uint8), np.ones((3, 3), np.uint8))  # le décor autour de l'icône n'entre pas dans l'aperçu
         piece = (tone * near)[box].astype(np.float32)
@@ -124,10 +190,13 @@ def identify(icon, folder=ICON_DIR, create=True, prefix="W", tone=None, exclude=
         return None
     templates = _templates(folder)
     best = max(((_score(v, t), name) for name, t in templates.items() if name.startswith(prefix) and name not in exclude), default=(-1.0, None))
-    if best[0] >= MATCH_SCORE_BY_PREFIX.get(prefix, MATCH_SCORE):
-        if tone is not None and create and _is_binary_preview(folder, best[1]):
-            _write_preview(folder, best[1], icon, tone)
-        return best[1]
+    found = best[1] if best[0] >= MATCH_SCORE_BY_PREFIX.get(prefix, MATCH_SCORE) else None
+    if found is None and prefix == "B" and tone is not None:
+        found = _native_match(icon, tone, templates, folder, exclude)
+    if found:
+        if tone is not None and create and _is_binary_preview(folder, found):
+            _write_preview(folder, found, icon, tone)
+        return found
     if not create:
         return None
     Path(folder).mkdir(parents=True, exist_ok=True)
@@ -182,4 +251,5 @@ def replace_template(icon_id, icon, tone=None, folder=ICON_DIR):
     cv2.imwrite(str(Path(folder) / f"{icon_id}.png"), cv2.resize(shape, SIZE, interpolation=cv2.INTER_AREA))
     _write_preview(folder, icon_id, icon, tone)
     _cache.pop(str(folder), None)
+    _native_cache.pop(str(folder), None)
 

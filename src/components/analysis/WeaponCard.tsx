@@ -50,7 +50,7 @@ export function WeaponCard({
     setDraft(null);
   };
   return (
-    <div className={`weapon${weapon.name ? ' is-named' : ''}${weapon.inferred ? ' is-inferred' : ''}${weapon.locked ? ' is-locked' : ''}`}>
+    <div className={`weapon${weapon.name ? ' is-named' : ''}${weapon.inferred ? ' is-inferred' : ''}${weapon.locked ? ' is-locked' : ''}${!weapon.name ? ' is-unknown' : ''}`} id={`weapon-${weapon.id}`}>
       <img src={weaponIconUrl(weapon.id)} alt={`Icône ${weapon.id}`} />
       <div className="weapon__meta">
         {weapon.locked ? (

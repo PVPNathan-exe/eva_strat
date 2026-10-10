@@ -55,3 +55,58 @@ def test_choose_best_prefers_thinnest_edges():
     a, b = _cand("sharp", 40), _cand("soft", 40)
     a["width"], b["width"] = 1.1, 2.5
     assert [c["token"] for c in icon_fix.choose_best([b, a], best=1)] == ["sharp"]
+
+
+def _box_read(width, height, top=4, left=6, tone_value=130):
+    """Lecture synthétique : une arme (rectangle) dans une boîte de 20 x 40 pixels."""
+    shape = np.zeros((20, 40), np.uint8)
+    shape[top : top + height, left : left + width] = 1
+    return shape, (shape * tone_value).astype(np.uint8)
+
+
+def test_only_held_whole_weapons_are_usable_reads():
+    import loadout
+
+    assert loadout.usable_weapon_read(*_box_read(26, 8))  # arme tenue, entière, plus longue que haute
+    assert not loadout.usable_weapon_read(*_box_read(26, 8, tone_value=40))  # arme rangée (pâle)
+    assert not loadout.usable_weapon_read(*_box_read(26, 8, top=0))  # coupée en haut de la boîte
+    assert not loadout.usable_weapon_read(*_box_read(8, 14))  # plus haute que longue : pas une arme (fond mal séparé)
+    assert not loadout.usable_weapon_read(np.zeros((20, 40), np.uint8), np.zeros((20, 40), np.uint8))
+
+
+def test_background_is_measured_row_by_row_when_the_health_fill_crosses_the_icon_band():
+    import loadout
+
+    piece = np.full((20, 40, 3), (150, 150, 150), np.uint8)  # haut du bandeau : gris
+    piece[10:] = (230, 120, 40)  # bas : couleur d'équipe (fond rempli selon les points de vie)
+    piece[4:8, 3:37] = (20, 20, 20)  # longue icône noire (85 % de la ligne) dans la partie grise
+    shape = loadout._shape(piece)
+    assert shape[4:8, 3:37].all() and not shape[10:].any()  # seule l'icône ressort, pas la moitié colorée de la boîte
+
+
+def test_merging_keeps_the_weapon_and_its_attached_parts_only():
+    import loadout
+
+    mask = np.zeros((20, 60), np.uint8)
+    mask[8:14, 5:35] = 1  # arme
+    mask[4:7, 10:22] = 1  # lunette détachée mais proche
+    mask[4:14, 52:58] = 1  # morceau de portrait, loin
+    merged = loadout.merge_masks([mask, mask])
+    assert merged[8:14, 5:35].all() and merged[4:7, 10:22].any()
+    assert not merged[:, 50:].any()
+
+
+def test_same_weapon_is_recognised_at_its_real_size_even_when_blurry():
+    import weapons
+
+    sharp = np.zeros((30, 50), np.uint8)
+    sharp[8:16, 6:34] = 1
+    sharp[16:24, 14:19] = 1  # poignée
+    blurry = cv2.GaussianBlur(sharp.astype(np.float32), (0, 0), 1.2)
+    other = np.zeros((30, 50), np.uint8)
+    other[12:18, 6:44] = 1  # arme plus longue et plus fine
+    d_sharp = weapons._native_desc(weapons._native_mask(sharp.astype(np.float32) * 130))
+    d_blurry = weapons._native_desc(weapons._native_mask(blurry * 130))
+    d_other = weapons._native_desc(weapons._native_mask(other.astype(np.float32) * 130))
+    assert weapons._score(d_sharp[0], d_blurry[0]) >= weapons.NATIVE_MATCH
+    assert weapons._score(d_sharp[0], d_other[0]) < weapons.NATIVE_MATCH

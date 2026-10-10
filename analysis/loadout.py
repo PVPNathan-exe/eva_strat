@@ -11,16 +11,21 @@ import numpy as np
 import weapons
 
 # Boîtes des icônes dans un bandeau (fractions de sa largeur et de sa hauteur) : x0, x1, y0, y1
-BOXES = {"arme1": (0.30, 0.54, 0.33, 0.50), "arme2": (0.53, 0.80, 0.33, 0.50), "gadget": (0.80, 0.96, 0.33, 0.50)}
+BOXES = {"arme1": (0.30, 0.54, 0.29, 0.52), "arme2": (0.53, 0.80, 0.29, 0.52), "gadget": (0.80, 0.96, 0.29, 0.52)}
 PREFIX = {"arme1": "B", "arme2": "B", "gadget": "G"}
 KEEP_SHARE = 0.5  # un pixel fait partie de la forme s'il l'est sur au moins la moitié des images
 MIN_AREA = 30
+BG_PERCENTILE = 90  # le fond d'une ligne de la boîte est ce niveau de sa distribution
+PART_GAP_PX = 3  # un morceau détaché (lunette, crosse) est gardé s'il est à moins de ce nombre de pixels de l'amas principal
 
 
 def _dark(piece):
-    """Relief de l'icône : de combien chaque pixel est plus sombre que le fond du bandeau (niveau le plus fréquent)."""
-    gray = cv2.cvtColor(piece, cv2.COLOR_BGR2GRAY).astype(np.int16)
-    bg = np.bincount(gray.ravel().clip(0, 255)).argmax()
+    """Relief de l'icône : de combien chaque pixel est plus sombre que le fond du bandeau, mesuré ligne par ligne (haut de la distribution de la ligne : le fond
+    est plus clair que l'arme noire, et une arme longue occupe plus de la moitié d'une ligne, ce qui empêche de prendre le niveau le plus fréquent).
+    Le fond d'un bandeau se remplit de la couleur de l'équipe depuis le bas selon les points de vie : la ligne de séparation (gris au-dessus, couleur
+    en dessous) traverse parfois la bande des armes, et un fond unique pour toute la boîte ferait ressortir une moitié de la boîte comme une fausse forme."""
+    gray = cv2.cvtColor(piece, cv2.COLOR_BGR2GRAY).astype(np.int16).clip(0, 255)
+    bg = np.percentile(gray, BG_PERCENTILE, axis=1).astype(np.int16)[:, None]
     return np.clip(bg - gray, 0, 255).astype(np.uint8)
 
 
@@ -58,11 +63,17 @@ def merge_masks(masks):
     n, lab, stats, _ = cv2.connectedComponentsWithStats(shape)
     if n <= 1:
         return None
+    # Le plus gros amas est l'arme ; ne restent avec lui que les morceaux qui le touchent presque (lunette, crosse détachées). Un bout de portrait
+    # ou du pseudo, loin de l'arme, n'en fait pas partie.
+    main = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    if stats[main, cv2.CC_STAT_AREA] < MIN_AREA:
+        return None
+    near = cv2.dilate((lab == main).astype(np.uint8), np.ones((2 * PART_GAP_PX + 1, 2 * PART_GAP_PX + 1), np.uint8))
     keep = np.zeros_like(shape)
     for i in range(1, n):
-        if stats[i, cv2.CC_STAT_AREA] >= MIN_AREA:
+        if stats[i, cv2.CC_STAT_AREA] >= MIN_AREA and (i == main or near[lab == i].any()):
             keep[lab == i] = 1
-    return keep * 255 if keep.sum() else None
+    return keep * 255
 
 
 def identify(shape, kind, folder=weapons.ICON_DIR, create=True, tone=None, exclude=()):
@@ -84,7 +95,25 @@ def resolve_loadout(reads, folder=weapons.ICON_DIR):
     return out
 
 
-def read_loadouts(video, game, team_zones, width, height, frames=8):
+HELD_TONE = 90  # relief (95e centile) d'une arme tenue, en noir sur le bandeau ; l'arme rangée est pâle (vers 40) et mal lue
+ICON_MIN_AREA = 80  # surface minimale (pixels de l'image native) d'une icône d'arme exploitable
+ICON_MAX_SHARE = 0.6  # part maximale de la boîte occupée par l'icône (au-delà : fond mal séparé)
+ICON_MIN_ASPECT = 1.2  # une arme est plus longue que haute (largeur / hauteur)
+
+
+def usable_weapon_read(shape, tone):
+    """Une lecture d'arme n'est gardée que si l'arme est tenue (noire, bien lisible) et que la forme a la taille et le rapport d'une arme.
+    L'arme rangée est pâle et sa forme incomplète ; mélangée aux lectures nettes elle rétrécit l'icône (icône coupée, ou aperçu entre les deux armes)."""
+    if not shape.any() or float(np.percentile(tone, 95)) < HELD_TONE:
+        return False
+    if shape[0].any() or shape[-1].any():
+        return False  # coupée en haut ou en bas de la boîte : l'icône dépasse, on lira une autre image (en largeur elle peut remplir la boîte)
+    ys, xs = np.nonzero(shape)
+    area, (h, w) = int(shape.sum()), shape.shape
+    return area >= ICON_MIN_AREA and area <= ICON_MAX_SHARE * h * w and (xs.max() - xs.min() + 1) >= ICON_MIN_ASPECT * (ys.max() - ys.min() + 1)
+
+
+def read_loadouts(video, game, team_zones, width, height, frames=12, folder=weapons.ICON_DIR):
     """Équipement {slot: {"arme1", "arme2", "gadget"}} d'une game (slots 1 à 8 dans l'ordre des bandeaux)."""
     import names  # évite un import circulaire au chargement
 
@@ -100,13 +129,15 @@ def read_loadouts(video, game, team_zones, width, height, frames=8):
                 continue
             for i, row in enumerate(icons_of_banners(crop, tones=True)):
                 for kind, (mask, tone) in row.items():
-                    acc.setdefault((slots[i], kind), []).append((mask, tone))
+                    # Armes : seules les images où l'arme est tenue comptent (sinon on change de frame). Gadgets : toutes.
+                    if kind == "gadget" or usable_weapon_read(mask, tone):
+                        acc.setdefault((slots[i], kind), []).append((mask, tone))
     merged = {}
     for (slot, kind), reads in acc.items():
         shape = merge_masks([m for m, _ in reads])
         if shape is not None:
             merged.setdefault(slot, {})[kind] = (shape, np.mean([t.astype(np.float32) for _, t in reads], axis=0).astype(np.uint8))
-    return {slot: resolve_loadout(reads) for slot, reads in merged.items()}
+    return {slot: resolve_loadout(reads, folder) for slot, reads in merged.items()}
 
 
 HELD_MIN_MARGIN = 30  # l'arme tenue est en noir sur le bandeau (relief vers 120-140), l'autre en pâle (vers 40) : en dessous, on ne tranche pas
@@ -127,7 +158,8 @@ def _held_reads(video, zone, width, height, t, index):
     for key in ("arme1", "arme2"):
         a, b, c, d = BOXES[key]
         piece = banner[int(c * h) : int(d * h), int(a * bw) : int(b * bw)]
-        reads.append((float(np.percentile(_dark(piece), 95)), _shape(piece)))
+        tone = _dark(piece)
+        reads.append((float(np.percentile(tone, 95)), _shape(piece), tone))
     return reads
 
 
@@ -156,8 +188,8 @@ def held_icon(video, zones, width, height, t, slot):
     for dt in HELD_OFFSETS:
         reads = _held_reads(video, zone, width, height, t + dt, index)
         if reads and abs(reads[0][0] - reads[1][0]) >= HELD_MIN_MARGIN:
-            shape = reads[0][1] if reads[0][0] > reads[1][0] else reads[1][1]
-            icon = identify(shape, "arme1", create=False) if shape.sum() else None
+            _, shape, tone = reads[0] if reads[0][0] > reads[1][0] else reads[1]
+            icon = identify(shape, "arme1", create=False, tone=tone) if shape.sum() else None
     return icon
 
 

@@ -99,6 +99,8 @@ export function WeaponsTab() {
   const unlock = (id: string) => void analysisApi.reviewWeapon(id, { locked: false }).then(() => loadWeapons()).catch((err: Error) => setError(err.message));
 
   const unnamed = (weapons ?? []).filter((w) => !w.name).length;
+  // Icônes que le programme n'a pas su deviner (forme jamais vue, ou trop différente des modèles verrouillés) : à nommer par l'utilisateur.
+  const unknown = (weapons ?? []).filter((w) => !w.name && w.kind !== 'killfeed');
   const save = (id: string, name: string) => void nameWeapon(id, name).catch((err: Error) => setError(err.message));
 
   return (
@@ -143,6 +145,15 @@ export function WeaponsTab() {
           )}
           {guessInfo && <strong>{guessInfo}</strong>}
         </div>
+      )}
+      {unknown.length > 0 && (
+        <p className="weapons__unknown" role="status">
+          <b>{unknown.length} icône(s) que le programme ne peut pas deviner</b> ({unknown.map((w) => w.id).join(', ')}) : forme jamais vue ou trop différente des modèles
+          verrouillés. Nomme-les ci-dessous (une arme peut venir d'un autre practice).
+          <button type="button" onClick={() => document.getElementById(`weapon-${unknown[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+            Aller à la première
+          </button>
+        </p>
       )}
       {error && <p className="games__error">{error}</p>}
       {weapons && weapons.length === 0 && (
