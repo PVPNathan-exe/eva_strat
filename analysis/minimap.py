@@ -34,6 +34,7 @@ WAITING_CIRCULARITY = 0.85  # un joueur mort qui attend sa réapparition est un 
 WAITING_SPAWN_SHARE = 0.25  # part du pourtour sur la couleur de la zone de départ de son équipe
 WHITE_REQUIRE_DIGIT = False  # vrai : une pastille blanche n'est acceptée que si son numéro est lisible (les symboles blancs de la carte n'en ont pas)
 WHITE_MAX_UNNUMBERED = 2  # une image normale a au plus un joueur observé : plus de pastilles blanches sans numéro, c'est du décor (Polaris)
+WHITE_RING_SHARE = 0.35  # part minimale du pourtour d'une pastille blanche qui doit être du liseré de la couleur de l'équipe
 WHITE_MIN_AREA = 90  # le joueur observé rétrécit par moments (animation) : sa pastille blanche peut tomber vers 100 pixels ; le liseré coloré reste exigé
 DIM_MIN_SEPARATION = 0.03  # distance minimale (relative à la largeur) à une pastille déjà trouvée de la même équipe
 RING_ORANGE = ((3, 110, 110), (22, 255, 255))  # liseré du joueur observé : plus sombre qu'une pastille pleine
@@ -396,6 +397,10 @@ def find_markers(crop, templates=None):
             }
             team = max(weak, key=weak.get)
             votes[team] = weak[team] if weak[team] >= RING_WEAK_PIXELS * scale and weak[team] > 2 * weak["A" if team == "B" else "B"] else 0
+        # Un vrai joueur observé a un liseré de sa couleur sur 30 à 75 % de son pourtour (mesuré) ; un reflet bleuté du décor autour d'une tache blanche n'en
+        # couvre qu'un petit bout. On exige une vraie proportion du pourtour, pas seulement quelques pixels.
+        if votes[team] and votes[team] < WHITE_RING_SHARE * int((ring > 0).sum()):
+            votes[team] = 0
         if votes[team] >= 10 * scale:
             # Le liseré coloré qui entoure la pastille blanche en dessine la pointe : on l'ajoute pour mesurer la direction.
             rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)

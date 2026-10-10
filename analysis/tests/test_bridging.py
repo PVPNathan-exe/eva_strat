@@ -195,3 +195,38 @@ def test_a_gap_across_a_station_waits_at_the_entrance_then_is_at_the_exit():
     ys = [rows[(k, 1)][5] for k in range(5, 15)]
     assert all(y in (0.70, 0.06) for y in ys)  # jamais un point au milieu de la carte
     assert ys[:5] == [0.70] * 5 and ys[5:] == [0.06] * 5  # entrée jusqu'au milieu du trou, puis sortie
+
+
+def _with_walk(cells, fn):
+    tracking._WALK.clear()
+    tracking._WALK.update(cells)
+    try:
+        fn()
+    finally:
+        tracking._WALK.clear()
+
+
+def test_a_gap_follows_the_known_corridors_instead_of_crossing_a_wall():
+    # couloir en L : de (0.1, 0.1) à (0.1, 0.5) puis à (0.5, 0.5) ; la droite directe traverserait la zone vide au milieu
+    points = [(0.1, y / 100) for y in range(10, 51)] * 3 + [(x / 100, 0.5) for x in range(10, 51)] * 3
+    cells = tracking.walk_grid(points)
+
+    def check():
+        path = tracking.route((0.1, 0.1), (0.5, 0.5))
+        assert len(path) >= 3  # il contourne par le coin
+        assert all(tracking._cell(p) in cells | {tracking._cell((0.1, 0.1)), tracking._cell((0.5, 0.5))} for p in path)
+        x, y = tracking._along(path, 0.5)
+        assert (x, y) != (0.3, 0.3)  # le milieu du trajet n'est pas au milieu de la zone vide
+
+    _with_walk(cells, check)
+
+
+def test_without_known_corridors_or_with_a_walkable_straight_line_the_route_is_straight():
+    assert tracking.route((0.1, 0.1), (0.5, 0.5)) == [(0.1, 0.1), (0.5, 0.5)]  # aucune carte des passages
+    open_cells = tracking.walk_grid([(x / 100, y / 100) for x in range(5, 60) for y in range(5, 60)] * 3)
+    _with_walk(open_cells, lambda: [None for _ in [0]] and None)
+    tracking._WALK.update(open_cells)
+    try:
+        assert tracking.route((0.1, 0.1), (0.5, 0.5)) == [(0.1, 0.1), (0.5, 0.5)]  # la ligne droite est praticable
+    finally:
+        tracking._WALK.clear()

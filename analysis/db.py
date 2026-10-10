@@ -192,6 +192,17 @@ TELEPORTS_PATH = Path(__file__).with_name("map_teleports.json")  # stations de t
 MAP_ZONES_PATH = Path(__file__).with_name("map_zones.json")  # zones propres à une carte (la minimap n'a pas la même taille partout)
 
 
+def map_points(conn, map_name, exclude_game=None):
+    """Positions sûres (vivant, confiance d'au moins 0,7) lues dans les autres games de la même carte : [(x, y)]. Elles servent à apprendre les passages de la carte."""
+    if not map_name:
+        return []
+    rows = conn.execute(
+        "SELECT s.x, s.y FROM samples s JOIN games g ON g.id = s.game_id WHERE g.map = ? AND g.id <> ? AND s.alive = 1 AND s.confidence >= 0.7",
+        (map_name, exclude_game or -1),
+    )
+    return [(r["x"], r["y"]) for r in rows]
+
+
 def teleports_for(map_name):
     """Paires de stations de tyrolienne d'une carte : [((x, y), (x, y))], vide si la carte n'en a pas de connues."""
     if not map_name or not TELEPORTS_PATH.exists():

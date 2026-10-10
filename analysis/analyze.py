@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 import db
+import banners
 import capture
 import ingest
 import killfeed
@@ -261,6 +262,18 @@ def upgrade_kill_weapons(conn, video_id, path, meta, emit, control=None, only=No
     return len(todo)
 
 
+def drop_unconfirmed_kills(path, meta, zones, events):
+    """Écarte les kills dont la victime n'est pas grisée sur son bandeau juste après (ligne inventée : nom flottant, transition de fin de game). Un bandeau
+    illisible ne fait rien écarter."""
+    kept = []
+    for e in events:
+        zone, index = loadout._bar_of(zones, e["victim"])
+        if zone is not None and banners.confirm_death(path, zone, meta["width"], meta["height"], e["t"], index) is False:
+            continue
+        kept.append(e)
+    return kept
+
+
 def extract_kills(conn, video_id, path, meta, emit, control=None, only=None):
     """Killfeed des games qui ont leurs pseudos et pas encore de kills lus. Renvoie le nombre de games lues, ou (n, erreur)."""
     todo = only_games(db.games_without_kills(conn, video_id, killfeed.REVISION), only)
@@ -282,6 +295,7 @@ def extract_kills(conn, video_id, path, meta, emit, control=None, only=None):
                 e["weapon"] = e.get("hint")  # piste pour retrouver le tueur après la lecture des positions (infer_killers), sinon effacée
             if e.get("killer") is not None and (e["kind"] == "kill" or (e["kind"] == "suicide" and e.get("grenade"))):
                 e["weapon"] = kill_weapon(path, meta, zones, loads, e["killer"], e["t"], e.get("grenade"))
+        events = drop_unconfirmed_kills(path, meta, zones, events)
         db.replace_kills(conn, g["id"], events, killfeed.REVISION)
         done += 1
     return done, None
@@ -298,7 +312,7 @@ def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=pos
         scanned = conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (g["id"],)).fetchone() is not None
         deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, g["id"])]
         bars = (db.zone_for(conn, g["map"], "team_a_bar"), db.zone_for(conn, g["map"], "team_b_bar"))
-        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s, deaths=deaths, bars=bars, teleports=db.teleports_for(g["map"]))
+        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s, deaths=deaths, bars=bars, teleports=db.teleports_for(g["map"]), walk_points=db.map_points(conn, g["map"], g["id"]))
         db.replace_samples(conn, g["id"], rows, tracking.PARAMS_VERSION, with_kills=scanned)
         db.apply_corrections(conn, g["id"])
     return len(todo)

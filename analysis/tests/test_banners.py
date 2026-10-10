@@ -86,3 +86,22 @@ def test_a_waiting_player_circle_is_not_taken_for_the_observed_marker():
 
     waiting = [d for d in minimap.find_markers(crop_with(8, True), {}) if d["spectated"]]
     assert waiting == []  # petit disque blanc sur la zone de départ : joueur mort en attente
+
+
+def test_a_kill_is_confirmed_only_if_the_victim_banner_turns_grey(monkeypatch):
+    import names
+
+    alive = _bar([1.0, 1.0, 1.0, 1.0])
+    dead_second = _bar([1.0, 0.0, 1.0, 1.0])
+    frames = {}
+    monkeypatch.setattr(names, "_grab", lambda video, t, zone, w, h: frames.get(round(t, 1)))
+    for t in (11.2, 12.2, 13.2):
+        frames[t] = dead_second
+    assert banners.confirm_death("v.mp4", {}, 1920, 1080, 10.0, 1) is True  # le joueur 2 est grisé juste après le kill
+    assert banners.confirm_death("v.mp4", {}, 1920, 1080, 10.0, 0) is False  # le joueur 1 est resté vivant : ligne du killfeed inventée
+    for t in (11.2, 12.2, 13.2):
+        frames[t] = alive
+    frames[12.2] = dead_second  # un seul parasite isolé du bandeau
+    assert banners.confirm_death("v.mp4", {}, 1920, 1080, 10.0, 1) is False
+    frames.clear()
+    assert banners.confirm_death("v.mp4", {}, 1920, 1080, 10.0, 1) is None  # bandeau illisible : on ne tranche pas

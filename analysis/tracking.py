@@ -47,6 +47,89 @@ def _tp_linked(p, q):
     return False
 
 
+WALK_CELL = 0.02  # taille (relative à la minimap) des cases de la carte des passages
+WALK_MIN_HITS = 2  # une case est un passage si au moins ce nombre de lectures sûres y sont tombées
+ROUTE_DETOUR = 2.0  # un trajet par les passages plus long que cela (fois le trajet direct) est écarté : on relie alors en ligne droite
+ROUTE_BUDGET = 8000  # cases explorées au plus par recherche de trajet
+_WALK = set()  # cases praticables de la carte en cours (posées par solve)
+
+
+def walk_grid(points):
+    """Cases de la carte où des joueurs sont réellement passés (lectures sûres), élargies d'une case : une carte des couloirs apprise sur toutes les games de la
+    carte. Sans plan des murs, c'est le meilleur indice de ce qui est praticable ; un trou n'est plus comblé en traversant un mur."""
+    hits = Counter((int(x / WALK_CELL), int(y / WALK_CELL)) for x, y in points)
+    core = [c for c, n in hits.items() if n >= WALK_MIN_HITS]
+    return {(cx + i, cy + j) for cx, cy in core for i in (-1, 0, 1) for j in (-1, 0, 1)}
+
+
+def _cell(p):
+    return int(p[0] / WALK_CELL), int(p[1] / WALK_CELL)
+
+
+def _line_walkable(a, b, ok):
+    n = max(1, int(math.hypot(b[0] - a[0], b[1] - a[1]) / (WALK_CELL * 0.5)))
+    return all(_cell((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) in ok for i in range(n + 1))
+
+
+def route(a, b):
+    """Trajet de a à b par les passages connus (A* sur les cases, puis raccourcis en ligne droite là où c'est praticable). Liste de points ; [a, b] (ligne droite)
+    si la carte des passages est vide, si la ligne droite est praticable ou si aucun trajet raisonnable n'existe."""
+    straight = math.hypot(b[0] - a[0], b[1] - a[1])
+    if not _WALK or straight < 2 * WALK_CELL:
+        return [a, b]
+    start, goal = _cell(a), _cell(b)
+    ok = _WALK | {start, goal}
+    if _line_walkable(a, b, ok):
+        return [a, b]
+    import heapq
+
+    best, came, heap, expanded = {start: 0.0}, {}, [(0.0, 0.0, start)], 0
+    while heap and expanded < ROUTE_BUDGET:
+        _, g, cur = heapq.heappop(heap)
+        if cur == goal:
+            break
+        if g > best.get(cur, 1e9):
+            continue
+        expanded += 1
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                nxt = (cur[0] + di, cur[1] + dj)
+                if (di or dj) and nxt in ok:
+                    ng = g + math.hypot(di, dj) * WALK_CELL
+                    if ng < best.get(nxt, 1e9):
+                        best[nxt], came[nxt] = ng, cur
+                        heapq.heappush(heap, (ng + math.hypot(goal[0] - nxt[0], goal[1] - nxt[1]) * WALK_CELL, ng, nxt))
+    if goal not in came and start != goal:
+        return [a, b]
+    cells = [goal]
+    while cells[-1] != start:
+        cells.append(came[cells[-1]])
+    cells.reverse()
+    pts = [a] + [((c[0] + 0.5) * WALK_CELL, (c[1] + 0.5) * WALK_CELL) for c in cells[1:-1]] + [b]
+    out, i = [pts[0]], 0
+    while i < len(pts) - 1:  # raccourcis : on saute au point le plus lointain visible en ligne droite
+        j = next(j for j in range(len(pts) - 1, i, -1) if j == i + 1 or _line_walkable(pts[i], pts[j], ok))
+        out.append(pts[j])
+        i = j
+    length = sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(out, out[1:]))
+    return out if length <= ROUTE_DETOUR * straight + 0.05 else [a, b]
+
+
+def _along(path, f):
+    """Point situé à la fraction f (0 à 1) de la longueur d'un trajet, à vitesse constante."""
+    total = sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(path, path[1:]))
+    if total <= 0:
+        return path[0]
+    want = f * total
+    for p, q in zip(path, path[1:]):
+        d = math.hypot(q[0] - p[0], q[1] - p[1])
+        if want <= d and d > 0:
+            r = want / d
+            return p[0] + (q[0] - p[0]) * r, p[1] + (q[1] - p[1]) * r
+        want -= d
+    return path[-1]
+
+
 class Track:
     def __init__(self, team, fi, det, dead=False):
         self.team = team
@@ -510,6 +593,7 @@ def bridge_gaps(rows, runs, step_s, put):
                     continue
                 ra, rb = rows[(a, slot)], rows[(b, slot)]
                 teleport = _tp_linked((ra[4], ra[5]), (rb[4], rb[5])) and (b - a) * step_s <= TP_MAX_GAP_S
+                path = None if teleport else route((ra[4], ra[5]), (rb[4], rb[5]))
                 for k in range(a + 1, b):
                     if rows.get((k, slot)):
                         continue
@@ -522,7 +606,8 @@ def bridge_gaps(rows, runs, step_s, put):
                         ang = (ra[6] + (((rb[6] - ra[6] + 180) % 360) - 180) * f) % 360
                     else:
                         ang = ra[6] if ra[6] is not None else rb[6]
-                    put(k, slot, ra[3], ra[4] + (rb[4] - ra[4]) * f, ra[5] + (rb[5] - ra[5]) * f, ang, True, CONF_BRIDGE)
+                    x, y = _along(path, f)
+                    put(k, slot, ra[3], x, y, ang, True, CONF_BRIDGE)
 
 
 SKEW_FULL = 0.25  # asymétrie à partir de laquelle le sens est considéré comme sûr
@@ -722,19 +807,24 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
     teleports : [((x, y), (x, y))] paires de stations de tyrolienne de la carte (facultatif).
+    walk_points : [(x, y)] lectures sûres des autres games de la même carte (facultatif) : avec celles de cette game, elles donnent la carte des passages
+    qui guide le comblement des trous (on ne traverse plus les murs).
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
     _TELEPORTS[:] = teleports or []
+    _WALK.clear()
     frames = anchor_spectated(frames, states)
     dead = dead_frames(states, step_s)
     frames = drop_static_spectated(drop_static_noise(frames), states)
     times = {fi: t for fi, t, _ in frames}
+    own = [(d["x"], d["y"]) for _, _, dets in frames for d in dets if d["alive"] and d.get("number")]  # pastilles numérotées : les plus fiables
+    _WALK.update(walk_grid(own + list(walk_points or [])))
     deaths = confirmed_deaths(deaths, dead, times, step_s)
     alive_tracks, dead_tracks = _link(frames, step_s)
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
@@ -761,13 +851,14 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None):
             for a, b in zip(idx, idx[1:]):
                 pa, pb = t.pts[a], t.pts[b]
                 teleport = _tp_linked((pa["x"], pa["y"]), (pb["x"], pb["y"]))
+                path = None if teleport or b - a <= 2 else route((pa["x"], pa["y"]), (pb["x"], pb["y"]))
                 for k in range(a + 1, b):
                     r = (k - a) / (b - a)
                     if teleport:  # station de tyrolienne : à l'entrée jusqu'au milieu du trou, puis à la sortie
                         near = pa if k - a <= b - k else pb
                         filled[k] = (near["x"], near["y"])
                         continue
-                    filled[k] = (pa["x"] + (pb["x"] - pa["x"]) * r, pa["y"] + (pb["y"] - pa["y"]) * r)
+                    filled[k] = _along(path, r) if path else (pa["x"] + (pb["x"] - pa["x"]) * r, pa["y"] + (pb["y"] - pa["y"]) * r)
             obs = {}
             for k in idx:
                 d = t.pts[k]
@@ -801,6 +892,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None):
             pa, pb = a.pts[ia], b.pts[ib]
             ang_a, ang_b = rows[(ia, slot)][6], rows[(ib, slot)][6]
             teleport = _tp_linked((pa["x"], pa["y"]), (pb["x"], pb["y"]))
+            path = None if teleport else route((pa["x"], pa["y"]), (pb["x"], pb["y"]))
             for k in range(ia + 1, ib):
                 r = (k - ia) / (ib - ia)
                 if (k, slot) not in rows and teleport:  # station de tyrolienne : à l'entrée jusqu'au milieu du trou, puis à la sortie
@@ -812,7 +904,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None):
                         ang = (ang_a + (((ang_b - ang_a + 180) % 360) - 180) * r) % 360
                     else:
                         ang = ang_a if ang_a is not None else ang_b
-                    put(k, slot, a.team, pa["x"] + (pb["x"] - pa["x"]) * r, pa["y"] + (pb["y"] - pa["y"]) * r, ang, True, CONF_FILL)
+                    x, y = _along(path, r)
+                    put(k, slot, a.team, x, y, ang, True, CONF_FILL)
     for x in crosses:
         for k, d in x.pts.items():
             if (k, x.slot) not in rows:
@@ -849,7 +942,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 6  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 7  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

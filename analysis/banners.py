@@ -55,3 +55,24 @@ def read_states(crop_a, crop_b):
         for i, st in enumerate(read_team(crop)):
             states[base + i] = st
     return states
+
+
+DEATH_OFFSETS_S = (1.2, 2.2, 3.2)  # instants (après l'entrée du killfeed) où le bandeau de la victime doit être grisé : une vraie mort dure environ 17 s
+
+
+def confirm_death(video, bar_zone, width, height, t, index, offsets=DEATH_OFFSETS_S):
+    """Le bandeau du joueur `index` (0 à 3 dans la zone `bar_zone`) est-il grisé après l'instant t ? True : la victime est bien morte ; False : elle est restée
+    vivante (ligne du killfeed inventée : nom flottant dans la vue 3D, transition de fin de game…) ; None : bandeau illisible, on ne tranche pas.
+    Il faut au moins deux images sur trois grisées : un parasite isolé du bandeau ne confirme pas une mort."""
+    import names  # évite un import circulaire au chargement
+
+    dead = known = 0
+    for dt in offsets:
+        crop = names._grab(video, t + dt, bar_zone, width, height)
+        if crop is None:
+            continue
+        known += 1
+        dead += not read_team(crop)[index]["alive"]
+    if known < 2:
+        return None
+    return dead >= 2

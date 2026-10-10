@@ -97,7 +97,7 @@ def evaluate_game(conn, game_id, refresh=False, every=6):
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
     out = {}
     for label, use_states in (("sans bandeaux", False), ("avec bandeaux", True)):
-        rows = tracking.solve(data["frames"], step_s, deaths, data["states"] if use_states else None, db.teleports_for(g["map"]))
+        rows = tracking.solve(data["frames"], step_s, deaths, data["states"] if use_states else None, db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id))
         out[label] = compare(rows, data["states"], step_s=step_s, teleports=db.teleports_for(g["map"]))
     return g, out
 
@@ -119,7 +119,7 @@ def gap_test(conn, game_ids):
         step_s = 6 / g["fps"]
         data = _load(conn, g, step_s)
         deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, gid)]
-        rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]))
+        rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], gid))
         truth = {(r[0], r[2]): r for r in rows if r[7] and r[8] >= READ_CONF}
         dead = tracking.dead_frames(data["states"], step_s)
         runs = tracking.alive_runs(data["states"], dead)
@@ -140,6 +140,9 @@ def gap_test(conn, game_ids):
                 def put(fi, sl, team, x, y, angle, alive, conf, work=work, times=times):
                     work[(fi, sl)] = (fi, times.get(fi, 0.0), sl, team, x, y, angle, int(alive), conf)
 
+                # carte des passages sans le trou caché : le joueur ne se guide pas lui-même
+                tracking._WALK.clear()
+                tracking._WALK.update(tracking.walk_grid([(r[4], r[5]) for r in work.values()]))
                 tracking.bridge_gaps(work, {slot: [r for r in runs[slot] if r[0] <= a < r[1]]}, step_s, put)
                 errors[length].extend(math.hypot(work[(k, slot)][4] - hidden[k][4], work[(k, slot)][5] - hidden[k][5]) for k in range(a, a + n) if (k, slot) in work)
     for length, errs in errors.items():

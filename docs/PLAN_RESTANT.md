@@ -115,7 +115,7 @@ Erreurs connues, classées par ce que j'ai vu sur 47 images de 9 cartes :
   lecture (variable `EVA_WORKERS`), jamais plus de la moitié des cœurs, moins si la mémoire libre est juste, en priorité basse.
 - **Ne pas lancer deux analyses en même temps** sur la même base : elles écrivent au même endroit et recalculent les mêmes games.
 - **`ALGO_REVISION`** (dans `analysis/tracking.py`) : à incrémenter quand l'algorithme change, sinon les positions déjà lues ne sont pas relues.
-  Elle vaut 6. La zone de minimap est aussi suivie (colonne `zone_key` de `samples_meta`).
+  Elle vaut 7. La zone de minimap est aussi suivie (colonne `zone_key` de `samples_meta`).
 - **OpenCV et les longues vidéos** : `cv2.VideoCapture.set(POS_MSEC)` est imprécis sur la vidéo de 58 minutes. Pour vérifier un instant, utiliser
   ffmpeg (`names._grab`), comme l'analyse. Mes premières vérifications visuelles sur cette vidéo étaient fausses pour cette raison.
 - **Ne jamais tuer un processus par nom** (`taskkill /IM brave.exe` ferme le navigateur de l'utilisateur) : cibler le port ou le profil de test.
