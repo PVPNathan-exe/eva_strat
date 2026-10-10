@@ -269,6 +269,54 @@ def _is_waiting_circle(blob, spawn_colors):
     return n > 0 and any(int((mask > 0)[around].sum()) / n >= WAITING_SPAWN_SHARE for mask in spawn_colors.values())
 
 
+GLYPH_DARK_V = 110  # pixel sombre : le chiffre noir du joueur observé
+GLYPH_AREA = (10, 90)  # surface (échelle de référence) d'un chiffre
+GLYPH_HEIGHT = (6, 16)  # hauteur (pixels, échelle de référence)
+GLYPH_ASPECT = (0.3, 1.1)  # largeur / hauteur
+DISC_WHITE_SHARE = 0.55  # part de pixels clairs et peu colorés autour du chiffre pour dire « disque blanc »
+RING_MIN_PIXELS = 5  # pixels de la couleur d'équipe exigés autour du disque (liseré partiel accepté)
+
+
+def _glyph_discs(hsv, scale, found):
+    """Joueur observé que la détection par taches blanches a manqué : sur Polaris le disque blanc touche une zone claire de la carte et fusionne
+    avec elle. On cherche donc le chiffre noir entouré de blanc, puis la couleur d'équipe autour, sans dépendre de la forme de la tache.
+    Renvoie [(blob disque, équipe)]. Le liseré de la couleur d'équipe est exigé : les symboles blancs de la carte (flèche de tyrolienne) n'en ont pas."""
+    h, w = hsv.shape[:2]
+    v, s_ch = hsv[:, :, 2], hsv[:, :, 1]
+    dark = cv2.morphologyEx((v < GLYPH_DARK_V).astype(np.uint8), cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
+    n, lab, stats, cents = cv2.connectedComponentsWithStats(dark)
+    k = math.sqrt(scale)
+    bright = (v >= 175) & (s_ch <= 95)
+    out = []
+    for i in range(1, n):
+        x0, y0, bw, bh, area = stats[i]
+        if not (GLYPH_AREA[0] * scale <= area <= GLYPH_AREA[1] * scale and GLYPH_HEIGHT[0] * k <= bh <= GLYPH_HEIGHT[1] * k and GLYPH_ASPECT[0] <= bw / bh <= GLYPH_ASPECT[1]):
+            continue
+        cx, cy = cents[i]
+        r = max(4, int(round(0.7 * max(bw, bh))))  # rayon du disque blanc autour du chiffre (le contour sombre du disque est au-delà)
+        yy, xx = np.mgrid[max(int(cy) - r, 0) : min(int(cy) + r + 1, h), max(int(cx) - r, 0) : min(int(cx) + r + 1, w)]
+        inside = ((xx - cx) ** 2 + (yy - cy) ** 2 <= r * r) & (lab[yy, xx] != i)
+        if inside.sum() < 20 or bright[yy, xx][inside].mean() < DISC_WHITE_SHARE:
+            continue
+        ring = np.zeros((h, w), np.uint8)
+        cv2.circle(ring, (int(round(cx)), int(round(cy))), r + 4, 1, -1)
+        cv2.circle(ring, (int(round(cx)), int(round(cy))), r, 0, -1)
+        votes = {
+            "A": int((_color_mask(hsv, RING_ORANGE_WEAK) > 0)[ring > 0].sum()),
+            "B": int((_color_mask(hsv, RING_BLUE_WEAK) > 0)[ring > 0].sum()),
+        }
+        team = max(votes, key=votes.get)
+        if votes[team] < RING_MIN_PIXELS or votes[team] < 2 * votes["A" if team == "B" else "B"]:
+            continue
+        disc = np.zeros((h, w), np.uint8)
+        # Disque de lecture du chiffre : de la taille de la pastille réelle (le chiffre en occupe la moitié centrale, comme pour les modèles appris).
+        cv2.circle(disc, (int(round(cx)), int(round(cy))), max(r, int(round(0.9 * max(bw, bh)))), 1, -1)
+        if any(d["team"] == team and d["spectated"] and math.hypot(d["x"] - cx / w, d["y"] - cy / h) < 0.03 for d in found):
+            continue
+        out.append((disc, team))
+    return out
+
+
 def find_markers(crop, templates=None):
     """Toutes les pastilles de la minimap. Coordonnées normalisées (0 à 1) dans le recadrage."""
     templates = templates if templates is not None else load_digit_templates()
@@ -353,6 +401,10 @@ def find_markers(crop, templates=None):
             rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)
             silhouette = cv2.morphologyEx(np.maximum(blob, rim.astype(np.uint8)), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
             add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT)  # halo pâle : le numéro doit être lisible
+    # Le joueur observé fusionné avec une zone claire de la carte (Polaris) : cherché par son chiffre noir sur disque blanc, hors zones de départ.
+    for disc, team in _glyph_discs(hsv, scale, found):
+        if not _is_waiting_circle(disc, spawn_colors):
+            add(disc, team, alive=True, spectated=True)  # numéro lu si possible ; sinon le bandeau dit quel joueur est observé
     noise = [d for d in found if d["spectated"] and not d["number"]]
     if len(noise) > WHITE_MAX_UNNUMBERED:
         found = [d for d in found if not (d["spectated"] and not d["number"])]

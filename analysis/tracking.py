@@ -650,6 +650,35 @@ def drop_static_noise(frames):
     return out
 
 
+SPECT_STATIC_SHARE = 0.04  # une case où une pastille blanche « observée » revient dans plus de cette part des images...
+SPECT_STATIC_WINDOWS = 4  # ...réparties sur au moins ce nombre de périodes de 15 s, est une station de tyrolienne (fixe, toujours là), pas le joueur observé
+SPECT_WINDOW_S = 15.0
+
+
+def drop_static_spectated(frames):
+    """Les disques blancs à flèche de certaines cartes (stations de tyrolienne) sont parfois lus comme le joueur observé, avec un numéro. Ils ne bougent
+    jamais et reviennent tout au long de la game, alors que le joueur observé ne reste immobile au même pixel que quelques secondes de suite."""
+    if len(frames) < STATIC_MIN_FRAMES:
+        return frames
+    hits, spread = {}, {}
+    for _, t, dets in frames:
+        cells = set()
+        for d in dets:
+            if d.get("spectated"):
+                cx, cy = round(d["x"] / STATIC_CELL), round(d["y"] / STATIC_CELL)
+                cells.update((cx + i, cy + j) for i in (-1, 0, 1) for j in (-1, 0, 1))
+        for c in cells:
+            hits[c] = hits.get(c, 0) + 1
+            spread.setdefault(c, set()).add(int(t / SPECT_WINDOW_S))
+    banned = {c for c, n in hits.items() if n > SPECT_STATIC_SHARE * len(frames) and len(spread[c]) >= SPECT_STATIC_WINDOWS}
+    if not banned:
+        return frames
+    return [
+        (fi, t, [d for d in dets if not (d.get("spectated") and (round(d["x"] / STATIC_CELL), round(d["y"] / STATIC_CELL)) in banned)])
+        for fi, t, dets in frames
+    ]
+
+
 def solve(frames, step_s, deaths=None, states=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
@@ -659,7 +688,7 @@ def solve(frames, step_s, deaths=None, states=None):
         return []
     frames = anchor_spectated(frames, states)
     dead = dead_frames(states, step_s)
-    frames = drop_static_noise(frames)
+    frames = drop_static_spectated(drop_static_noise(frames))
     times = {fi: t for fi, t, _ in frames}
     deaths = confirmed_deaths(deaths, dead, times, step_s)
     alive_tracks, dead_tracks = _link(frames, step_s)

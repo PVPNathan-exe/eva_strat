@@ -110,3 +110,12 @@ def test_an_unnumbered_short_track_far_from_the_player_is_not_given_by_eliminati
     assert tracking._elimination_ok(near, [known], STEP)
     assert tracking._elimination_ok(_track(52, 100, 0.36, 0.20), [known], STEP)  # une trajectoire longue est fiable
     assert tracking._elimination_ok(noise, [], STEP)  # aucune position connue de ce joueur : rien ne la contredit
+
+
+def test_a_white_marker_that_never_moves_and_comes_back_all_game_is_a_zipline_station():
+    # 1 image sur 10 pendant 200 s : une station de tyrolienne lue comme « joueur observé » ; un joueur observé immobile 3 s ne l'est pas
+    frames = [(k, k * 1.0, [det("B", 0.61, 0.66, number=9, spectated=True)] if k % 10 == 0 else []) for k in range(200)]
+    frames += [(200 + k, 200.0 + k, [det("A", 0.30, 0.30, number=1, spectated=True)] if k < 3 else []) for k in range(60)]
+    kept = tracking.drop_static_spectated(frames)
+    assert not any(d for _, _, dets in kept for d in dets if d["team"] == "B")  # la station est retirée
+    assert sum(1 for _, _, dets in kept for d in dets if d["team"] == "A") == 3  # le joueur immobile 3 s reste

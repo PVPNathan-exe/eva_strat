@@ -180,3 +180,24 @@ def test_a_dimmed_marker_is_still_found_but_without_trusting_its_digit():
     assert len(bright) == 1 and len(dim) == 1
     assert dim[0]["number"] is None and abs(dim[0]["x"] - 0.5) < 0.02
     assert minimap.find_markers(_disc_crop(100), {}) == []  # trop sombre : du décor, pas une pastille
+
+
+def test_observed_marker_merged_with_a_bright_map_area_is_found_by_its_digit():
+    """Polaris : le disque blanc du joueur observé touche une zone claire de la carte et fusionne avec elle. Chiffre noir sur disque blanc, liseré orange."""
+    import cv2
+    import numpy as np
+
+    import minimap
+
+    img = np.full((254, 460, 3), 235, np.uint8)  # zone claire (neige) : le disque y est noyé
+    cv2.circle(img, (200, 120), 12, (40, 130, 235), 2)  # liseré orange (BGR)
+    cv2.circle(img, (200, 120), 9, (255, 255, 255), -1)
+    cv2.rectangle(img, (197, 114), (203, 126), (20, 20, 20), -1)  # chiffre noir
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    found = minimap._glyph_discs(hsv, minimap._scale(img), [])
+    assert [team for _, team in found] == ["A"]
+    # un disque blanc sans liseré de la couleur d'une équipe (flèche de tyrolienne) n'est pas un joueur
+    plain = np.full((254, 460, 3), 235, np.uint8)
+    cv2.circle(plain, (200, 120), 9, (255, 255, 255), -1)
+    cv2.rectangle(plain, (197, 114), (203, 126), (20, 20, 20), -1)
+    assert minimap._glyph_discs(cv2.cvtColor(plain, cv2.COLOR_BGR2HSV), minimap._scale(plain), []) == []
