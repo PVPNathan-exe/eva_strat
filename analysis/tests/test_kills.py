@@ -337,3 +337,39 @@ def test_without_a_weapon_hint_only_a_clearly_nearest_enemy_is_accepted():
     assert analyze.infer_killer([_cand(1, 0.1, "B1"), _cand(2, 0.5, "B1")], None, _NAMES.get)["slot"] == 1
     assert analyze.infer_killer([_cand(1, 0.3, "B1"), _cand(2, 0.4, "B1")], None, _NAMES.get) is None  # trop proches l'un de l'autre
     assert analyze.infer_killer([], None, _NAMES.get) is None  # personne en vie
+
+
+def _name_piece(text, team, noise_seed, pill=(70, 70, 70)):
+    """Segment de killfeed synthétique : pseudo coloré sur une pastille, avec un peu de bruit d'une image à l'autre."""
+    rng = np.random.default_rng(noise_seed)
+    img = np.zeros((26, 160, 3), np.uint8)
+    img[:] = pill
+    color = (40, 130, 235) if team == "A" else (235, 130, 40)  # BGR : orange ou bleu
+    cv2.putText(img, text, (6, 19), cv2.FONT_HERSHEY_DUPLEX, 0.62, color, 1, cv2.LINE_AA)
+    noisy = img.astype(np.int16) + rng.integers(-6, 7, img.shape)
+    return np.clip(noisy, 0, 255).astype(np.uint8)
+
+
+def test_pseudos_are_recognised_by_their_look_when_text_reading_fails():
+    names = {1: "SNVXPRIME", 2: "SNVXLAIDEEN", 3: "SNVXGLENS", 4: "SNVXALEXO"}
+    pieces, team_of, ocr = {}, {}, {}
+    for slot, name in names.items():
+        for k in range(12):  # chaque pseudo revient souvent, avec exactement le même aspect
+            sig = f"{slot}-{k}"
+            pieces[sig], team_of[sig] = _name_piece(name, "A", slot * 100 + k), "A"
+            ocr[sig] = (None, None)
+    ocr["1-0"], ocr["2-0"], ocr["3-0"] = (1, 0.10), (2, 0.12), (3, 0.08)  # trois lectures de texte sûres sur 48 segments : le quatrième joueur se déduit
+    seen = killfeed.resolve_by_appearance(pieces, team_of, ocr)
+    wrong = [sig for sig, slot in seen.items() if slot != int(sig.split("-")[0])]
+    assert not wrong
+    assert len(seen) >= 44  # presque tous les segments sont reconnus, y compris ceux du joueur dont aucun texte n'a été lu
+    assert seen["4-5"] == 4
+
+
+def test_a_group_with_contradicting_readings_is_not_labelled():
+    pieces = {f"a{k}": _name_piece("SNVXPRIME", "A", k) for k in range(10)}
+    pieces.update({f"b{k}": _name_piece("SNVXLAIDEEN", "A", 50 + k) for k in range(10)})
+    team_of = {sig: "A" for sig in pieces}
+    ocr = {sig: (None, None) for sig in pieces}
+    ocr["a0"], ocr["b0"] = (1, 0.1), (1, 0.1)  # les deux groupes réclament le joueur 1 : on ne tranche pas
+    assert killfeed.resolve_by_appearance(pieces, team_of, ocr) == {}

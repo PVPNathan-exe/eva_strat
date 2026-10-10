@@ -71,7 +71,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 
 - `ingest.py` : source (fichier ou URL yt-dlp). `segments.py` et `timer.py` : games d'après le chrono. `mapname.py` : nom de la carte. `names.py` : pseudos.
 - `banners.py` : vivant ou mort, joueur observé. `loadout.py` : armes et gadget de chaque joueur. `capture.py` : pourcentages de capture.
-- `killfeed.py` : kills. `weapons.py` : modèles d'icônes (W killfeed, B armes, G gadgets), netteté (`edge_width`).
+- `killfeed.py` : kills (texte lu par OCR, puis pseudos reconnus par leur aspect quand le texte échoue). `weapons.py` : modèles d'icônes (W killfeed, B armes, G gadgets), netteté (`edge_width`).
 - `minimap.py` : pastilles sur la minimap. `positions.py` : lectures régulières. `tracking.py` (598 lignes) : suivi dans le temps et attribution des joueurs 1 à 8.
 - `ocr.py` et `ocr_win.ps1` : reconnaissance de texte de Windows. `recap.py` : bilan de qualité par game.
 - `icon_fix.py` : recalcul des icônes (`candidates`, `rebuild` avec marge élargie, `audit`, `guess`).

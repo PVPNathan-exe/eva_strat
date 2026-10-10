@@ -113,7 +113,8 @@ CREATE TABLE IF NOT EXISTS kills (
   PRIMARY KEY (game_id, t, victim_slot)
 );
 CREATE TABLE IF NOT EXISTS kills_meta (
-  game_id INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE
+  game_id INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL DEFAULT 0  -- version de l'algorithme de lecture du killfeed : une lecture plus ancienne est refaite
 );
 
 -- Version des réglages du suivi avec laquelle les positions d'une game ont été lues : si elle change, elles sont relues.

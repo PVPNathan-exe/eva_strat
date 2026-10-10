@@ -24,7 +24,10 @@ position attendue (95 % de bons choix en test simulé), puis les trous restants 
 **Polaris (carte la plus difficile, 11 octobre 2026)** : joueur observé réellement lu 44 à 72 % et 33 à 76 % (deux games de NCT vs OR) ; stations de tyrolienne (`analysis/map_teleports.json`, Polaris seulement
 : à relever pour les autres cartes) : sauts non expliqués 25 à 22, 37 à 28 et 12 à 9 ; identité : seulement 0,8 à 2,1 % des lectures de numéro sont dans une trajectoire qui contredit le
 joueur attribué. Lire deux fois plus d'images (une toutes les 3 images) n'améliore pas (78 % lues contre 80 %, plus de sauts) : le problème est le marqueur caché, pas la cadence.
-Killfeed de NCT vs SNV : 7 tueurs lus sur 61 kills (le texte est très mal lu, préfixe d'équipe compris) : piste = apprendre l'aspect visuel des pseudos.
+Killfeed : sur NCT vs SNV le texte du tueur (pastille grise translucide) était presque illisible pour la reconnaissance de texte (7 tueurs lus sur 61 kills). Les pseudos sont maintenant
+reconnus par leur ASPECT (`killfeed.resolve_by_appearance` : segments regroupés par ressemblance, 4 gros groupes par équipe, joueur donné par vote pondéré des lectures de texte et cohérence,
+rattachement des segments isolés) : 100 % de précision sur des lectures sûres cachées, 73 % des observations de tueurs lues au lieu de 4,5 %, soit 52 kills sur 54 avec tueur (Polaris SNV), 43 sur 47
+(Polaris OR). Contrôle indépendant : le tueur annoncé est vivant d'après les bandeaux dans 96 à 98 % des cas. `killfeed.REVISION` : les kills lus avec une version plus ancienne sont relus.
 
 **Limites, à dire clairement** :
 - « 0 % de manquants » est vrai par construction : 15 % des positions vivantes sont reconstruites, pas lues. Leur justesse se mesure par `--gap-test` (on cache des positions

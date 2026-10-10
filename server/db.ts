@@ -20,6 +20,8 @@ export function openDb(path: string, schemaPath: string): DatabaseSync {
   const killCols = db.prepare('PRAGMA table_info(kills)').all() as { name: string }[];
   if (killCols.length && !killCols.some((c) => c.name === 'headshot')) db.exec('ALTER TABLE kills ADD COLUMN headshot INTEGER NOT NULL DEFAULT 0');
   if (killCols.length && !killCols.some((c) => c.name === 'kind')) db.exec('ALTER TABLE kills ADD COLUMN kind TEXT');
+  const killMeta = db.prepare('PRAGMA table_info(kills_meta)').all() as { name: string }[];
+  if (killMeta.length && !killMeta.some((c) => c.name === 'revision')) db.exec('ALTER TABLE kills_meta ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
   const meta = db.prepare('PRAGMA table_info(samples_meta)').all() as { name: string }[];
   if (meta.length && !meta.some((c) => c.name === 'with_kills')) db.exec('ALTER TABLE samples_meta ADD COLUMN with_kills INTEGER NOT NULL DEFAULT 0');
   // Une base créée avant l'ajout de zones du HUD a une contrainte CHECK trop stricte : on reconstruit la table (même logique que db.py).

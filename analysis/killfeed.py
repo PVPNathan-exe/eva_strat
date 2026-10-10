@@ -9,6 +9,7 @@ Un même kill est vu sur plusieurs images : on ne garde que son apparition.
 """
 
 import hashlib
+import itertools
 import subprocess
 import tempfile
 from pathlib import Path
@@ -29,6 +30,9 @@ MIN_ROW_PIXELS = 25  # pixels colorés minimum pour qu'une ligne existe
 NAME_GAP_PX = 16  # trou horizontal qui sépare deux segments de texte (le trou de l'icône est plus large)
 MIN_OBSERVATIONS = 2  # une entrée reste affichée plusieurs secondes : vue sur une seule image, elle doit être lue très nettement
 CLEAR_READ = 0.22  # distance relative maximale du pseudo de la victime pour accepter une entrée vue une seule fois
+REVISION = 2  # version de la lecture du killfeed (1 : texte seul ; 2 : + reconnaissance des pseudos par leur aspect) : les kills lus avec une version plus ancienne sont relus
+APPEARANCE_OVERRIDES = 0.25  # une lecture de texte plus mauvaise que cela est remplacée par la reconnaissance par l'aspect
+APPEARANCE_DISTANCE = 0.30  # distance donnée à un pseudo reconnu par son aspect (plus que CLEAR_READ : une entrée vue une seule fois ne passe pas pour autant)
 ENTRY_GAP_S = 1.6  # deux observations de la même victime séparées de moins que cela sont la même entrée du killfeed
 
 
@@ -219,6 +223,113 @@ def iter_regions(video, game, width, height, step_s=SCAN_STEP_S):
         proc.wait()
 
 
+# ---------- reconnaissance des pseudos par leur aspect ----------
+# La lecture de texte échoue sur certaines vidéos (pseudo du tueur sur une pastille grise translucide : 7 tueurs lus sur 61 kills), alors que le pseudo se
+# répète des dizaines de fois par game avec exactement le même aspect. On regroupe donc les segments qui se ressemblent (par équipe, il y a 4 gros groupes :
+# les 4 joueurs), on donne à chaque groupe son joueur par vote pondéré de TOUTES les lectures de texte du groupe (même mauvaises) et par cohérence (chaque joueur
+# une fois), puis on rattache les segments isolés au groupe le plus proche. Mesuré sur 3 games : 100 % de précision sur des lectures sûres cachées,
+# 73 % des observations de tueurs lues au lieu de 4,5 %.
+TEXT_HUE = {"A": (3, 24), "B": (96, 120)}  # teinte du texte orange et du texte bleu
+TEXT_SIZE = (96, 16)
+GROUP_LINK = 0.90  # ressemblance (corrélation des masques) à partir de laquelle deux segments sont le même pseudo
+ATTACH_MIN = 0.70  # ressemblance minimale d'un segment isolé avec le groupe d'un joueur
+ATTACH_MARGIN = 0.04  # et avance minimale sur le deuxième groupe
+MIN_GROUP = 6  # un groupe de moins de segments n'est pas un joueur
+VOTE_MARGIN = 0.12  # avance minimale (en poids de lectures) de l'affectation retenue sur toute autre pour étiqueter un groupe
+TEAM_SLOTS = {"A": (1, 2, 3, 4), "B": (5, 6, 7, 8)}
+
+
+def text_mask(piece, team):
+    """Masque normalisé (vecteur) du texte coloré d'un segment : pixels de la teinte de l'équipe, saturés par rapport au texte lui-même (le fond de la pastille,
+    noir ou gris, est peu saturé). None si le segment n'a pas de texte exploitable."""
+    big = cv2.resize(piece, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+    hsv = cv2.cvtColor(big, cv2.COLOR_BGR2HSV)
+    lo, hi = TEXT_HUE[team]
+    hue_ok = (hsv[:, :, 0] >= lo) & (hsv[:, :, 0] <= hi)
+    if hue_ok.sum() < 30:
+        return None
+    sat = hsv[:, :, 1].astype(np.float32)
+    thr = max(60.0, 0.55 * float(np.percentile(sat[hue_ok], 95)))
+    mask = (hue_ok & (sat >= thr) & (hsv[:, :, 2] >= 90)).astype(np.uint8)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(mask)
+    keep = np.zeros_like(mask)
+    for i in range(1, n):
+        if stats[i, cv2.CC_STAT_AREA] >= 12 and stats[i, cv2.CC_STAT_HEIGHT] >= 0.125 * mask.shape[0]:
+            keep[lab == i] = 1
+    cols, rows = np.flatnonzero(keep.sum(axis=0)), np.flatnonzero(keep.sum(axis=1))
+    if cols.size < 30 or rows.size < 12:
+        return None
+    keep = keep[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
+    return cv2.GaussianBlur(cv2.resize(keep.astype(np.float32), TEXT_SIZE, interpolation=cv2.INTER_AREA), (0, 0), 0.8).ravel()
+
+
+def _unit(v):
+    v = v - v.mean()
+    return v / max(float(np.linalg.norm(v)), 1e-9)
+
+
+def group_segments(vecs, link=GROUP_LINK):
+    """vecs : {signature: masque}. Groupes de segments qui se ressemblent (lien simple au-dessus de `link`)."""
+    sigs = list(vecs)
+    if not sigs:
+        return []
+    unit = np.array([_unit(vecs[sig]) for sig in sigs])
+    similar = np.triu(unit @ unit.T >= link, 1)
+    parent = list(range(len(sigs)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i, j in zip(*np.nonzero(similar)):
+        parent[find(i)] = find(j)
+    groups = {}
+    for i, sig in enumerate(sigs):
+        groups.setdefault(find(i), []).append(sig)
+    return list(groups.values())
+
+
+def label_groups(groups, ocr, team):
+    """Joueur de chacun des 4 plus gros groupes de l'équipe : l'affectation groupes -> joueurs (chaque joueur au plus une fois) qui totalise le plus de poids de
+    lectures de texte (poids = 0,40 moins la distance de lecture). Un groupe n'est étiqueté que si son affectation bat nettement toute autre.
+    ocr : {signature: (joueur ou None, distance)}. Renvoie ([groupes retenus], {indice du groupe: joueur})."""
+    big = [g for g in sorted(groups, key=len, reverse=True)[:4] if len(g) >= MIN_GROUP]
+    slots = TEAM_SLOTS[team]
+    weight = [[sum(max(0.0, 0.40 - (ocr.get(sig, (None, 1.0))[1] or 1.0)) for sig in g if ocr.get(sig, (None, None))[0] == slot) for slot in slots] for g in big]
+    total = lambda perm: sum(weight[i][perm[i]] for i in range(len(big)))
+    ranked = sorted(itertools.permutations(range(len(slots)), len(big)), key=total, reverse=True)
+    if not ranked:
+        return big, {}
+    best, out = ranked[0], {}
+    for i in range(len(big)):
+        rival = max((total(p) for p in ranked if p[i] != best[i]), default=0.0)
+        if total(best) - rival >= VOTE_MARGIN:
+            out[i] = slots[best[i]]
+    return big, out
+
+
+def resolve_by_appearance(pieces, team_of, ocr):
+    """Joueur de chaque segment du killfeed, d'après son aspect. pieces : {signature: morceau d'écran}, team_of : {signature: équipe},
+    ocr : {signature: (joueur ou None, distance)}. Renvoie {signature: joueur}. Ne renvoie que ce qui est sûr (groupe étiqueté, rattachement net)."""
+    out = {}
+    for team in ("A", "B"):
+        vecs = {}
+        for sig, piece in pieces.items():
+            if team_of.get(sig) == team:
+                mask = text_mask(piece, team)
+                if mask is not None:
+                    vecs[sig] = mask
+        big, labels = label_groups(group_segments(vecs), ocr, team)
+        centers = {labels[i]: _unit(np.mean([vecs[sig] for sig in g], axis=0)) for i, g in enumerate(big) if i in labels}
+        for sig, vec in vecs.items():
+            ranked = sorted(((float(_unit(vec) @ c), slot) for slot, c in centers.items()), reverse=True)
+            if ranked and ranked[0][0] >= ATTACH_MIN and (len(ranked) < 2 or ranked[0][0] - ranked[1][0] >= ATTACH_MARGIN):
+                out[sig] = ranked[0][1]
+    return out
+
+
 def _fingerprint(img):
     small = cv2.resize(img, (32, 8), interpolation=cv2.INTER_AREA)
     return hashlib.md5((small // 24).tobytes()).hexdigest()
@@ -283,6 +394,11 @@ def read_events(video, game, players, width, height, step_s=SCAN_STEP_S, wait=No
                 if slot is not None:
                     resolved[sig], distance[sig] = slot, d
                     break
+    # Pseudos que la lecture de texte n'a pas su lire (ou lus avec une mauvaise distance) : reconnus par leur aspect.
+    seen = resolve_by_appearance(pieces, team_of, {sig: (resolved[sig], distance.get(sig)) for sig in resolved})
+    for sig, slot in seen.items():
+        if resolved.get(sig) is None or (distance.get(sig) or 0.0) > APPEARANCE_OVERRIDES:
+            resolved[sig], distance[sig] = slot, APPEARANCE_DISTANCE
     reads = []
     for o in observations:
         killer = resolved.get(o["killer_sig"]) if o["killer_sig"] else None

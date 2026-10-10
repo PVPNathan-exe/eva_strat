@@ -21,6 +21,8 @@ def connect(db_path):
         conn.execute("ALTER TABLE games ADD COLUMN doubts TEXT")
     if "checked" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
         conn.execute("ALTER TABLE games ADD COLUMN checked INTEGER NOT NULL DEFAULT 0")
+    if "revision" not in {row["name"] for row in conn.execute("PRAGMA table_info(kills_meta)")}:
+        conn.execute("ALTER TABLE kills_meta ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
     if "team_a" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
         conn.execute("ALTER TABLE games ADD COLUMN team_a TEXT")
         conn.execute("ALTER TABLE games ADD COLUMN team_b TEXT")
@@ -285,15 +287,15 @@ def replace_players(conn, game_id, names):
     conn.commit()
 
 
-def games_without_kills(conn, video_id):
+def games_without_kills(conn, video_id, revision=0):
     """Games dont les pseudos sont connus (nécessaires pour reconnaître les noms du killfeed) et dont le killfeed n'a pas été lu."""
     return [
         dict(r)
         for r in conn.execute(
             "SELECT id, start_s, end_s, map FROM games WHERE video_id = ? "
             "AND id IN (SELECT DISTINCT game_id FROM players) "
-            "AND id NOT IN (SELECT game_id FROM kills_meta) ORDER BY start_s",
-            (video_id,),
+            "AND id NOT IN (SELECT game_id FROM kills_meta WHERE revision >= ?) ORDER BY start_s",
+            (video_id, revision),
         )
     ]
 
@@ -302,14 +304,14 @@ def players_of(conn, game_id):
     return {r["slot"]: r["name"] for r in conn.execute("SELECT slot, name FROM players WHERE game_id = ?", (game_id,))}
 
 
-def replace_kills(conn, game_id, events):
+def replace_kills(conn, game_id, events, revision=0):
     """Enregistre d'un seul bloc les kills d'une game (events : {t, killer, victim, weapon})."""
     conn.execute("DELETE FROM kills WHERE game_id = ?", (game_id,))
     conn.executemany(
         "INSERT OR REPLACE INTO kills (game_id, t, killer_slot, victim_slot, weapon, headshot, kind) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [(game_id, round(e["t"], 2), e.get("killer"), e["victim"], e.get("weapon"), int(bool(e.get("headshot"))), e.get("kind")) for e in events],
     )
-    conn.execute("INSERT OR REPLACE INTO kills_meta (game_id) VALUES (?)", (game_id,))
+    conn.execute("INSERT OR REPLACE INTO kills_meta (game_id, revision) VALUES (?, ?)", (game_id, revision))
     conn.commit()
 
 

@@ -263,7 +263,7 @@ def upgrade_kill_weapons(conn, video_id, path, meta, emit, control=None, only=No
 
 def extract_kills(conn, video_id, path, meta, emit, control=None, only=None):
     """Killfeed des games qui ont leurs pseudos et pas encore de kills lus. Renvoie le nombre de games lues, ou (n, erreur)."""
-    todo = only_games(db.games_without_kills(conn, video_id), only)
+    todo = only_games(db.games_without_kills(conn, video_id, killfeed.REVISION), only)
     done = 0
     for i, g in enumerate(todo):
         def progress(pct, i=i):
@@ -282,7 +282,7 @@ def extract_kills(conn, video_id, path, meta, emit, control=None, only=None):
                 e["weapon"] = e.get("hint")  # piste pour retrouver le tueur après la lecture des positions (infer_killers), sinon effacée
             if e.get("killer") is not None and (e["kind"] == "kill" or (e["kind"] == "suicide" and e.get("grenade"))):
                 e["weapon"] = kill_weapon(path, meta, zones, loads, e["killer"], e["t"], e.get("grenade"))
-        db.replace_kills(conn, g["id"], events)
+        db.replace_kills(conn, g["id"], events, killfeed.REVISION)
         done += 1
     return done, None
 
