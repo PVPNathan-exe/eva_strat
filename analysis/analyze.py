@@ -262,14 +262,16 @@ def upgrade_kill_weapons(conn, video_id, path, meta, emit, control=None, only=No
     return len(todo)
 
 
-def drop_unconfirmed_kills(path, meta, zones, events):
+def drop_unconfirmed_kills(path, meta, zones, events, end_s=None):
     """Écarte les kills dont la victime n'est pas grisée sur son bandeau juste après (ligne inventée : nom flottant, transition de fin de game). Un bandeau
-    illisible ne fait rien écarter."""
+    illisible (écran noir de fin de game) n'écarte pas un kill dont le tueur est identifié, mais écarte un kill sans tueur : rien ne le prouve."""
     kept = []
     for e in events:
         zone, index = loadout._bar_of(zones, e["victim"])
-        if zone is not None and banners.confirm_death(path, zone, meta["width"], meta["height"], e["t"], index) is False:
-            continue
+        if zone is not None:
+            confirmed = banners.confirm_death(path, zone, meta["width"], meta["height"], e["t"], index, end_s=end_s)
+            if confirmed is False or (confirmed is None and e.get("killer") is None):
+                continue
         kept.append(e)
     return kept
 
@@ -295,7 +297,7 @@ def extract_kills(conn, video_id, path, meta, emit, control=None, only=None):
                 e["weapon"] = e.get("hint")  # piste pour retrouver le tueur après la lecture des positions (infer_killers), sinon effacée
             if e.get("killer") is not None and (e["kind"] == "kill" or (e["kind"] == "suicide" and e.get("grenade"))):
                 e["weapon"] = kill_weapon(path, meta, zones, loads, e["killer"], e["t"], e.get("grenade"))
-        events = drop_unconfirmed_kills(path, meta, zones, events)
+        events = drop_unconfirmed_kills(path, meta, zones, events, g["end_s"])
         db.replace_kills(conn, g["id"], events, killfeed.REVISION)
         done += 1
     return done, None

@@ -27,7 +27,7 @@ joueur attribué. Lire deux fois plus d'images (une toutes les 3 images) n'amél
 Killfeed : sur NCT vs SNV le texte du tueur (pastille grise translucide) était presque illisible pour la reconnaissance de texte (7 tueurs lus sur 61 kills). Les pseudos sont maintenant
 reconnus par leur ASPECT (`killfeed.resolve_by_appearance` : segments regroupés par ressemblance, 4 gros groupes par équipe, joueur donné par vote pondéré des lectures de texte et cohérence,
 rattachement des segments isolés) : 100 % de précision sur des lectures sûres cachées, 73 % des observations de tueurs lues au lieu de 4,5 %, soit 52 kills sur 54 avec tueur (Polaris SNV), 43 sur 47
-(Polaris OR). Contrôle indépendant : le tueur annoncé est vivant d'après les bandeaux dans 96 à 98 % des cas. `killfeed.REVISION` : les kills lus avec une version plus ancienne sont relus.
+(Polaris OR). Contrôle indépendant : le tueur annoncé est vivant d'après les bandeaux dans 96 à 98 % des cas. `killfeed.REVISION` : les kills lus avec une version plus ancienne sont relus. Kills de fin de game : un kill sans tueur identifié que le bandeau de la victime ne confirme pas (écran noir de fin de game) est écarté (`killfeed.REVISION` 4, `banners.confirm_death` ignore les images noires). Suivi (ALGO_REVISION 8 et 9) : une pastille hors de tout passage connu n'est plus récupérée comme joueur (reflets de lumière du début de game), et le disque blanc d'une station de tyrolienne lu avec le numéro d'un autre joueur n'est plus pris pour le joueur observé quand celui-ci attend dans sa zone de départ. Mesuré sur trois Polaris (suivi refait depuis les lectures en cache, pas une relecture complète de la vidéo) : sauts non expliqués 10 à 4 (game 16), 7 à 4 (game 22), 4 à 1 (game 26).
 
 **Limites, à dire clairement** :
 - « 0 % de manquants » est vrai par construction : 15 % des positions vivantes sont reconstruites, pas lues. Leur justesse se mesure par `--gap-test` (on cache des positions
@@ -115,7 +115,7 @@ Erreurs connues, classées par ce que j'ai vu sur 47 images de 9 cartes :
   lecture (variable `EVA_WORKERS`), jamais plus de la moitié des cœurs, moins si la mémoire libre est juste, en priorité basse.
 - **Ne pas lancer deux analyses en même temps** sur la même base : elles écrivent au même endroit et recalculent les mêmes games.
 - **`ALGO_REVISION`** (dans `analysis/tracking.py`) : à incrémenter quand l'algorithme change, sinon les positions déjà lues ne sont pas relues.
-  Elle vaut 7. La zone de minimap est aussi suivie (colonne `zone_key` de `samples_meta`).
+  Elle vaut 9. La zone de minimap est aussi suivie (colonne `zone_key` de `samples_meta`).
 - **OpenCV et les longues vidéos** : `cv2.VideoCapture.set(POS_MSEC)` est imprécis sur la vidéo de 58 minutes. Pour vérifier un instant, utiliser
   ffmpeg (`names._grab`), comme l'analyse. Mes premières vérifications visuelles sur cette vidéo étaient fausses pour cette raison.
 - **Ne jamais tuer un processus par nom** (`taskkill /IM brave.exe` ferme le navigateur de l'utilisateur) : cibler le port ou le profil de test.

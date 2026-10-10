@@ -60,16 +60,23 @@ def read_states(crop_a, crop_b):
 DEATH_OFFSETS_S = (1.2, 2.2, 3.2)  # instants (après l'entrée du killfeed) où le bandeau de la victime doit être grisé : une vraie mort dure environ 17 s
 
 
-def confirm_death(video, bar_zone, width, height, t, index, offsets=DEATH_OFFSETS_S):
+MIN_BAR_BRIGHTNESS = 25  # luminosité moyenne en dessous de laquelle l'écran est noir (fin de game, transition) : le bandeau n'est pas lisible
+END_MARGIN_S = 0.5  # on ne lit pas les dernières fractions de seconde d'une game (fondu au noir)
+
+
+def confirm_death(video, bar_zone, width, height, t, index, offsets=DEATH_OFFSETS_S, end_s=None):
     """Le bandeau du joueur `index` (0 à 3 dans la zone `bar_zone`) est-il grisé après l'instant t ? True : la victime est bien morte ; False : elle est restée
     vivante (ligne du killfeed inventée : nom flottant dans la vue 3D, transition de fin de game…) ; None : bandeau illisible, on ne tranche pas.
-    Il faut au moins deux images sur trois grisées : un parasite isolé du bandeau ne confirme pas une mort."""
+    Il faut au moins deux images sur trois grisées : un parasite isolé du bandeau ne confirme pas une mort. Une image noire (fin de game) ou après la fin de la
+    game (end_s) ne compte pas : un écran noir n'est pas un bandeau grisé."""
     import names  # évite un import circulaire au chargement
 
     dead = known = 0
     for dt in offsets:
+        if end_s is not None and t + dt > end_s - END_MARGIN_S:
+            continue
         crop = names._grab(video, t + dt, bar_zone, width, height)
-        if crop is None:
+        if crop is None or float(crop.mean()) < MIN_BAR_BRIGHTNESS:
             continue
         known += 1
         dead += not read_team(crop)[index]["alive"]

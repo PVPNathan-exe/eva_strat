@@ -71,6 +71,12 @@ def _line_walkable(a, b, ok):
     return all(_cell((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) in ok for i in range(n + 1))
 
 
+def on_walkable(p):
+    """Vrai si le point est sur un passage connu de la carte (ou si la carte des passages est vide : on ne tranche pas). Une pastille hors de tout passage est
+    un reflet ou un effet de l'écran, pas un joueur."""
+    return not _WALK or _cell(p) in _WALK
+
+
 def route(a, b):
     """Trajet de a à b par les passages connus (A* sur les cases, puis raccourcis en ligne droite là où c'est praticable). Liste de points ; [a, b] (ligne droite)
     si la carte des passages est vide, si la ligne droite est praticable ou si aucun trajet raisonnable n'existe."""
@@ -347,6 +353,13 @@ def confirmed_deaths(deaths, dead, times, step_s):
     return out
 
 
+def _is_other_player(d, slot):
+    """Vrai si la pastille porte le numéro d'un autre joueur de l'équipe, lu avec certitude : ce n'est pas le joueur de ce slot (par exemple le disque blanc
+    d'une station de tyrolienne lu « 9 » alors que le joueur observé est le « 8 »)."""
+    team = "A" if slot <= 4 else "B"
+    return bool(d.get("number")) and d["number"] != _number_of(slot) and d["number"] in {_number_of(s) for s in SLOTS[team]}
+
+
 def anchor_spectated(frames, states):
     """Le cadre blanc du bandeau dit quel joueur est observé : la pastille blanche de la minimap est donc ce joueur, quel que soit son
     numéro lu (souvent illisible sur cette pastille). Les autres pastilles blanches (joueurs qui attendent leur réapparition) gardent le leur.
@@ -365,7 +378,14 @@ def anchor_spectated(frames, states):
         slot = watched[0]
         team = "A" if slot <= 4 else "B"
         cands = [d for d in dets if d.get("spectated") and d["team"] == team and d.get("alive", True)]
-        pick = next((d for d in cands if d.get("number") == _number_of(slot)), None) or (max(cands, key=lambda d: d.get("area", 0)) if len(cands) == 1 else None)
+        mine_waiting = [d for d in waits if d["team"] == team]
+        pick = next((d for d in cands if d.get("number") == _number_of(slot)), None)
+        if pick is None:  # le joueur observé attend peut-être dans sa zone de départ : son disque porte son numéro
+            pick = next((d for d in mine_waiting if d.get("number") == _number_of(slot) and d.get("verified")), None)
+            if pick is not None:
+                dets = dets + [pick]
+        if pick is None and len(cands) == 1 and not _is_other_player(cands[0], slot):
+            pick = cands[0]
         if pick is None and not cands:
             mine = [d for d in waits if d["team"] == team]
             dead = sum(1 for s, v in states[fi].items() if (s <= 4) == (team == "A") and not v["alive"])
@@ -557,6 +577,8 @@ def recover_from_unused(rows, runs, frames, states, step_s, put):
             for i, d in enumerate(free):
                 if d["team"] != team or (d.get("spectated") and slot not in watched):
                     continue
+                if not on_walkable((d["x"], d["y"])):
+                    continue  # hors de tout passage connu : reflet de lumière, pas un joueur
                 if d.get("number") and d["number"] != _number_of(slot) and d["number"] in {_number_of(s) for s in SLOTS[team]}:
                     continue  # un autre joueur de l'équipe, lu avec certitude
                 dist = math.hypot(d["x"] - ex, d["y"] - ey)
@@ -942,7 +964,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 7  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 9  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

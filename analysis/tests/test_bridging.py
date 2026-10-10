@@ -1,8 +1,18 @@
 """Aucun joueur vivant ne disparaît : périodes vivantes (bandeaux), comblement des trous, pastilles inutilisées, morts confirmées."""
 
+import pytest
+
 import tracking
 
 STEP = 0.1
+
+
+@pytest.fixture(autouse=True)
+def _no_walk_map():
+    """La carte des passages est un état global posé par solve : chaque test repart sans carte."""
+    tracking._WALK.clear()
+    yield
+    tracking._WALK.clear()
 
 
 def states(alive_by_slot, n):
@@ -230,3 +240,25 @@ def test_without_known_corridors_or_with_a_walkable_straight_line_the_route_is_s
         assert tracking.route((0.1, 0.1), (0.5, 0.5)) == [(0.1, 0.1), (0.5, 0.5)]  # la ligne droite est praticable
     finally:
         tracking._WALK.clear()
+
+
+def test_a_blob_outside_every_known_passage_is_not_recovered_as_a_player():
+    tracking._WALK.clear()
+    tracking._WALK.update(tracking.walk_grid([(0.50 + 0.001 * i, 0.50) for i in range(6)] * 2))
+    try:
+        assert tracking.on_walkable((0.50, 0.50))
+        assert not tracking.on_walkable((0.89, 0.61))  # reflet de lumière loin des galeries
+    finally:
+        tracking._WALK.clear()
+    assert tracking.on_walkable((0.89, 0.61))  # sans carte des passages on ne tranche pas
+
+
+def test_the_observed_player_waiting_in_the_spawn_zone_is_not_replaced_by_a_station_disc():
+    # le joueur observé est le 7 (numéro 8) : son disque attend dans la zone de départ ; le disque blanc d'une station de tyrolienne est lu « 9 » (un autre joueur)
+    waiting = {**det("B", 0.47, 0.58, number=8, spectated=True), "waiting": True, "verified": True}
+    station = det("B", 0.74, 0.85, number=9, spectated=True)
+    st = {0: {7: {"alive": True, "spectated": True}}}
+    out = tracking.anchor_spectated([(0, 0.0, [waiting, station])], st)
+    anchored = [d for d in out[0][2] if d.get("slot") == 7]
+    assert len(anchored) == 1 and (anchored[0]["x"], anchored[0]["y"]) == (0.47, 0.58)
+    assert all(d.get("slot") != 7 for d in out[0][2] if d["x"] == 0.74)

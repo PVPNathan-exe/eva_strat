@@ -105,3 +105,31 @@ def test_a_kill_is_confirmed_only_if_the_victim_banner_turns_grey(monkeypatch):
     assert banners.confirm_death("v.mp4", {}, 1920, 1080, 10.0, 1) is False
     frames.clear()
     assert banners.confirm_death("v.mp4", {}, 1920, 1080, 10.0, 1) is None  # bandeau illisible : on ne tranche pas
+
+
+def test_a_black_screen_at_the_end_of_a_game_does_not_confirm_a_death(monkeypatch):
+    import names
+
+    black = np.zeros((120, 400, 3), np.uint8)  # fin de game : écran noir, le « bandeau » est vide donc lu comme grisé
+    monkeypatch.setattr(names, "_grab", lambda video, t, zone, w, h: black)
+    assert banners.confirm_death("v.mp4", {}, 1920, 1080, 10.0, 1) is None  # rien de lisible : on ne confirme pas, on n'écarte pas non plus
+    dead = _bar([1.0, 0.0, 1.0, 1.0])
+    monkeypatch.setattr(names, "_grab", lambda video, t, zone, w, h: dead)
+    assert banners.confirm_death("v.mp4", {}, 1920, 1080, 10.0, 1, end_s=11.0) is None  # les images demandées tombent après la fin de la game
+
+
+def test_drop_unconfirmed_kills_keeps_named_killers_but_drops_unproven_ones(monkeypatch):
+    import analyze
+    import loadout
+
+    monkeypatch.setattr(loadout, "_bar_of", lambda zones, slot: ({}, 0))
+    answers = {10.0: True, 20.0: False, 30.0: None, 31.0: None}
+    monkeypatch.setattr(banners, "confirm_death", lambda video, zone, w, h, t, index, offsets=None, end_s=None: answers[t])
+    events = [
+        {"t": 10.0, "killer": 1, "victim": 5},  # confirmé
+        {"t": 20.0, "killer": 1, "victim": 5},  # victime restée vivante : écarté
+        {"t": 30.0, "killer": 2, "victim": 6},  # illisible mais tueur identifié : gardé
+        {"t": 31.0, "killer": None, "victim": 6},  # illisible et sans tueur (kill halluciné de fin de game) : écarté
+    ]
+    kept = analyze.drop_unconfirmed_kills("v.mp4", {"width": 1920, "height": 1080}, {}, events, 32.0)
+    assert [e["t"] for e in kept] == [10.0, 30.0]
