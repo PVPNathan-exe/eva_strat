@@ -121,6 +121,11 @@ def _build_game(group, doubts, duration, pre_roll, post_roll):
     return {"start_s": start, "end_s": end, "doubts": doubts}
 
 
+def _has_run(group):
+    """Vrai si le chrono descend réellement quelque part dans le groupe (une suite d'au moins RUN_READINGS lectures qui baissent d'une seconde par seconde)."""
+    return any(_is_run(group[i : i + RUN_READINGS]) for i in range(len(group) - RUN_READINGS + 1))
+
+
 def detect_games(samples, duration, pre_roll=PRE_ROLL_S, post_roll=POST_ROLL_S, gap_s=30.0):
     """samples : liste de (t, secondes restantes ou None), triée par t. Renvoie les games détectées avec leurs doutes."""
     readings = _drop_outliers([(t, v) for t, v in samples if v is not None])
@@ -128,5 +133,7 @@ def detect_games(samples, duration, pre_roll=PRE_ROLL_S, post_roll=POST_ROLL_S, 
     for group, doubts in _split(readings, gap_s):
         if len(group) < MIN_READINGS or group[-1][0] - group[0][0] < MIN_GAME_S:
             continue
+        if not _has_run(group):
+            continue  # chrono figé du début à la fin (compte à rebours d'une game qui n'a pas démarré, fin de session) : ce n'est pas une game
         games.append(_build_game(group, doubts, duration, pre_roll, post_roll))
     return games

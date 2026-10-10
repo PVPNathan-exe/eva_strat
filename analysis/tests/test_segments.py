@@ -76,3 +76,11 @@ def test_a_clock_frozen_twice_before_it_runs_starts_after_the_last_freeze():
     games = segments.detect_games(intro + run, duration=500, pre_roll=1.0, post_roll=1.0)
     assert len(games) == 1
     assert 203 <= games[0]["start_s"] <= 207
+
+
+def test_a_clock_that_never_runs_is_not_a_game():
+    """Fin de session (vu sur NCT vs SNV) : 10:00 figé 84 s avec le nom de la carte affiché, puis plus rien."""
+    real = [(10 + k, 600 - k) for k in range(120)]
+    frozen_tail = [(300 + k, 600) for k in range(84)]
+    games = segments.detect_games(real + frozen_tail, duration=420, pre_roll=1.0, post_roll=1.0)
+    assert len(games) == 1 and games[0]["start_s"] < 20
