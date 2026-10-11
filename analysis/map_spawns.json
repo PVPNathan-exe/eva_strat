@@ -1,0 +1,17 @@
+{
+  "_doc": "Zones de départ par carte (rectangles x0, y0, x1, y1 en fraction de la minimap) : seul un disque blanc posé dans la zone de départ de son équipe est un joueur mort qui attend sa réapparition. La boîte centrale de Polaris (point de capture) prend la couleur de l'équipe qui la tient mais n'est pas une zone de départ : un joueur observé qui la capture n'est pas un joueur mort. Une carte sans entrée garde l'ancien comportement (la couleur autour du disque décide seule).",
+  "Polaris": {
+    "A": [
+      0.0,
+      0.4,
+      0.26,
+      0.82
+    ],
+    "B": [
+      0.74,
+      0.4,
+      1.0,
+      0.82
+    ]
+  }
+}

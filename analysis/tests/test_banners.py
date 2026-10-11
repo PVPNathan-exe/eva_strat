@@ -152,3 +152,8 @@ def test_the_white_frame_is_found_even_tinted_and_below_dark_padding():
     assert banners.read_team(bar(tinted, padding=16))[2]["spectated"]
     assert not banners.read_team(bar(None, padding=16))[2]["spectated"]
     assert not banners.read_team(bar(None, padding=16, scene_below=True))[2]["spectated"]
+
+
+def test_a_player_alive_with_one_or_two_hit_points_keeps_a_thin_strip_and_is_not_dead():
+    states = banners.read_team(_bar([0.02, 0.0, 0.5, 0.0]))
+    assert [s["alive"] for s in states] == [True, False, True, False]  # filet de 2 lignes : vivant ; entièrement gris : mort

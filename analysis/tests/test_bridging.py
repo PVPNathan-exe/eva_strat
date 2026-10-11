@@ -379,3 +379,43 @@ def test_a_very_short_unnumbered_track_is_not_assigned_by_continuity():
     blob.add(23, {"x": 0.52, "y": 0.52, "number": None, "slot": None, "alive": True})
     tracking._assign([known, blob], STEP)
     assert known.slot == 1 and blob.slot is None  # deux lectures : trop peu, le trou est comblé à la place
+
+
+def test_a_waiting_disc_outside_the_team_spawn_is_the_observed_player_in_the_capture_box():
+    # la boîte centrale prend la couleur de l'équipe qui la tient : le disque blanc du joueur observé qui la capture n'est pas un joueur mort qui attend
+    disc = {**det("B", 0.50, 0.58, number=8, spectated=True), "waiting": True, "verified": True}
+    st = {0: {7: {"alive": True, "spectated": True}}}
+    spawns = {"A": (0.0, 0.4, 0.26, 0.82), "B": (0.74, 0.4, 1.0, 0.82)}
+    out = tracking.anchor_spectated([(0, 0.0, [disc])], st, spawns)
+    assert [d["slot"] for d in out[0][2] if d.get("anchored")] == [7]
+    inside = {**disc, "x": 0.85, "number": None, "verified": False}  # dans la zone de départ bleue et sans numéro lu : un mort qui attend, pas ancré
+    st_dead = {0: {7: {"alive": True, "spectated": True}, 5: {"alive": False, "spectated": False}}}  # un coéquipier est mort : le disque est le sien
+    assert not [d for d in tracking.anchor_spectated([(0, 0.0, [inside])], st_dead, spawns)[0][2] if d.get("anchored")]
+
+
+def test_an_anchored_disc_weighs_like_four_reads():
+    t = tracking.Track("A", 0, {"x": 0.5, "y": 0.5, "number": 2, "slot": 2, "anchored": True, "alive": True})
+    t.add(1, {"x": 0.5, "y": 0.5, "number": 3, "slot": 3, "alive": True})
+    assert t.votes[2] == tracking.ANCHOR_VOTE and t.votes[3] == 1
+
+
+def test_a_gaze_into_a_wall_costs_and_a_gaze_along_the_corridor_does_not():
+    tracking._WALK.update(_block(0.10, 0.45, 0.90, 0.55))  # couloir horizontal
+    assert tracking._wall_penalty((0.5, 0.5), 0.0) == 0.0  # le long du couloir
+    assert tracking._wall_penalty((0.5, 0.455), 270.0) > 0.5  # vers le haut, contre le mur
+    assert tracking._wall_penalty(None, 90.0) == 0.0
+
+
+def test_a_white_station_disc_that_is_not_the_observed_player_is_removed():
+    tracking._TELEPORTS[:] = [((0.23, 0.85), (0.04, 0.38))]
+    station = {**det("B", 0.23, 0.85, number=9, spectated=True)}  # icône de station lue « 9 »
+    st = {0: {2: {"alive": True, "spectated": True}}}  # le joueur observé est le 2 (équipe orange)
+    out = tracking.anchor_spectated([(0, 0.0, [station])], st)
+    assert out[0][2] == []
+
+
+def test_a_gap_whose_detour_dwarfs_the_distance_keeps_the_player_in_place():
+    tracking._WALK.update(_block(0.05, 0.45, 0.45, 0.55) | _block(0.55, 0.45, 0.95, 0.55) | _block(0.05, 0.45, 0.10, 0.95) | _block(0.05, 0.90, 0.95, 0.95) | _block(0.90, 0.45, 0.95, 0.95))  # deux couloirs reliés par un grand tour
+    tracking._WALK.difference_update(_block(0.46, 0.45, 0.54, 0.55))  # mur de 0,08 entre les deux
+    path = tracking.route((0.44, 0.50), (0.56, 0.50), gap_s=20.0)
+    assert tracking._along(path, 0.5) == (0.44, 0.50)  # 4 m en ligne droite, un détour de dizaines de mètres : il reste en place

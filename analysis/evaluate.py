@@ -82,8 +82,8 @@ def _load(conn, game, step_s, refresh=False):
         return {"frames": frames, "states": states, "noise": dict(enumerate(raw["noise"]))}
     zone = db.zone_for(conn, game["map"], "minimap")
     za, zb = db.zone_for(conn, game["map"], "team_a_bar"), db.zone_for(conn, game["map"], "team_b_bar")
-    frames, noise = positions.detect_frames_and_noise(game["path"], game, zone, game["width"], game["height"], step_s=step_s)
     states = positions.detect_states(game["path"], game, za, zb, game["width"], game["height"], step_s=step_s)
+    frames, noise = positions.detect_frames_and_noise(game["path"], game, zone, game["width"], game["height"], step_s=step_s, hints=positions.hints_from_states(states))
     path.write_text(json.dumps({"frames": frames, "states": states, "zone_key": zone_key, "noise": noise}, default=float), encoding="utf-8")
     return {"frames": frames, "states": states, "noise": dict(enumerate(noise))}
 
@@ -99,7 +99,7 @@ def evaluate_game(conn, game_id, refresh=False, every=6):
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
     out = {}
     for label, use_states in (("sans bandeaux", False), ("avec bandeaux", True)):
-        rows = tracking.solve(data["frames"], step_s, deaths, data["states"] if use_states else None, db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]), data["noise"])
+        rows = tracking.solve(data["frames"], step_s, deaths, data["states"] if use_states else None, db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]), data["noise"], db.spawns_for(g["map"]))
         out[label] = compare(rows, data["states"], step_s=step_s, teleports=db.teleports_for(g["map"]))
     return g, out
 
@@ -121,7 +121,7 @@ def gap_test(conn, game_ids):
         step_s = 6 / g["fps"]
         data = _load(conn, g, step_s)
         deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, gid)]
-        rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], gid), db.walk_mask_for(g["map"]), data["noise"])
+        rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], gid), db.walk_mask_for(g["map"]), data["noise"], db.spawns_for(g["map"]))
         truth = {(r[0], r[2]): r for r in rows if r[7] and r[8] >= READ_CONF}
         dead = tracking.dead_frames(data["states"], step_s)
         runs = tracking.alive_runs(data["states"], dead)

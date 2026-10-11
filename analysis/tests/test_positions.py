@@ -195,9 +195,26 @@ def test_observed_marker_merged_with_a_bright_map_area_is_found_by_its_digit():
     cv2.rectangle(img, (197, 114), (203, 126), (20, 20, 20), -1)  # chiffre noir
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     found = minimap._glyph_discs(hsv, minimap._scale(img), [])
-    assert [team for _, team in found] == ["A"]
+    assert [team for _, team, _ in found] == ["A"]
     # un disque blanc sans liseré de la couleur d'une équipe (flèche de tyrolienne) n'est pas un joueur
     plain = np.full((254, 460, 3), 235, np.uint8)
     cv2.circle(plain, (200, 120), 9, (255, 255, 255), -1)
     cv2.rectangle(plain, (197, 114), (203, 126), (20, 20, 20), -1)
     assert minimap._glyph_discs(cv2.cvtColor(plain, cv2.COLOR_BGR2HSV), minimap._scale(plain), []) == []
+
+
+def test_a_disc_without_a_readable_ring_is_kept_only_with_the_observed_player_hint():
+    """Boîte de capture teintée de l'autre équipe ou fond sombre : le liseré est illisible. Le bandeau dit quel joueur est observé (équipe, numéro) : le disque
+    à chiffre est gardé comme incertain ; sans cette indication il est refusé."""
+    import cv2
+    import numpy as np
+
+    import minimap
+
+    img = np.full((254, 460, 3), 235, np.uint8)
+    cv2.circle(img, (200, 120), 9, (255, 255, 255), -1)
+    cv2.rectangle(img, (197, 114), (203, 126), (20, 20, 20), -1)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    assert minimap._glyph_discs(hsv, minimap._scale(img), []) == []
+    found = minimap._glyph_discs(hsv, minimap._scale(img), [], ("A", 3))
+    assert [(team, unsure) for _, team, unsure in found] == [("A", True)]

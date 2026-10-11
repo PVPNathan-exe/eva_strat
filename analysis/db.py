@@ -188,6 +188,7 @@ def all_verified(conn, video_id):
 
 
 DEFAULT_ZONES_PATH = Path(__file__).with_name("default_zones.json")
+SPAWNS_PATH = Path(__file__).with_name("map_spawns.json")  # zones de départ par carte
 TELEPORTS_PATH = Path(__file__).with_name("map_teleports.json")  # stations de tyrolienne par carte (paires entrée/sortie)
 MAP_ZONES_PATH = Path(__file__).with_name("map_zones.json")  # zones propres à une carte (la minimap n'a pas la même taille partout)
 
@@ -209,6 +210,14 @@ def teleports_for(map_name):
         return []
     pairs = json.loads(TELEPORTS_PATH.read_text(encoding="utf-8")).get(map_name, [])
     return [(tuple(a), tuple(b)) for a, b in pairs]
+
+
+def spawns_for(map_name):
+    """Zones de départ d'une carte : {"A": (x0, y0, x1, y1), "B": ...}, vide si la carte n'en a pas de connues."""
+    if not map_name or not SPAWNS_PATH.exists():
+        return {}
+    zones = json.loads(SPAWNS_PATH.read_text(encoding="utf-8")).get(map_name, {})
+    return {team: tuple(rect) for team, rect in zones.items()}
 
 
 def walk_mask_for(map_name):

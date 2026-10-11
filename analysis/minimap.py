@@ -35,6 +35,7 @@ WAITING_SPAWN_SHARE = 0.25  # part du pourtour sur la couleur de la zone de dép
 WHITE_REQUIRE_DIGIT = False  # vrai : une pastille blanche n'est acceptée que si son numéro est lisible (les symboles blancs de la carte n'en ont pas)
 WHITE_MAX_UNNUMBERED = 2  # une image normale a au plus un joueur observé : plus de pastilles blanches sans numéro, c'est du décor (Polaris)
 WHITE_RING_SHARE = 0.35  # part minimale du pourtour d'une pastille blanche qui doit être du liseré de la couleur de l'équipe
+WHITE_RING_WEAK_SHARE = 0.5  # ... ou cette part avec le liseré faible (RING_*_WEAK), dominant sur l'autre équipe
 WHITE_MIN_AREA = 90  # le joueur observé rétrécit par moments (animation) : sa pastille blanche peut tomber vers 100 pixels ; le liseré coloré reste exigé
 DIM_MIN_SEPARATION = 0.03  # distance minimale (relative à la largeur) à une pastille déjà trouvée de la même équipe
 RING_ORANGE = ((3, 110, 110), (22, 255, 255))  # liseré du joueur observé : plus sombre qu'une pastille pleine
@@ -284,6 +285,10 @@ def _is_waiting_circle(blob, spawn_colors):
     return n > 0 and any(int((mask > 0)[around].sum()) / n >= WAITING_SPAWN_SHARE for mask in spawn_colors.values())
 
 
+OPEN_DISC_PX = 5  # ouverture (pixels) qui retire les traits blancs fins du plan collés à un disque
+OPEN_DISC_SEPARATION = 0.025  # distance minimale (relative à la largeur) à un joueur observé déjà trouvé de la même équipe
+
+
 GLYPH_DARK_V = 110  # pixel sombre : le chiffre noir du joueur observé
 GLYPH_AREA = (10, 90)  # surface (échelle de référence) d'un chiffre
 GLYPH_HEIGHT = (6, 16)  # hauteur (pixels, échelle de référence)
@@ -292,10 +297,12 @@ DISC_WHITE_SHARE = 0.55  # part de pixels clairs et peu colorés autour du chiff
 RING_MIN_PIXELS = 5  # pixels de la couleur d'équipe exigés autour du disque (liseré partiel accepté)
 
 
-def _glyph_discs(hsv, scale, found):
+def _glyph_discs(hsv, scale, found, hint=None):
     """Joueur observé que la détection par taches blanches a manqué : sur Polaris le disque blanc touche une zone claire de la carte et fusionne
     avec elle. On cherche donc le chiffre noir entouré de blanc, puis la couleur d'équipe autour, sans dépendre de la forme de la tache.
-    Renvoie [(blob disque, équipe)]. Le liseré de la couleur d'équipe est exigé : les symboles blancs de la carte (flèche de tyrolienne) n'en ont pas."""
+    Renvoie [(blob disque, équipe, incertain)]. Le liseré de la couleur d'équipe est exigé : les symboles blancs de la carte (flèche de tyrolienne) n'en ont pas.
+    hint = (équipe, numéro) du joueur que le bandeau dit observé : sans liseré net (boîte de capture teintée de l'autre équipe, fond sombre), le disque est
+    gardé comme « incertain » ; l'appelant ne le garde que si son chiffre est bien celui du joueur observé."""
     h, w = hsv.shape[:2]
     v, s_ch = hsv[:, :, 2], hsv[:, :, 1]
     dark = cv2.morphologyEx((v < GLYPH_DARK_V).astype(np.uint8), cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
@@ -321,19 +328,23 @@ def _glyph_discs(hsv, scale, found):
             "B": int((_color_mask(hsv, RING_BLUE_WEAK) > 0)[ring > 0].sum()),
         }
         team = max(votes, key=votes.get)
+        unsure = False
         if votes[team] < RING_MIN_PIXELS or votes[team] < 2 * votes["A" if team == "B" else "B"]:
-            continue
+            if not hint:
+                continue
+            team, unsure = hint[0], True
         disc = np.zeros((h, w), np.uint8)
         # Disque de lecture du chiffre : de la taille de la pastille réelle (le chiffre en occupe la moitié centrale, comme pour les modèles appris).
         cv2.circle(disc, (int(round(cx)), int(round(cy))), max(r, int(round(0.9 * max(bw, bh)))), 1, -1)
         if any(d["team"] == team and d["spectated"] and math.hypot(d["x"] - cx / w, d["y"] - cy / h) < 0.03 for d in found):
             continue
-        out.append((disc, team))
+        out.append((disc, team, unsure))
     return out
 
 
-def find_markers(crop, templates=None):
-    """Toutes les pastilles de la minimap. Coordonnées normalisées (0 à 1) dans le recadrage."""
+def find_markers(crop, templates=None, hint=None):
+    """Toutes les pastilles de la minimap. Coordonnées normalisées (0 à 1) dans le recadrage.
+    hint : (équipe, numéro) du joueur observé d'après les bandeaux (facultatif) : aide à retrouver son disque blanc quand le liseré est illisible."""
     templates = templates if templates is not None else load_digit_templates()
     cv2.setRNGSeed(0)  # le découpage des amas (k-means) est aléatoire : sans graine, deux lectures de la même image pouvaient différer
     h, w = crop.shape[:2]
@@ -394,37 +405,59 @@ def find_markers(crop, templates=None):
         "A": cv2.morphologyEx(cv2.inRange(hsv, np.array((3, 90, 90)), np.array((22, 255, 255))), cv2.MORPH_OPEN, np.ones((9, 9), np.uint8)),
         "B": cv2.morphologyEx(cv2.inRange(hsv, np.array((98, 90, 90)), np.array((118, 255, 255))), cv2.MORPH_OPEN, np.ones((9, 9), np.uint8)),
     }
-    for blob, _ in _blobs(white, scale, min_area=WHITE_MIN_AREA * scale):
-        if _is_waiting_circle(blob, spawn_colors):
-            continue  # joueur mort qui attend dans sa zone de départ : ce n'est pas une pastille en jeu
-        ring = cv2.dilate(blob, np.ones((7, 7), np.uint8)) - blob
-        votes = {
-            "A": int((_color_mask(hsv, RING_ORANGE) > 0)[ring > 0].sum()),
-            "B": int((_color_mask(hsv, RING_BLUE) > 0)[ring > 0].sum()),
-        }
-        team = max(votes, key=votes.get)
-        pale_ring = votes[team] < 10 * scale
-        if pale_ring:
-            weak = {
-                "A": int((_color_mask(hsv, RING_ORANGE_WEAK) > 0)[ring > 0].sum()),
-                "B": int((_color_mask(hsv, RING_BLUE_WEAK) > 0)[ring > 0].sum()),
+    def white_discs(mask, opened=False):
+        for blob, _ in _blobs(mask, scale, min_area=WHITE_MIN_AREA * scale):
+            if _is_waiting_circle(blob, spawn_colors):
+                continue  # joueur mort qui attend dans sa zone de départ : ce n'est pas une pastille en jeu
+            ring = cv2.dilate(blob, np.ones((7, 7), np.uint8)) - blob
+            votes = {
+                "A": int((_color_mask(hsv, RING_ORANGE) > 0)[ring > 0].sum()),
+                "B": int((_color_mask(hsv, RING_BLUE) > 0)[ring > 0].sum()),
             }
-            team = max(weak, key=weak.get)
-            votes[team] = weak[team] if weak[team] >= RING_WEAK_PIXELS * scale and weak[team] > 2 * weak["A" if team == "B" else "B"] else 0
-        # Un vrai joueur observé a un liseré de sa couleur sur 30 à 75 % de son pourtour (mesuré) ; un reflet bleuté du décor autour d'une tache blanche n'en
-        # couvre qu'un petit bout. On exige une vraie proportion du pourtour, pas seulement quelques pixels.
-        if votes[team] and votes[team] < WHITE_RING_SHARE * int((ring > 0).sum()):
-            votes[team] = 0
-        if votes[team] >= 10 * scale:
-            # Le liseré coloré qui entoure la pastille blanche en dessine la pointe : on l'ajoute pour mesurer la direction.
-            rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)
-            silhouette = cv2.morphologyEx(np.maximum(blob, rim.astype(np.uint8)), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-            add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT)  # halo pâle : le numéro doit être lisible
+            team = max(votes, key=votes.get)
+            pale_ring = votes[team] < 10 * scale
+            if pale_ring:
+                weak = {
+                    "A": int((_color_mask(hsv, RING_ORANGE_WEAK) > 0)[ring > 0].sum()),
+                    "B": int((_color_mask(hsv, RING_BLUE_WEAK) > 0)[ring > 0].sum()),
+                }
+                team = max(weak, key=weak.get)
+                votes[team] = weak[team] if weak[team] >= RING_WEAK_PIXELS * scale and weak[team] > 2 * weak["A" if team == "B" else "B"] else 0
+            # Un vrai joueur observé a un liseré de sa couleur sur 30 à 75 % de son pourtour (mesuré) ; un reflet bleuté du décor autour d'une tache blanche n'en
+            # couvre qu'un petit bout. On exige une vraie proportion du pourtour, pas seulement quelques pixels.
+            ring_px = int((ring > 0).sum())
+            if votes[team] and votes[team] < WHITE_RING_SHARE * ring_px:
+                # liseré fort trop court : accepté si le liseré faible, dominant sur l'autre équipe, couvre la moitié du pourtour (vidéo où le liseré est mince et terne)
+                weak_all = {
+                    "A": int((_color_mask(hsv, RING_ORANGE_WEAK) > 0)[ring > 0].sum()),
+                    "B": int((_color_mask(hsv, RING_BLUE_WEAK) > 0)[ring > 0].sum()),
+                }
+                other = "A" if team == "B" else "B"
+                if weak_all[team] >= WHITE_RING_WEAK_SHARE * ring_px and weak_all[team] > 2 * weak_all[other]:
+                    votes[team] = max(votes[team], 10 * scale)
+                else:
+                    votes[team] = 0
+            if votes[team] >= 10 * scale:
+                # Le liseré coloré qui entoure la pastille blanche en dessine la pointe : on l'ajoute pour mesurer la direction.
+                rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)
+                silhouette = cv2.morphologyEx(np.maximum(blob, rim.astype(np.uint8)), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+                if opened:  # seulement un disque que la passe normale n'a pas trouvé
+                    m = cv2.moments(blob, binaryImage=True)
+                    ox, oy = m["m10"] / m["m00"] / w, m["m01"] / m["m00"] / h
+                    if any(d["team"] == team and d["spectated"] and math.hypot(d["x"] - ox, d["y"] - oy) < OPEN_DISC_SEPARATION for d in found):
+                        continue
+                add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT)  # halo pâle : le numéro doit être lisible
+    white_discs(white)
+    # Un disque posé contre un trait blanc du plan fusionne avec lui et la tache n'a plus la forme d'un disque : on retire les traits fins (ouverture) pour
+    # retrouver le disque seul. Mesuré : le joueur observé n'était trouvé que dans 47 % des images d'une vidéo (92 % sur les autres).
+    white_discs(cv2.morphologyEx(white, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (OPEN_DISC_PX, OPEN_DISC_PX))), opened=True)
     # Le joueur observé fusionné avec une zone claire de la carte (Polaris) : cherché par son chiffre noir sur disque blanc, hors zones de départ.
-    for disc, team in _glyph_discs(hsv, scale, found):
+    for disc, team, unsure in _glyph_discs(hsv, scale, found, hint):
         waiting = _is_waiting_circle(disc, spawn_colors)
         before = len(found)
         add(disc, team, alive=True, spectated=True)  # numéro lu si possible ; sinon le bandeau dit quel joueur est observé
+        if unsure:  # liseré illisible : on ne garde le disque que si son chiffre est celui du joueur observé
+            found[before:] = [d for d in found[before:] if d["number"] == hint[1]]
         for d in found[before:]:
             d["verified"] = True  # chiffre noir sur disque blanc et liseré de la couleur d'équipe : pas un symbole du décor
             if waiting:

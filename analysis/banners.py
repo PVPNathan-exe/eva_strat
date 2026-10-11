@@ -10,7 +10,7 @@ import numpy as np
 COLORED = {"S": 100, "V": 140}  # pixel « coloré » (couleur de l'équipe)
 FILL_COLUMNS = (0.34, 0.80)  # colonnes examinées : hors portrait (à gauche) et hors points de vie (à droite)
 ROW_COLORED = 0.35  # une ligne du bandeau est « remplie » si au moins cette part de ses pixels est colorée
-MIN_FILL = 0.03  # remplissage minimal (part de la hauteur) pour être vivant : en dessous, le bandeau est entièrement grisé = mort
+MIN_FILL = 0.015  # remplissage minimal (part de la hauteur) pour être vivant : un bandeau de mort est entièrement gris (0,00) ; un joueur vivant à 1 ou 2 points de vie garde un mince filet (0,02), mesuré
 FRAME_V, FRAME_S = 200, 130  # pixel du cadre blanc : clair et peu saturé (teinté de bleu ou d'orange sur certaines vidéos : saturation jusqu'à 120)
 FRAME_TOP_ROWS = 3  # le trait du haut du cadre est dans ces premières lignes du bandeau
 FRAME_TOP_SHARE = 0.7  # part de la largeur du trait du haut qui doit être blanche

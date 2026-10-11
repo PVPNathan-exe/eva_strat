@@ -169,6 +169,8 @@ def _route_path(a, b, detour=ROUTE_DETOUR, rides=True):
 
 ARENA_M = (31.0, 16.5)  # taille d'une arène en mètres (largeur, hauteur) : la minimap est normalisée sur chacune de ses deux directions
 ELIM_V_MS = 8.0  # vitesse maximale pour attribuer une trajectoire sans numéro par élimination (le 99,9e centile des pas lus est à 7,2 m/s)
+FILL_DETOUR = 3.0  # un trou n'est comblé par un trajet plus long que cela (fois la distance directe)...
+FILL_DETOUR_SLACK_M = 3.0  # ... plus cette marge (m) que si aucun autre choix : sinon le joueur reste en place
 V_MAX_MS = 10.0  # vitesse maximale d'un joueur (m/s) : sur 46 401 pas lus avec certitude, 11 seulement dépassent 10 m/s (99,9e centile : 7,2 m/s)
 MOVE_SLACK_M = 1.5  # marge (m) sur le trajet d'un trou : position du centre d'une pastille, arrondis
 
@@ -189,8 +191,10 @@ def route(a, b, gap_s=None, rides=True):
         if path is None:
             _JUMPS.add((a, b))
             return [a, b]
-    if gap_s is not None and _path_m(path) > V_MAX_MS * gap_s + MOVE_SLACK_M:
-        _JUMPS.add((a, b))
+    length_m = _path_m(path)
+    straight_m = math.hypot((b[0] - a[0]) * ARENA_M[0], (b[1] - a[1]) * ARENA_M[1])
+    if (gap_s is not None and length_m > V_MAX_MS * gap_s + MOVE_SLACK_M) or length_m > FILL_DETOUR * straight_m + FILL_DETOUR_SLACK_M:
+        _JUMPS.add((a, b))  # trop vite, ou un détour sans commune mesure avec la distance (un passage manque au masque, ou le joueur est resté sur place)
         return [a, b]
     return path
 
@@ -222,6 +226,9 @@ def _along(path, f):
     return path[-1]
 
 
+ANCHOR_VOTE = 4  # un disque blanc identifié par le cadre du bandeau et son numéro pèse comme 4 numéros lus : l'identité du joueur observé ne s'échange pas avec un autre
+
+
 class Track:
     def __init__(self, team, fi, det, dead=False):
         self.team = team
@@ -236,7 +243,7 @@ class Track:
     def _vote(self, det):
         slot = det.get("slot")
         if slot in SLOTS[self.team]:
-            self.votes[slot] += 1
+            self.votes[slot] += ANCHOR_VOTE if det.get("anchored") else 1
 
     def add(self, fi, det):
         self.pts[fi] = det
@@ -469,7 +476,13 @@ def _is_other_player(d, slot):
 ANCHOR_WINDOW_S = 3.0  # un disque blanc sans numéro est comparé aux images où le numéro du joueur observé est lu, jusqu'à cet écart
 ANCHOR_BOTH = (0.08, 0.10)  # tolérance (relative à la minimap) entre deux ancres : base, plus ceci par seconde d'écart à la plus proche
 ANCHOR_ONE = (0.06, 0.25)  # ... avec une seule ancre d'un côté : un joueur qui court peut s'éloigner de 0,25 par seconde
+STATION_NEIGHBOUR_FRAMES = 15  # image sans joueur observé unique : on prend celui des images voisines (jusqu'à cet écart) pour écarter les disques de stations
 STATION_NEAR = 0.04  # un disque blanc à moins de cela d'une extrémité de tyrolienne, sans ancre, est le décor de la station
+
+
+def _on_station(d):
+    """Vrai si la détection est sur une extrémité de tyrolienne de la carte."""
+    return any(math.hypot(d["x"] - p[0], d["y"] - p[1]) <= STATION_NEAR for pair in _TELEPORTS for p in pair)
 
 
 def _anchor_ok(d, t, anchors):
@@ -496,13 +509,20 @@ def _anchor_ok(d, t, anchors):
     return math.hypot(here[0] - expected[0], here[1] - expected[1]) <= base + rate * dt
 
 
-def anchor_spectated(frames, states):
+def _in_spawn(d, spawns):
+    rect = (spawns or {}).get(d["team"])
+    return rect is None or (rect[0] <= d["x"] <= rect[2] and rect[1] <= d["y"] <= rect[3])
+
+
+def anchor_spectated(frames, states, spawns=None):
     """Le cadre blanc du bandeau dit quel joueur est observé : la pastille blanche de la minimap est donc ce joueur, quel que soit son
     numéro lu (souvent illisible sur cette pastille). Les autres pastilles blanches (joueurs qui attendent leur réapparition) gardent le leur.
 
     Un disque blanc dans la zone de départ (`waiting`) est un joueur mort qui attend OU le joueur observé qui n'a pas encore quitté sa zone. Les bandeaux
     tranchent : s'il y a plus de disques que de joueurs morts dans l'équipe, le disque en trop est le joueur observé (sûr seulement si un seul est en trop,
     ou si son numéro est lu). Les disques d'attente non retenus sont retirés : ils ne sont pas des joueurs en jeu."""
+    if spawns:  # un disque « d'attente » hors de la zone de départ de son équipe est un joueur en jeu (boîte de capture), pas un mort qui attend
+        frames = [(fi, t, [({**d, "waiting": False} if d.get("waiting") and not _in_spawn(d, spawns) else d) for d in dets]) for fi, t, dets in frames]
     anchors = {}  # slot -> [(t, x, y)] : où le numéro du joueur observé est lu sur un disque blanc
     for fi, t, dets in frames:
         watched = [s for s, v in (states or {}).get(fi, {}).items() if v["spectated"]]
@@ -511,16 +531,29 @@ def anchor_spectated(frames, states):
                 if d.get("spectated") and d.get("number") == _number_of(watched[0]) and d.get("alive", True):
                     anchors.setdefault(watched[0], []).append((t, d["x"], d["y"]))
                     break
+    single = {}  # indice d'image -> joueur observé quand le bandeau n'en désigne qu'un
+    for fi, _, _ in frames:
+        w = [s for s, v in (states or {}).get(fi, {}).items() if v["spectated"]]
+        if len(w) == 1:
+            single[fi] = w[0]
+    nearest = sorted(single)
     out = []
     for fi, t, dets in frames:
         waits = [d for d in dets if d.get("waiting")]
         dets = [d for d in dets if not d.get("waiting")]
         watched = [s for s, v in (states or {}).get(fi, {}).items() if v["spectated"]]
+        if _TELEPORTS and nearest and len(watched) != 1:
+            # cadre qui clignote : le joueur observé est celui des images voisines ; les disques de stations qui ne sont pas lui sont retirés quand même
+            j = min(nearest, key=lambda k: abs(k - fi))
+            if abs(j - fi) <= STATION_NEIGHBOUR_FRAMES:
+                dets = [d for d in dets if not (d.get("spectated") and _on_station(d) and not (d["team"] == ("A" if single[j] <= 4 else "B") and d.get("number") in (None, _number_of(single[j]))))]
         if not states or len(watched) != 1:
             out.append((fi, t, dets))
             continue
         slot = watched[0]
         team = "A" if slot <= 4 else "B"
+        if _TELEPORTS:  # un disque blanc de station qui n'est pas le joueur observé (autre équipe, ou autre numéro) est l'icône de la station, pas un joueur
+            dets = [d for d in dets if not (d.get("spectated") and _on_station(d) and not (d["team"] == team and d.get("number") in (None, _number_of(slot))))]
         cands = [d for d in dets if d.get("spectated") and d["team"] == team and d.get("alive", True)]
         mine_waiting = [d for d in waits if d["team"] == team]
         pick = next((d for d in cands if d.get("number") == _number_of(slot)), None)
@@ -536,7 +569,7 @@ def anchor_spectated(frames, states):
             pick = next((d for d in mine if d.get("number") == _number_of(slot)), None) or (mine[0] if len(mine) == dead + 1 and dead == 0 else None)
             if pick is not None:
                 dets = dets + [pick]
-        out.append((fi, t, [({**d, "number": _number_of(slot), "slot": slot} if d is pick else d) for d in dets]))
+        out.append((fi, t, [({**d, "number": _number_of(slot), "slot": slot, "anchored": True} if d is pick else d) for d in dets]))
     return out
 
 
@@ -856,7 +889,23 @@ def _angdist(a, b):
     return abs((a - b + 180) % 360 - 180)
 
 
-def _choose_directions(obs, moves=None):
+WALL_WEIGHT = 0.8  # coût d'un regard qui donne dans un mur à bout portant (la carte des passages le dit) : on regarde où l'on voit, pas contre un mur
+WALL_LOOK = 0.06  # distance (relative à la minimap) examinée devant le joueur
+
+
+def _wall_penalty(pos, angle):
+    """0 à 1 : 1 si le premier pas du regard sort des passages, 0 si le regard reste dans les passages sur toute la distance examinée. 0 sans carte des passages."""
+    if not _WALK or pos is None:
+        return 0.0
+    for i in range(1, 7):
+        d = WALL_LOOK * i / 6
+        p = (pos[0] + d * math.cos(math.radians(angle)), pos[1] + d * math.sin(math.radians(angle)))
+        if _cell(p) not in _WALK:
+            return 1.0 - (i - 1) / 6
+    return 0.0
+
+
+def _choose_directions(obs, moves=None, positions=None):
     """obs : {indice: (axe, asymétrie)} -> {indice: angle}. Programmation dynamique sur le sens (axe ou axe + 180) :
     chaque lecture « vote » pour le sens de son asymétrie, proportionnellement à sa netteté, et un retournement d'une
     lecture à l'autre coûte cher. Un sens isolé et douteux est donc corrigé, un vrai demi-tour soutenu est conservé.
@@ -879,6 +928,8 @@ def _choose_directions(obs, moves=None):
             weight = MOVE_WEIGHT * min(1.0, speed / MOVE_SPEED_FULL)
             # 0 si le regard suit le déplacement, 1 s'il lui tourne le dos
             cost += weight * (1 - math.cos(math.radians(ang[k][c] - heading))) / 2
+        if positions:
+            cost += WALL_WEIGHT * _wall_penalty(positions.get(k), ang[k][c])
         return cost
 
     cost = [[unary(keys[0], 0), unary(keys[0], 1)]]
@@ -1042,7 +1093,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1053,6 +1104,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     et donne la distance réelle (par les couloirs et les tyroliennes) pour accepter une pastille récupérée.
     noise : {indice d'image: couleur d'équipe non expliquée, en équivalents de pastille} (frame_noise.py), facultatif : une image contaminée (stries de lumière)
     ne crée pas de trajectoire et ne sert pas à récupérer une pastille sans numéro.
+    spawns : {"A": (x0, y0, x1, y1), "B": ...} zones de départ de la carte (facultatif) : un disque blanc « qui attend » hors de la zone de départ de son équipe
+    (la boîte de capture de Polaris) est un joueur en jeu, pas un mort.
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
@@ -1061,7 +1114,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     _NEAR.clear()
     _ROUTES.clear()
     _JUMPS.clear()
-    frames = anchor_spectated(frames, states)
+    frames = anchor_spectated(frames, states, spawns)
     dead = dead_frames(states, step_s)
     frames = drop_static_spectated(drop_static_noise(frames), states)
     times = {fi: t for fi, t, _ in frames}
@@ -1127,7 +1180,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     speed = math.hypot(dx, dy) / dt
                     if speed >= MOVE_MIN_SPEED:
                         moves[k] = (math.degrees(math.atan2(dy, dx)) % 360, speed)
-            chosen = _choose_directions(obs, moves)
+            chosen = _choose_directions(obs, moves, {k: (t.pts[k]["x"], t.pts[k]["y"]) for k in idx})
             smooth = _smooth_angles({k: chosen.get(k) for k in idx}, half)
             for k in idx:
                 d = t.pts[k]
@@ -1193,7 +1246,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 22  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 27  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

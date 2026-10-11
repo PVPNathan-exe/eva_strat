@@ -21,12 +21,23 @@ BATCH = 48  # images décodées d'avance et lues en parallèle
 _templates = None
 
 
-def _detect_one(crop):
-    """Pastilles d'une image (exécuté dans un processus de travail : les modèles de chiffres sont chargés une fois par processus)."""
+def _detect_one(args):
+    """Pastilles d'une image (exécuté dans un processus de travail : les modèles de chiffres sont chargés une fois par processus).
+    args = (image, indice du joueur observé d'après les bandeaux ou None)."""
     global _templates
+    crop, hint = args
     if _templates is None:
         _templates = minimap.load_digit_templates()
-    return [{k: v for k, v in m.items() if k != "glyph"} for m in minimap.find_markers(crop, _templates)], minimap.coarse_colour_map(crop)
+    return [{k: v for k, v in m.items() if k != "glyph"} for m in minimap.find_markers(crop, _templates, hint)], minimap.coarse_colour_map(crop)
+
+
+def hints_from_states(states):
+    """[(équipe, numéro) du joueur observé, ou None] pour chaque image, d'après les bandeaux : une seule personne observée par image."""
+    out = []
+    for i in range(len(states)):
+        watched = [s for s, v in states.get(i, {}).items() if v["spectated"]]
+        out.append(("A" if watched[0] <= 4 else "B", tracking._number_of(watched[0])) if len(watched) == 1 else None)
+    return out
 
 
 MAX_WORKERS = 3  # volontairement bas : le PC reste utilisable pendant une analyse
@@ -82,11 +93,12 @@ def detect_frames(video, game, zone, width, height, emit=None, wait=None, step_s
     return detect_frames_and_noise(video, game, zone, width, height, emit, wait, step_s, workers)[0]
 
 
-def detect_frames_and_noise(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, workers=None):
+def detect_frames_and_noise(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, workers=None, hints=None):
     """Détections brutes de la minimap à cadence régulière et contamination de couleur de chaque image : ([(indice, t, [pastilles])], [bruit par image]).
     Les images sont décodées par ffmpeg puis lues par plusieurs processus (une game de 4 minutes passe de quelques minutes à moins d'une)."""
     workers = _workers() if workers is None else workers
     frames, coarse = [], []
+    hint_at = lambda t: (hints[min(int(round((t - game["start_s"]) / step_s)), len(hints) - 1)] if hints else None)  # indice d'image selon l'instant
     start, end = game["start_s"], game["end_s"]
     crops = timer.iter_crops(video, zone, width, height, step_s=step_s, t0=start, t1=end)
 
@@ -101,7 +113,7 @@ def detect_frames_and_noise(video, game, zone, width, height, emit=None, wait=No
         for t, crop in crops:
             if wait:
                 wait()
-            finish([(t, crop)], [_detect_one(crop)])
+            finish([(t, crop)], [_detect_one((crop, hint_at(t)))])
         return frames, frame_noise.frame_noise(np.array(coarse), frames)
     from concurrent.futures import ProcessPoolExecutor
 
@@ -112,10 +124,10 @@ def detect_frames_and_noise(video, game, zone, width, height, emit=None, wait=No
             if len(batch) >= BATCH:
                 if wait:
                     wait()
-                finish(batch, list(pool.map(_detect_one, [c for _, c in batch])))
+                finish(batch, list(pool.map(_detect_one, [(c, hint_at(t)) for t, c in batch])))
                 batch = []
         if batch:
-            finish(batch, list(pool.map(_detect_one, [c for _, c in batch])))
+            finish(batch, list(pool.map(_detect_one, [(c, hint_at(t)) for t, c in batch])))
     return frames, frame_noise.frame_noise(np.array(coarse), frames)
 
 
@@ -132,9 +144,10 @@ def detect_states(video, game, zone_a, zone_b, width, height, wait=None, step_s=
     return states
 
 
-def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None, teleports=None, walk_points=None, walk_mask=None):
+def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None, teleports=None, walk_points=None, walk_mask=None, spawns=None):
     """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance).
     deaths : [(t, slot)] morts connues par le killfeed. bars : (zone du bandeau gauche, zone du bandeau droit) pour guider le suivi."""
     states = detect_states(video, game, bars[0], bars[1], width, height, wait, step_s) if bars else None
-    frames, noise = detect_frames_and_noise(video, game, zone, width, height, emit, wait, step_s)
-    return tracking.solve(frames, step_s, deaths, states, teleports, walk_points, walk_mask, dict(enumerate(noise)))
+    hints = hints_from_states(states) if states else None
+    frames, noise = detect_frames_and_noise(video, game, zone, width, height, emit, wait, step_s, hints=hints)
+    return tracking.solve(frames, step_s, deaths, states, teleports, walk_points, walk_mask, dict(enumerate(noise)), spawns)
