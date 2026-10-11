@@ -349,3 +349,33 @@ def test_a_life_with_no_reading_is_placed_at_the_team_spawn_point():
                     rows[(k, slot)] = row(k, slot, 0.80, 0.60)
     tracking.bridge_gaps(rows, runs, STEP, make_put(rows))
     assert all((k, 1) in rows and rows[(k, 1)][4:6] == (0.80, 0.60) and rows[(k, 1)][8] == tracking.CONF_SPAWN_GUESS for k in range(60, 64))
+
+
+def test_a_lone_white_disc_is_the_observed_player_only_if_it_fits_the_numbered_reads():
+    anchors = [(10.0, 0.50, 0.60), (14.0, 0.50, 0.60)]  # le numéro du joueur observé est lu deux fois, au même endroit
+    stay = {"x": 0.51, "y": 0.60}
+    waiting_disc_elsewhere = {"x": 0.80, "y": 0.54}  # disque d'attente d'un joueur mort
+    assert tracking._anchor_ok(stay, 12.0, anchors)
+    assert not tracking._anchor_ok(waiting_disc_elsewhere, 12.0, anchors)
+    tracking._TELEPORTS[:] = [((0.04, 0.38), (0.23, 0.85))]
+    try:
+        assert not tracking._anchor_ok({"x": 0.04, "y": 0.38}, 30.0, anchors)  # sans ancre proche, le disque d'une station est le décor
+        assert tracking._anchor_ok({"x": 0.50, "y": 0.50}, 30.0, anchors)
+    finally:
+        tracking._TELEPORTS[:] = []
+
+
+def test_a_track_that_reads_another_player_is_not_given_by_elimination():
+    t = tracking.Track("B", 0, {"x": 0.7, "y": 0.8, "number": 9, "slot": 8, "alive": True})
+    t.add(1, {"x": 0.7, "y": 0.8, "number": 9, "slot": 8, "alive": True})
+    assert tracking._reads_another_player(t, 7) and not tracking._reads_another_player(t, 8)
+
+
+def test_a_very_short_unnumbered_track_is_not_assigned_by_continuity():
+    known = tracking.Track("A", 0, {"x": 0.5, "y": 0.5, "number": 1, "slot": 1, "alive": True})
+    for k in range(1, 20):
+        known.add(k, {"x": 0.5, "y": 0.5, "number": 1, "slot": 1, "alive": True})
+    blob = tracking.Track("A", 22, {"x": 0.52, "y": 0.52, "number": None, "slot": None, "alive": True})
+    blob.add(23, {"x": 0.52, "y": 0.52, "number": None, "slot": None, "alive": True})
+    tracking._assign([known, blob], STEP)
+    assert known.slot == 1 and blob.slot is None  # deux lectures : trop peu, le trou est comblé à la place

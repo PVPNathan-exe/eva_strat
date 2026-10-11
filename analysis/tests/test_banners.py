@@ -133,3 +133,22 @@ def test_drop_unconfirmed_kills_keeps_named_killers_but_drops_unproven_ones(monk
     ]
     kept = analyze.drop_unconfirmed_kills("v.mp4", {"width": 1920, "height": 1080}, {}, events, 32.0)
     assert [e["t"] for e in kept] == [10.0, 30.0]
+
+
+def test_the_white_frame_is_found_even_tinted_and_below_dark_padding():
+    def bar(frame_color, padding, scene_below=False):
+        h, w = 104, 400
+        img = np.full((h, w, 3), 20, np.uint8)
+        blue = cv2.cvtColor(np.uint8([[[108, 220, 230]]]), cv2.COLOR_HSV2BGR)[0, 0].tolist()
+        img[: h - padding, 202:298] = blue  # un bandeau, le reste du recadrage est sombre (zone trop haute)
+        if frame_color is not None:
+            img[0:2, 210:290] = frame_color  # trait du haut
+            img[h - padding - 4 : h - padding - 1, 210:290] = frame_color  # trait du bas, pas à la dernière ligne
+        if scene_below:
+            img[h - 20 :, 210:290] = 255  # décor clair sous le bandeau : trop épais pour être un trait de cadre
+        return img
+
+    tinted = cv2.cvtColor(np.uint8([[[108, 100, 255]]]), cv2.COLOR_HSV2BGR)[0, 0].tolist()  # blanc teinté de bleu (saturation 100)
+    assert banners.read_team(bar(tinted, padding=16))[2]["spectated"]
+    assert not banners.read_team(bar(None, padding=16))[2]["spectated"]
+    assert not banners.read_team(bar(None, padding=16, scene_below=True))[2]["spectated"]

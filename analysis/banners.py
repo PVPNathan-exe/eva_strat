@@ -11,14 +11,46 @@ COLORED = {"S": 100, "V": 140}  # pixel « coloré » (couleur de l'équipe)
 FILL_COLUMNS = (0.34, 0.80)  # colonnes examinées : hors portrait (à gauche) et hors points de vie (à droite)
 ROW_COLORED = 0.35  # une ligne du bandeau est « remplie » si au moins cette part de ses pixels est colorée
 MIN_FILL = 0.03  # remplissage minimal (part de la hauteur) pour être vivant : en dessous, le bandeau est entièrement grisé = mort
-BORDER_PX = 3  # épaisseur du cadre blanc examinée
-BORDER_WHITE_SHARE = 0.3  # part du haut et du bas du bandeau en blanc pour dire « observé »
+FRAME_V, FRAME_S = 200, 130  # pixel du cadre blanc : clair et peu saturé (teinté de bleu ou d'orange sur certaines vidéos : saturation jusqu'à 120)
+FRAME_TOP_ROWS = 3  # le trait du haut du cadre est dans ces premières lignes du bandeau
+FRAME_TOP_SHARE = 0.7  # part de la largeur du trait du haut qui doit être blanche
+FRAME_BOTTOM_ROWS = 30  # le trait du bas est cherché dans ces dernières lignes (la zone du bandeau déborde parfois sous le bandeau)
+FRAME_BOTTOM_SHARE = 0.75  # part de la largeur d'une ligne du trait du bas qui doit être blanche
+FRAME_BOTTOM_THICKNESS = (2, 6)  # épaisseur (lignes) du trait du bas : une zone claire plus épaisse est le décor derrière le bandeau
 
 
 def _banner(crop, index, n=4):
     h, w = crop.shape[:2]
     bw = w / n
     return crop[:, int(index * bw) : int((index + 1) * bw)]
+
+
+def _runs(flags):
+    """Longueurs des suites de valeurs vraies."""
+    out, n = [], 0
+    for v in flags:
+        if v:
+            n += 1
+        elif n:
+            out.append(n)
+            n = 0
+    if n:
+        out.append(n)
+    return out
+
+
+def _white_frame(hsv):
+    """(part blanche du trait du haut, vrai si le bandeau est entouré du cadre blanc du joueur observé). Le cadre a un trait en haut (première ou deux premières
+    lignes) et un trait fin en bas ; seuls le haut et le bas comptent, les côtés se confondent avec le cadre des bandeaux voisins. Mesuré sur trois games :
+    une seule personne observée par image dans 69 à 76 images sur 80 (l'ancien test, trop strict sur la saturation et sur la position du bas : 3 sur 80 pour une des games)."""
+    h, w = hsv.shape[:2]
+    x0, x1 = int(0.08 * w), int(0.92 * w)
+    white = (hsv[:, x0:x1, 2] >= FRAME_V) & (hsv[:, x0:x1, 1] <= FRAME_S)
+    rows = white.mean(axis=1)
+    top = float(rows[:FRAME_TOP_ROWS].max())
+    lo, hi = FRAME_BOTTOM_THICKNESS
+    bottom = any(lo <= n <= hi for n in _runs(rows[-FRAME_BOTTOM_ROWS:] >= FRAME_BOTTOM_SHARE))
+    return top, top >= FRAME_TOP_SHARE and bottom
 
 
 def read_team(crop, n=4):
@@ -35,14 +67,8 @@ def read_team(crop, n=4):
         colored = (cols[:, :, 1] >= COLORED["S"]) & (cols[:, :, 2] >= COLORED["V"])
         rows = colored.mean(axis=1) >= ROW_COLORED
         fill = float(rows[int(0.1 * h) :].mean())
-        # cadre blanc : pourtour du bandeau
-        # Seuls le haut et le bas comptent : les côtés se confondent avec le cadre des bandeaux voisins.
-        mask = np.zeros((h, w), np.uint8)
-        mask[:BORDER_PX, int(0.08 * w) : int(0.92 * w)] = 1
-        mask[-BORDER_PX:, int(0.08 * w) : int(0.92 * w)] = 1
-        white = (hsv[:, :, 2] >= 225) & (hsv[:, :, 1] <= 55)
-        share = float(white[mask > 0].mean())
-        out.append({"alive": fill >= MIN_FILL, "spectated": share >= BORDER_WHITE_SHARE, "fill": round(fill, 2), "white_border": round(share, 2)})
+        top, spectated = _white_frame(hsv)
+        out.append({"alive": fill >= MIN_FILL, "spectated": spectated, "fill": round(fill, 2), "white_border": round(top, 2)})
     return out
 
 

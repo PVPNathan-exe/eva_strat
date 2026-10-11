@@ -168,6 +168,7 @@ def _route_path(a, b, detour=ROUTE_DETOUR, rides=True):
 
 
 ARENA_M = (31.0, 16.5)  # taille d'une arène en mètres (largeur, hauteur) : la minimap est normalisée sur chacune de ses deux directions
+ELIM_V_MS = 8.0  # vitesse maximale pour attribuer une trajectoire sans numéro par élimination (le 99,9e centile des pas lus est à 7,2 m/s)
 V_MAX_MS = 10.0  # vitesse maximale d'un joueur (m/s) : sur 46 401 pas lus avec certitude, 11 seulement dépassent 10 m/s (99,9e centile : 7,2 m/s)
 MOVE_SLACK_M = 1.5  # marge (m) sur le trajet d'un trou : position du centre d'une pastille, arrondis
 
@@ -465,6 +466,36 @@ def _is_other_player(d, slot):
     return bool(d.get("number")) and d["number"] != _number_of(slot) and d["number"] in {_number_of(s) for s in SLOTS[team]}
 
 
+ANCHOR_WINDOW_S = 3.0  # un disque blanc sans numéro est comparé aux images où le numéro du joueur observé est lu, jusqu'à cet écart
+ANCHOR_BOTH = (0.08, 0.10)  # tolérance (relative à la minimap) entre deux ancres : base, plus ceci par seconde d'écart à la plus proche
+ANCHOR_ONE = (0.06, 0.25)  # ... avec une seule ancre d'un côté : un joueur qui court peut s'éloigner de 0,25 par seconde
+STATION_NEAR = 0.04  # un disque blanc à moins de cela d'une extrémité de tyrolienne, sans ancre, est le décor de la station
+
+
+def _anchor_ok(d, t, anchors):
+    """Un disque blanc sans numéro peut-il être le joueur observé ? anchors : [(t, x, y)] positions où le numéro de ce joueur est lu. Cohérent si proche de
+    la position attendue entre les deux ancres voisines (ou d'une seule, avec une tolérance plus large), ou à la sortie d'une tyrolienne. Sans ancre proche :
+    refusé seulement s'il est sur une station (disque fixe du décor). Évite le disque d'attente d'un joueur mort pris pour le joueur observé."""
+    near = [a for a in anchors if abs(a[0] - t) <= ANCHOR_WINDOW_S]
+    here = (d["x"], d["y"])
+    if not near:
+        return not any(math.hypot(here[0] - p[0], here[1] - p[1]) <= STATION_NEAR for pair in _TELEPORTS for p in pair)
+    if any(_tp_linked((a[1], a[2]), here) for a in near):
+        return True
+    before = max((a for a in near if a[0] <= t), key=lambda a: a[0], default=None)
+    after = min((a for a in near if a[0] > t), key=lambda a: a[0], default=None)
+    if before and after:
+        span = after[0] - before[0]
+        f = (t - before[0]) / span if span > 0 else 0.0
+        expected = (before[1] + (after[1] - before[1]) * f, before[2] + (after[2] - before[2]) * f)
+        base, rate = ANCHOR_BOTH
+        dt = min(t - before[0], after[0] - t)
+    else:
+        a = before or after
+        expected, (base, rate), dt = (a[1], a[2]), ANCHOR_ONE, abs(a[0] - t)
+    return math.hypot(here[0] - expected[0], here[1] - expected[1]) <= base + rate * dt
+
+
 def anchor_spectated(frames, states):
     """Le cadre blanc du bandeau dit quel joueur est observé : la pastille blanche de la minimap est donc ce joueur, quel que soit son
     numéro lu (souvent illisible sur cette pastille). Les autres pastilles blanches (joueurs qui attendent leur réapparition) gardent le leur.
@@ -472,6 +503,14 @@ def anchor_spectated(frames, states):
     Un disque blanc dans la zone de départ (`waiting`) est un joueur mort qui attend OU le joueur observé qui n'a pas encore quitté sa zone. Les bandeaux
     tranchent : s'il y a plus de disques que de joueurs morts dans l'équipe, le disque en trop est le joueur observé (sûr seulement si un seul est en trop,
     ou si son numéro est lu). Les disques d'attente non retenus sont retirés : ils ne sont pas des joueurs en jeu."""
+    anchors = {}  # slot -> [(t, x, y)] : où le numéro du joueur observé est lu sur un disque blanc
+    for fi, t, dets in frames:
+        watched = [s for s, v in (states or {}).get(fi, {}).items() if v["spectated"]]
+        if states and len(watched) == 1:
+            for d in dets:
+                if d.get("spectated") and d.get("number") == _number_of(watched[0]) and d.get("alive", True):
+                    anchors.setdefault(watched[0], []).append((t, d["x"], d["y"]))
+                    break
     out = []
     for fi, t, dets in frames:
         waits = [d for d in dets if d.get("waiting")]
@@ -489,7 +528,7 @@ def anchor_spectated(frames, states):
             pick = next((d for d in mine_waiting if d.get("number") == _number_of(slot) and d.get("verified")), None)
             if pick is not None:
                 dets = dets + [pick]
-        if pick is None and len(cands) == 1 and not _is_other_player(cands[0], slot):
+        if pick is None and len(cands) == 1 and not _is_other_player(cands[0], slot) and _anchor_ok(cands[0], t, anchors.get(slot, [])):
             pick = cands[0]
         if pick is None and not cands:
             mine = [d for d in waits if d["team"] == team]
@@ -506,6 +545,15 @@ ELIM_BASE = 0.08  # distance (relative à la minimap) qu'on accepte entre deux t
 ELIM_SPEED = 0.35  # ...cette vitesse maximale (par seconde) × temps écoulé entre elles
 
 
+def _reads_another_player(t, slot):
+    """Vrai si la trajectoire porte au moins deux numéros lus qui désignent un autre joueur que `slot` : ce n'est pas lui, même s'il est le seul libre (le disque
+    d'une station lu « 9 » n'est pas le joueur « 8 » parce que le « 9 » est mort)."""
+    if not t.votes:
+        return False
+    top, count = t.votes.most_common(1)[0]
+    return top != slot and count >= 2
+
+
 def _elimination_ok(t, same_slot, step_s):
     """Une trajectoire sans numéro ne reçoit le seul joueur libre « par élimination » que si c'est plausible : assez longue pour ne pas être
     du bruit (reflet bleu de l'eau, tache du décor), ou assez proche, au regard du temps écoulé, de la dernière position connue de ce joueur."""
@@ -518,12 +566,15 @@ def _elimination_ok(t, same_slot, step_s):
     if _WALK and not _tp_linked(a.pos, start):
         # atteignable par les couloirs, sans tyrolienne supposée (une trajectoire sans numéro ne prouve pas qu'il en a pris une), à vitesse humaine
         path = _route_path(a.pos, start, detour=None, rides=False)
-        if path is None or _path_m(path) > V_MAX_MS * gap_s + MOVE_SLACK_M:
+        if path is None or _path_m(path) > ELIM_V_MS * gap_s + MOVE_SLACK_M:
             return False
     if (t.last - t.first + 1) * step_s >= ELIM_MIN_S:
         return True
     dist = math.hypot(a.pos[0] - start[0], a.pos[1] - start[1])
     return dist <= ELIM_BASE + ELIM_SPEED * gap_s
+
+
+MIN_UNVOTED_POINTS = 4  # une trajectoire de moins de lectures n'est attribuée qu'à partir de numéros lus (vote), jamais par continuité ou élimination
 
 
 def _assign(alive_tracks, step_s, dead=None):
@@ -553,7 +604,7 @@ def _assign(alive_tracks, step_s, dead=None):
             progress = False
             for t in sorted(pending, key=lambda t: t.first):
                 cands = [s for s in slots if free(t, s)]
-                if not cands:
+                if not cands or len(t.pts) < MIN_UNVOTED_POINTS:  # trop court pour être attribué sans numéro : reflet ou clignotement, le trou sera comblé
                     continue
                 scored = []
                 for s in cands:
@@ -566,7 +617,7 @@ def _assign(alive_tracks, step_s, dead=None):
                 good = sorted((c, s) for c, s in scored if c is not None)
                 if good:
                     t.slot, t.how = good[0][1], CONF_CONTINUITY
-                elif len(cands) == 1 and _elimination_ok(t, assigned[cands[0]], step_s):
+                elif len(cands) == 1 and not _reads_another_player(t, cands[0]) and _elimination_ok(t, assigned[cands[0]], step_s):
                     t.slot, t.how = cands[0], CONF_ELIM
                 else:
                     continue
@@ -1142,7 +1193,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 18  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 22  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
