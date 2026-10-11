@@ -7,12 +7,18 @@ import tracking
 STEP = 0.1
 
 
+def _reset():
+    for state in (tracking._WALK, tracking._NEAR, tracking._ROUTES, tracking._JUMPS):
+        state.clear()
+    tracking._TELEPORTS[:] = []
+
+
 @pytest.fixture(autouse=True)
 def _no_walk_map():
     """La carte des passages est un état global posé par solve : chaque test repart sans carte."""
-    tracking._WALK.clear()
+    _reset()
     yield
-    tracking._WALK.clear()
+    _reset()
 
 
 def states(alive_by_slot, n):
@@ -262,3 +268,46 @@ def test_the_observed_player_waiting_in_the_spawn_zone_is_not_replaced_by_a_stat
     anchored = [d for d in out[0][2] if d.get("slot") == 7]
     assert len(anchored) == 1 and (anchored[0]["x"], anchored[0]["y"]) == (0.47, 0.58)
     assert all(d.get("slot") != 7 for d in out[0][2] if d["x"] == 0.74)
+
+
+def _block(x0, y0, x1, y1):
+    """Cases praticables d'un rectangle (en fraction de la minimap)."""
+    return {(i, j) for i in range(int(x0 / tracking.WALK_CELL), int(x1 / tracking.WALK_CELL) + 1) for j in range(int(y0 / tracking.WALK_CELL), int(y1 / tracking.WALK_CELL) + 1)}
+
+
+def test_a_route_between_two_islands_goes_through_the_zipline_stations():
+    tracking._WALK.update(_block(0.05, 0.45, 0.35, 0.55) | _block(0.65, 0.45, 0.95, 0.55))  # deux îlots sans passage entre eux
+    tracking._TELEPORTS[:] = [((0.30, 0.50), (0.70, 0.50))]
+    try:
+        path = tracking.route((0.10, 0.50), (0.90, 0.50))
+        assert (0.30, 0.50) in path and (0.70, 0.50) in path  # elle passe par les deux stations
+        assert tracking.walk_distance((0.10, 0.50), (0.90, 0.50)) < 0.5  # la tyrolienne ne compte pas dans la distance
+        tracking._TELEPORTS[:] = []
+        tracking._ROUTES.clear()
+        assert tracking.walk_distance((0.10, 0.50), (0.90, 0.50)) is None  # sans station, aucun trajet
+    finally:
+        tracking._TELEPORTS[:] = []
+        tracking._ROUTES.clear()
+
+
+def test_a_gap_with_no_route_keeps_the_player_where_he_was():
+    tracking._WALK.update(_block(0.05, 0.45, 0.25, 0.55) | _block(0.75, 0.45, 0.95, 0.55))
+    try:
+        path = tracking.route((0.10, 0.50), (0.90, 0.50))
+        assert tracking._along(path, 0.5) == (0.10, 0.50)  # il ne traverse pas le mur, il reste sur place
+    finally:
+        tracking._JUMPS.clear()
+
+
+def test_detections_outside_the_map_mask_are_never_players():
+    import numpy as np
+
+    mask = np.zeros((100, 100), bool)
+    mask[40:60, 10:90] = True  # un seul couloir horizontal
+    frames = [(i, round(i * 0.2, 2), [
+        {"team": "A", "x": 0.2 + 0.01 * i, "y": 0.5, "number": 1, "slot": 1, "angle": 0.0, "alive": True, "spectated": False},
+        {"team": "A", "x": 0.5, "y": 0.9, "number": 2, "slot": 2, "angle": 0.0, "alive": True, "spectated": False},  # reflet loin du couloir
+    ]) for i in range(30)]
+    rows = tracking.solve(frames, 0.2, walk_mask=mask)
+    assert {r[2] for r in rows} == {1}
+    assert all(abs(r[5] - 0.5) < 0.05 for r in rows)

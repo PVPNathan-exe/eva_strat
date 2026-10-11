@@ -51,7 +51,11 @@ WALK_CELL = 0.02  # taille (relative à la minimap) des cases de la carte des pa
 WALK_MIN_HITS = 2  # une case est un passage si au moins ce nombre de lectures sûres y sont tombées
 ROUTE_DETOUR = 2.0  # un trajet par les passages plus long que cela (fois le trajet direct) est écarté : on relie alors en ligne droite
 ROUTE_BUDGET = 8000  # cases explorées au plus par recherche de trajet
+TP_RIDE_COST = 0.03  # coût (en distance) d'une tyrolienne dans la recherche de trajet : presque gratuite
 _WALK = set()  # cases praticables de la carte en cours (posées par solve)
+_NEAR = set()  # ces cases élargies d'une case (masque de carte seulement) : tolérance pour refuser une détection impossible
+_ROUTES = {}  # trajets de cases déjà calculés pour la carte en cours
+_JUMPS = set()  # couples de points sans trajet praticable entre eux : le joueur reste au premier jusqu'à sa réapparition au second
 
 
 def walk_grid(points):
@@ -71,64 +75,126 @@ def _line_walkable(a, b, ok):
     return all(_cell((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) in ok for i in range(n + 1))
 
 
+def _around(cell):
+    return {(cell[0] + i, cell[1] + j) for i in (-1, 0, 1) for j in (-1, 0, 1)}
+
+
 def on_walkable(p):
     """Vrai si le point est sur un passage connu de la carte (ou si la carte des passages est vide : on ne tranche pas). Une pastille hors de tout passage est
-    un reflet ou un effet de l'écran, pas un joueur."""
-    return not _WALK or _cell(p) in _WALK
+    un reflet ou un effet de l'écran, pas un joueur. Avec un masque de carte, on tolère une case de plus (le centre d'une pastille près d'un bord)."""
+    return not _WALK or _cell(p) in (_NEAR or _WALK)
 
 
-def route(a, b):
-    """Trajet de a à b par les passages connus (A* sur les cases, puis raccourcis en ligne droite là où c'est praticable). Liste de points ; [a, b] (ligne droite)
-    si la carte des passages est vide, si la ligne droite est praticable ou si aucun trajet raisonnable n'existe."""
-    straight = math.hypot(b[0] - a[0], b[1] - a[1])
-    if not _WALK or straight < 2 * WALK_CELL:
-        return [a, b]
-    start, goal = _cell(a), _cell(b)
-    ok = _WALK | {start, goal}
-    if _line_walkable(a, b, ok):
-        return [a, b]
+def _seg_len(p, q):
+    """Longueur d'un tronçon de trajet : nulle pour une tyrolienne ou un saut sans trajet (instantanés), sinon la distance."""
+    return 0.0 if (p, q) in _JUMPS or _tp_linked(p, q) else math.hypot(q[0] - p[0], q[1] - p[1])
+
+
+def _path_length(path):
+    return sum(_seg_len(p, q) for p, q in zip(path, path[1:]))
+
+
+def _station_cells():
+    """{case: point exact de la station} pour chaque extrémité de tyrolienne de la carte."""
+    return {_cell(pt): pt for pair in _TELEPORTS for pt in pair}
+
+
+def _cell_route(start, goal, ok):
+    """Plus court trajet de cases de start à goal par les passages `ok`, tyroliennes comprises (coût fixe). Liste de (case, arrivée par tyrolienne) ou None.
+    Recherche de Dijkstra, mémorisée par couple de cases (la mémoire est vidée à chaque game)."""
+    key = (start, goal)
+    if key in _ROUTES:
+        return _ROUTES[key]
     import heapq
 
-    best, came, heap, expanded = {start: 0.0}, {}, [(0.0, 0.0, start)], 0
+    jumps = {}
+    for a, b in _TELEPORTS:
+        jumps.setdefault(_cell(a), []).append(_cell(b))
+        jumps.setdefault(_cell(b), []).append(_cell(a))
+    best, came, heap, expanded = {start: 0.0}, {}, [(0.0, start)], 0
     while heap and expanded < ROUTE_BUDGET:
-        _, g, cur = heapq.heappop(heap)
+        g, cur = heapq.heappop(heap)
         if cur == goal:
             break
         if g > best.get(cur, 1e9):
             continue
         expanded += 1
-        for di in (-1, 0, 1):
-            for dj in (-1, 0, 1):
-                nxt = (cur[0] + di, cur[1] + dj)
-                if (di or dj) and nxt in ok:
-                    ng = g + math.hypot(di, dj) * WALK_CELL
-                    if ng < best.get(nxt, 1e9):
-                        best[nxt], came[nxt] = ng, cur
-                        heapq.heappush(heap, (ng + math.hypot(goal[0] - nxt[0], goal[1] - nxt[1]) * WALK_CELL, ng, nxt))
-    if goal not in came and start != goal:
+        steps = [((cur[0] + di, cur[1] + dj), math.hypot(di, dj) * WALK_CELL, False) for di in (-1, 0, 1) for dj in (-1, 0, 1) if (di or dj) and (cur[0] + di, cur[1] + dj) in ok]
+        steps += [(cell, TP_RIDE_COST, True) for cell in jumps.get(cur, [])]
+        for nxt, cost, ride in steps:
+            if g + cost < best.get(nxt, 1e9):
+                best[nxt], came[nxt] = g + cost, (cur, ride)
+                heapq.heappush(heap, (g + cost, nxt))
+    result = None
+    if goal == start or goal in came:
+        nodes, cell = [(goal, False)], goal  # (case, vrai si on y arrive par tyrolienne)
+        while cell != start:
+            prev, ride = came[cell]
+            nodes[-1] = (cell, ride)
+            nodes.append((prev, False))
+            cell = prev
+        result = nodes[::-1]
+    _ROUTES[key] = result
+    return result
+
+
+def _route_path(a, b, detour=ROUTE_DETOUR):
+    """Trajet de a à b par les passages connus (tyroliennes comprises), raccourci en ligne droite là où c'est praticable. Liste de points ; None si aucun
+    trajet n'existe ou s'il dépasse `detour` fois le trajet direct (detour=None : sans limite). Ligne droite [a, b] si elle est praticable."""
+    straight = math.hypot(b[0] - a[0], b[1] - a[1])
+    start, goal = _cell(a), _cell(b)
+    ok = _WALK | _around(start) | _around(goal) | set(_station_cells())
+    if _line_walkable(a, b, ok):
         return [a, b]
-    cells = [goal]
-    while cells[-1] != start:
-        cells.append(came[cells[-1]])
-    cells.reverse()
-    pts = [a] + [((c[0] + 0.5) * WALK_CELL, (c[1] + 0.5) * WALK_CELL) for c in cells[1:-1]] + [b]
+    nodes = _cell_route(start, goal, ok)
+    if nodes is None:
+        return None
+    stations = _station_cells()
+    pts = [a]
+    for k in range(1, len(nodes) - 1):
+        cell = nodes[k][0]
+        pts.append(stations.get(cell, ((cell[0] + 0.5) * WALK_CELL, (cell[1] + 0.5) * WALK_CELL)))
+    pts.append(b)
+    ride = [nodes[k + 1][1] for k in range(len(nodes) - 1)]  # tronçon k -> k+1 : tyrolienne si l'on arrive par tyrolienne en k+1
     out, i = [pts[0]], 0
-    while i < len(pts) - 1:  # raccourcis : on saute au point le plus lointain visible en ligne droite
-        j = next(j for j in range(len(pts) - 1, i, -1) if j == i + 1 or _line_walkable(pts[i], pts[j], ok))
+    while i < len(pts) - 1:  # raccourcis : on saute au point le plus lointain visible en ligne droite, sans jamais franchir une tyrolienne
+        j = next(j for j in range(len(pts) - 1, i, -1) if j == i + 1 or (not any(ride[i:j]) and _line_walkable(pts[i], pts[j], ok)))
         out.append(pts[j])
         i = j
-    length = sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(out, out[1:]))
-    return out if length <= ROUTE_DETOUR * straight + 0.05 else [a, b]
+    if detour is not None and _path_length(out) > detour * straight + 0.05:
+        return None
+    return out
+
+
+def route(a, b):
+    """Trajet de a à b pour combler un trou : par les passages et les tyroliennes si la carte les connaît (aussi long soit-il : on ne traverse jamais un mur),
+    sinon en ligne droite. S'il n'existe aucun trajet entre les deux points, le joueur reste en a jusqu'à sa réapparition en b (saut sans trajet)."""
+    if not _WALK or math.hypot(b[0] - a[0], b[1] - a[1]) < 2 * WALK_CELL:
+        return [a, b]
+    path = _route_path(a, b, detour=None)
+    if path is None:
+        _JUMPS.add((a, b))
+        return [a, b]
+    return path
+
+
+def walk_distance(a, b):
+    """Longueur du trajet praticable de a à b (tyroliennes gratuites), ou None si aucun trajet n'existe. Sans carte des passages : distance directe."""
+    straight = math.hypot(b[0] - a[0], b[1] - a[1])
+    if not _WALK or straight < 2 * WALK_CELL:
+        return straight
+    path = _route_path(a, b, detour=None)
+    return None if path is None else _path_length(path)
 
 
 def _along(path, f):
-    """Point situé à la fraction f (0 à 1) de la longueur d'un trajet, à vitesse constante."""
-    total = sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(path, path[1:]))
+    """Point situé à la fraction f (0 à 1) de la longueur d'un trajet, à vitesse constante (une tyrolienne ne compte pour rien : on y saute)."""
+    total = _path_length(path)
     if total <= 0:
         return path[0]
     want = f * total
     for p, q in zip(path, path[1:]):
-        d = math.hypot(q[0] - p[0], q[1] - p[1])
+        d = _seg_len(p, q)
         if want <= d and d > 0:
             r = want / d
             return p[0] + (q[0] - p[0]) * r, p[1] + (q[1] - p[1]) * r
@@ -582,8 +648,10 @@ def recover_from_unused(rows, runs, frames, states, step_s, put):
                 if d.get("number") and d["number"] != _number_of(slot) and d["number"] in {_number_of(s) for s in SLOTS[team]}:
                     continue  # un autre joueur de l'équipe, lu avec certitude
                 dist = math.hypot(d["x"] - ex, d["y"] - ey)
-                if dist <= reach:
-                    pairs.append((dist, slot, i))
+                if dist <= reach or (_NEAR and _tp_linked((ex, ey), (d["x"], d["y"]))):
+                    walked = walk_distance((ex, ey), (d["x"], d["y"])) if _NEAR else dist
+                    if walked is not None and walked <= reach + 0.03:  # la distance réelle (couloirs et tyroliennes) compte, pas la ligne droite à travers les murs
+                        pairs.append((dist, slot, i))
         used_slots, used_dets = set(), set()
         for dist, slot, i in sorted(pairs):
             if slot in used_slots or i in used_dets:
@@ -829,24 +897,37 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
     teleports : [((x, y), (x, y))] paires de stations de tyrolienne de la carte (facultatif).
     walk_points : [(x, y)] lectures sûres des autres games de la même carte (facultatif) : avec celles de cette game, elles donnent la carte des passages
     qui guide le comblement des trous (on ne traverse plus les murs).
+    walk_mask : masque booléen des zones praticables de la carte (map_mask.load), facultatif : il remplace la carte apprise, refuse les détections hors des couloirs
+    et donne la distance réelle (par les couloirs et les tyroliennes) pour accepter une pastille récupérée.
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
     _TELEPORTS[:] = teleports or []
     _WALK.clear()
+    _NEAR.clear()
+    _ROUTES.clear()
+    _JUMPS.clear()
     frames = anchor_spectated(frames, states)
     dead = dead_frames(states, step_s)
     frames = drop_static_spectated(drop_static_noise(frames), states)
     times = {fi: t for fi, t, _ in frames}
     own = [(d["x"], d["y"]) for _, _, dets in frames for d in dets if d["alive"] and d.get("number")]  # pastilles numérotées : les plus fiables
-    _WALK.update(walk_grid(own + list(walk_points or [])))
+    if walk_mask is not None:
+        import map_mask
+
+        near_stations = {c for pt in _station_cells() for c in _around(_cell(pt))}
+        _WALK.update(map_mask.coverage_cells(walk_mask, WALK_CELL) | near_stations)
+        _NEAR.update(set().union(*(_around(c) for c in _WALK)))
+        frames = [(fi, t, [d for d in dets if on_walkable((d["x"], d["y"]))]) for fi, t, dets in frames]  # hors des couloirs : reflet ou effet de l'écran, jamais un joueur
+    else:
+        _WALK.update(walk_grid(own + list(walk_points or [])))
     deaths = confirmed_deaths(deaths, dead, times, step_s)
     alive_tracks, dead_tracks = _link(frames, step_s)
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
@@ -964,7 +1045,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 9  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 10  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

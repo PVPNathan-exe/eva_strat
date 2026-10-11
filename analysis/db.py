@@ -211,6 +211,13 @@ def teleports_for(map_name):
     return [(tuple(a), tuple(b)) for a, b in pairs]
 
 
+def walk_mask_for(map_name):
+    """Masque des zones praticables d'une carte (tableau booléen) ou None si la carte n'en a pas (voir map_mask.py)."""
+    import map_mask
+
+    return map_mask.load(map_name)
+
+
 def zone_for(conn, map_name, zone):
     """Rectangle relatif d'une zone du HUD : calibration de l'utilisateur, sinon zone connue de la carte (map_zones.json), sinon zone par défaut."""
     if map_name:
