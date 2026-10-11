@@ -34,6 +34,7 @@ CONF_VOTE, CONF_CONTINUITY, CONF_ELIM, CONF_FILL = 1.0, 0.7, 0.4, 0.5
 
 
 TP_NEAR = 0.07  # distance (relative à la minimap) à une station de tyrolienne en deçà de laquelle un joueur y est
+TP_LINK_COST = 0.03  # coût de liaison d'une pastille qui ressort d'une tyrolienne (au lieu de la grande distance parcourue)
 TP_MAX_GAP_S = 4.0  # un joueur qui disparaît à une station peut réapparaître à sa sortie jusqu'à cette durée après
 _TELEPORTS = []  # paires de stations de la carte en cours (posées par solve)
 
@@ -300,9 +301,12 @@ def _link(frames, step_s):
                 row = []
                 for d in living:
                     dist = math.hypot(d["x"] - t.pos[0], d["y"] - t.pos[1])
-                    if dist > gate and not _tp_linked(t.pos, (d["x"], d["y"])):
+                    jump = dist > gate and _tp_linked(t.pos, (d["x"], d["y"]))
+                    if dist > gate and not jump:
                         row.append(None)
                         continue
+                    if jump:
+                        dist = TP_LINK_COST  # sortie de tyrolienne : presque aussi sûr qu'une pastille voisine, aussi loin soit-elle
                     pen = 0.0
                     if dom and d.get("slot"):
                         pen = -0.02 if d["slot"] == dom else VOTE_MISMATCH
@@ -336,6 +340,20 @@ def _link(frames, step_s):
 
 def _overlap(a, b, slack=0):
     return a.first <= b.last + slack and b.first <= a.last + slack
+
+
+SAME_MARKER_DIST = 0.04  # deux trajectoires qui se chevauchent sans jamais s'écarter de plus que cela suivent la même pastille (détectée en double)
+
+
+def _conflict(a, b):
+    """Vrai si deux trajectoires ne peuvent pas être le même joueur parce qu'elles coexistent à des endroits différents. Une pastille détectée en double (deux
+    trajectoires superposées pendant quelques images, par exemple quand la détection se coupe en deux) n'est pas un conflit : la seconde prolonge la première."""
+    if not _overlap(a, b):
+        return False
+    common = [k for k in a.pts if k in b.pts]
+    if not common:
+        return True
+    return any(math.hypot(a.pts[k]["x"] - b.pts[k]["x"], a.pts[k]["y"] - b.pts[k]["y"]) > SAME_MARKER_DIST for k in common)
 
 
 def _gap_cost(a, b, step_s, max_gap=None, max_dist=None):
@@ -490,7 +508,7 @@ def _assign(alive_tracks, step_s, dead=None):
         def free(t, s):
             if s in dead and t.pts and sum(1 for k in t.pts if k in dead[s]) / len(t.pts) > DEAD_TRACK_SHARE:
                 return False  # le bandeau de ce joueur est grisé pendant la trajectoire : ce n'est pas lui
-            return not any(_overlap(t, o) for o in assigned[s])
+            return not any(_conflict(t, o) for o in assigned[s])
 
         # a) par vote : les trajectoires les mieux étayées d'abord
         for t in sorted(tracks, key=lambda t: -sum(t.votes.values())):
@@ -922,7 +940,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     if walk_mask is not None:
         import map_mask
 
-        near_stations = {c for pt in _station_cells() for c in _around(_cell(pt))}
+        near_stations = {c for cell in _station_cells() for c in _around(cell)}
         _WALK.update(map_mask.coverage_cells(walk_mask, WALK_CELL) | near_stations)
         _NEAR.update(set().union(*(_around(c) for c in _WALK)))
         frames = [(fi, t, [d for d in dets if on_walkable((d["x"], d["y"]))]) for fi, t, dets in frames]  # hors des couloirs : reflet ou effet de l'écran, jamais un joueur
@@ -1045,7 +1063,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 10  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 12  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

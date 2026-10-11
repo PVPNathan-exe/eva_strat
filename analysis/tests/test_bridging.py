@@ -311,3 +311,14 @@ def test_detections_outside_the_map_mask_are_never_players():
     rows = tracking.solve(frames, 0.2, walk_mask=mask)
     assert {r[2] for r in rows} == {1}
     assert all(abs(r[5] - 0.5) < 0.05 for r in rows)
+
+
+def test_a_player_standing_on_a_zipline_station_is_kept_with_a_map_mask():
+    import numpy as np
+
+    mask = np.zeros((100, 100), bool)
+    mask[40:60, 10:90] = True  # couloir horizontal ; la station est hors du couloir
+    station = (0.5, 0.8)
+    frames = [(i, round(i * 0.2, 2), [{"team": "A", "x": station[0], "y": station[1], "number": 1, "slot": 1, "angle": 0.0, "alive": True, "spectated": False}]) for i in range(20)]
+    rows = tracking.solve(frames, 0.2, teleports=[(station, (0.2, 0.5))], walk_mask=mask)
+    assert len(rows) == 20 and all((r[4], r[5]) == station for r in rows)
