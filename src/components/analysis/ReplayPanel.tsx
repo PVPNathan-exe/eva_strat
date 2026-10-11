@@ -262,23 +262,6 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     setT(value);
   };
 
-  // Déplacement fin pour la relecture : une seconde, ou une image (une lecture de la minimap). Avec la vidéo, on la met en pause pour que l'image reste fixe.
-  const nudge = (delta: number) => {
-    const target = Math.min(game.end_s, Math.max(game.start_s, time + delta));
-    if (follow) {
-      getVideoElement()?.pause();
-      requestSeek(target);
-    } else {
-      seek(target);
-    }
-  };
-
-  const stepFrame = (dir: 1 | -1) => {
-    const i = frameIndexAt(frames, time);
-    const j = dir === 1 ? Math.min(frames.length - 1, i + 1) : frames[i].t < time - 0.001 ? i : Math.max(0, i - 1);
-    nudge(frames[j].t - time);
-  };
-
   const togglePlay = () => {
     if (follow) {
       setFollow(false);
@@ -328,10 +311,6 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
         <button onClick={togglePlay} title={follow ? 'Rejouer sans la vidéo' : playing ? 'Pause' : 'Lecture'}>
           {!follow && playing ? <Pause className="ic" /> : <Play className="ic" />}
         </button>
-        <button className="replay__nudge" onClick={() => nudge(-1)} title="Reculer d'une seconde">−1 s</button>
-        <button className="replay__nudge" onClick={() => stepFrame(-1)} title="Image précédente (une lecture de la minimap)">−1 i</button>
-        <button className="replay__nudge" onClick={() => stepFrame(1)} title="Image suivante (une lecture de la minimap)">+1 i</button>
-        <button className="replay__nudge" onClick={() => nudge(1)} title="Avancer d'une seconde">+1 s</button>
         <input
           type="range"
           min={game.start_s}

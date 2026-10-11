@@ -6,7 +6,11 @@ La minimap affiche toujours le même plan (couloirs sombres, bords blancs) sous 
 disparaître les joueurs et ne laisse que le plan. Le masque est donc exactement aux coordonnées des pastilles, sans recalage avec la carte stratégique.
 Seules les cartes dont le plan reste identique d'une image à l'autre ont un masque (Polaris). Une carte à étages superposés ou au fond qui change
 (Atlantis, The Cliff) n'en a pas : le suivi garde alors la carte des passages apprise sur les lectures.
-Le fichier est une image noir et blanc de SIZE x SIZE pixels : blanc = praticable. Le dossier map_masks/ est versionné."""
+Le fichier est une image noir et blanc de SIZE x SIZE pixels : blanc = praticable. Le dossier map_masks/ est versionné.
+
+Traits de murs (`<Carte>_lignes.png`, à la taille de la minimap lue) : sur Polaris les murs sont des traits blancs fins, comme le disque du joueur observé : ils
+fusionnent et la direction du disque est mal lue le long des murs. Ces traits sont les structures blanches fines et immobiles de la médiane (ni disque, ni zone
+épaisse) : la lecture les efface avant de chercher le disque blanc."""
 
 import argparse
 import sys
@@ -46,6 +50,26 @@ def load(map_name):
     return None if img is None else img > 127
 
 
+def load_lines(map_name):
+    """Traits de murs d'une carte (tableau uint8, 255 = trait blanc fixe à effacer), ou None si la carte n'en a pas."""
+    path = MASK_DIR / f"{map_name}_lignes.png"
+    if not map_name or not path.exists():
+        return None
+    return cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+
+
+LINE_MAX_WIDTH = 5  # une structure blanche plus épaisse que cela (disque, icône de station, zone claire) n'est pas un trait de mur
+
+
+def wall_lines_from_median(median):
+    """Traits blancs fins et immobiles d'une médiane de minimap (BGR, taille de la minimap lue) : le blanc moins son ouverture, élargi d'un pixel."""
+    hsv = cv2.cvtColor(median, cv2.COLOR_BGR2HSV)
+    white = ((hsv[:, :, 2] >= 205) & (hsv[:, :, 1] <= 70)).astype(np.uint8)
+    thick = cv2.morphologyEx(white, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (LINE_MAX_WIDTH, LINE_MAX_WIDTH)))
+    thin = cv2.subtract(white, cv2.dilate(thick, np.ones((3, 3), np.uint8)))
+    return (cv2.dilate(thin, np.ones((3, 3), np.uint8)) * 255).astype(np.uint8)
+
+
 def coverage_cells(mask, cell, min_cover=0.25):
     """Cases (de côté `cell`, en fraction de la minimap) dont au moins `min_cover` des pixels sont praticables : {(i, j)}."""
     h, w = mask.shape
@@ -59,12 +83,12 @@ def coverage_cells(mask, cell, min_cover=0.25):
 
 
 def build(conn, map_name, frames_per_game=FRAMES_PER_GAME):
-    """Médiane des images de la minimap de toutes les games analysables de la carte. Renvoie (médiane, nombre d'images)."""
+    """Médiane des images de la minimap de toutes les games analysables de la carte. Renvoie (médiane carrée, nombre d'images, médiane à la taille de la minimap lue)."""
     import db
     import names
 
     zone = db.zone_for(conn, map_name, "minimap")
-    images = []
+    images, native = [], []
     for g in conn.execute("SELECT g.*, v.path, v.width, v.height FROM games g JOIN videos v ON v.id = g.video_id WHERE g.map = ? ORDER BY g.id", (map_name,)):
         span = g["end_s"] - g["start_s"] - 40
         if span <= 0:
@@ -73,9 +97,12 @@ def build(conn, map_name, frames_per_game=FRAMES_PER_GAME):
             crop = names._grab(g["path"], g["start_s"] + 20 + k * span / (frames_per_game - 1), zone, g["width"], g["height"])
             if crop is not None:
                 images.append(cv2.resize(crop, (SIZE, SIZE)))
+                native.append(crop)
     if not images:
-        return None, 0
-    return np.median(np.stack(images), axis=0).astype(np.uint8), len(images)
+        return None, 0, None
+    ref = native[0].shape[1::-1]  # (largeur, hauteur) de la première minimap lue : toutes y sont ramenées
+    native = [crop if crop.shape[1::-1] == ref else cv2.resize(crop, ref) for crop in native]
+    return np.median(np.stack(images), axis=0).astype(np.uint8), len(images), np.median(np.stack(native), axis=0).astype(np.uint8)
 
 
 def main(argv=None):
@@ -85,7 +112,7 @@ def main(argv=None):
     parser.add_argument("--db", default="data/eva.db")
     parser.add_argument("--map", required=True)
     args = parser.parse_args(argv)
-    median, count = build(db.connect(args.db), args.map)
+    median, count, native = build(db.connect(args.db), args.map)
     if median is None:
         print(f"aucune image pour la carte {args.map}")
         return 1
@@ -95,6 +122,9 @@ def main(argv=None):
     shade = median.copy()
     shade[~mask] = (shade[~mask] * 0.35 + np.array([0, 0, 160]) * 0.65).astype(np.uint8)  # hors masque en rouge
     cv2.imwrite(str(MASK_DIR / f"{args.map}_controle.jpg"), np.hstack([median, shade]))
+    lines = wall_lines_from_median(native)
+    cv2.imwrite(str(MASK_DIR / f"{args.map}_lignes.png"), lines)
+    print(f"{args.map} : traits de murs {int((lines > 0).sum())} pixels sur {lines.size}")
     print(f"{args.map} : {count} images, {mask.mean() * 100:.0f} % praticable. Contrôler à l'œil : {MASK_DIR / (args.map + '_controle.jpg')}")
     return 0
 

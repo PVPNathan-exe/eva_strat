@@ -75,7 +75,7 @@ def _load(conn, game, step_s, refresh=False):
         raw = json.loads(path.read_text(encoding="utf-8"))
         if raw.get("zone_key") != zone_key:  # lu avec une autre zone de minimap : à refaire
             return _load(conn, game, step_s, refresh=True)
-        if "noise" not in raw:  # lu avant la mesure de contamination : à refaire
+        if "noise" not in raw or raw.get("walls", False) != (db.wall_lines_for(game["map"]) is not None):  # lu avant la mesure de contamination ou l'effacement des murs : à refaire
             return _load(conn, game, step_s, refresh=True)
         frames = [(fi, t, dets) for fi, t, dets in raw["frames"]]
         states = {int(k): {int(slot): v for slot, v in per.items()} for k, per in raw["states"].items()}
@@ -83,8 +83,8 @@ def _load(conn, game, step_s, refresh=False):
     zone = db.zone_for(conn, game["map"], "minimap")
     za, zb = db.zone_for(conn, game["map"], "team_a_bar"), db.zone_for(conn, game["map"], "team_b_bar")
     states = positions.detect_states(game["path"], game, za, zb, game["width"], game["height"], step_s=step_s)
-    frames, noise = positions.detect_frames_and_noise(game["path"], game, zone, game["width"], game["height"], step_s=step_s, hints=positions.hints_from_states(states))
-    path.write_text(json.dumps({"frames": frames, "states": states, "zone_key": zone_key, "noise": noise}, default=float), encoding="utf-8")
+    frames, noise = positions.detect_frames_and_noise(game["path"], game, zone, game["width"], game["height"], step_s=step_s, hints=positions.hints_from_states(states), walls=db.wall_lines_for(game["map"]))
+    path.write_text(json.dumps({"frames": frames, "states": states, "zone_key": zone_key, "noise": noise, "walls": db.wall_lines_for(game["map"]) is not None}, default=float), encoding="utf-8")
     return {"frames": frames, "states": states, "noise": dict(enumerate(noise))}
 
 

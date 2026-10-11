@@ -156,12 +156,6 @@
   min-width: 60px;
 }
 
-.replay__nudge {
-  padding: 0.15rem 0.4rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .replay__time {
   font-variant-numeric: tabular-nums;
   font-size: 0.8rem;

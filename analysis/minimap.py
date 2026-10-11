@@ -342,9 +342,10 @@ def _glyph_discs(hsv, scale, found, hint=None):
     return out
 
 
-def find_markers(crop, templates=None, hint=None):
+def find_markers(crop, templates=None, hint=None, walls=None):
     """Toutes les pastilles de la minimap. Coordonnées normalisées (0 à 1) dans le recadrage.
-    hint : (équipe, numéro) du joueur observé d'après les bandeaux (facultatif) : aide à retrouver son disque blanc quand le liseré est illisible."""
+    hint : (équipe, numéro) du joueur observé d'après les bandeaux (facultatif) : aide à retrouver son disque blanc quand le liseré est illisible.
+    walls : traits de murs fixes de la carte (map_mask.load_lines), retirés de la silhouette du disque blanc avant de mesurer sa direction (le mur collé au disque la fausse)."""
     templates = templates if templates is not None else load_digit_templates()
     cv2.setRNGSeed(0)  # le découpage des amas (k-means) est aléatoire : sans graine, deux lectures de la même image pouvaient différer
     h, w = crop.shape[:2]
@@ -401,11 +402,13 @@ def find_markers(crop, templates=None, hint=None):
     # Joueur observé : pastille blanche, cerclée de la couleur de son équipe.
     white = cv2.inRange(hsv, np.array((0, 0, 205)), np.array((180, 70, 255)))
     white = cv2.morphologyEx(white, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    # Traits de murs fixes (blancs comme le disque) : la détection n'y change rien, mais ils sont retirés de la silhouette qui sert à mesurer la direction.
+    wall_px = None if walls is None else (walls if walls.shape == white.shape else cv2.resize(walls, (w, h), interpolation=cv2.INTER_NEAREST)) > 0
     spawn_colors = {
         "A": cv2.morphologyEx(cv2.inRange(hsv, np.array((3, 90, 90)), np.array((22, 255, 255))), cv2.MORPH_OPEN, np.ones((9, 9), np.uint8)),
         "B": cv2.morphologyEx(cv2.inRange(hsv, np.array((98, 90, 90)), np.array((118, 255, 255))), cv2.MORPH_OPEN, np.ones((9, 9), np.uint8)),
     }
-    def white_discs(mask, opened=False):
+    def white_discs(mask, dedupe=False):
         for blob, _ in _blobs(mask, scale, min_area=WHITE_MIN_AREA * scale):
             if _is_waiting_circle(blob, spawn_colors):
                 continue  # joueur mort qui attend dans sa zone de départ : ce n'est pas une pastille en jeu
@@ -441,7 +444,9 @@ def find_markers(crop, templates=None, hint=None):
                 # Le liseré coloré qui entoure la pastille blanche en dessine la pointe : on l'ajoute pour mesurer la direction.
                 rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)
                 silhouette = cv2.morphologyEx(np.maximum(blob, rim.astype(np.uint8)), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-                if opened:  # seulement un disque que la passe normale n'a pas trouvé
+                if wall_px is not None:
+                    silhouette[wall_px] = 0  # le mur collé au disque ne tire plus la direction
+                if dedupe:  # seulement un disque que les passes précédentes n'ont pas trouvé
                     m = cv2.moments(blob, binaryImage=True)
                     ox, oy = m["m10"] / m["m00"] / w, m["m01"] / m["m00"] / h
                     if any(d["team"] == team and d["spectated"] and math.hypot(d["x"] - ox, d["y"] - oy) < OPEN_DISC_SEPARATION for d in found):
@@ -450,7 +455,7 @@ def find_markers(crop, templates=None, hint=None):
     white_discs(white)
     # Un disque posé contre un trait blanc du plan fusionne avec lui et la tache n'a plus la forme d'un disque : on retire les traits fins (ouverture) pour
     # retrouver le disque seul. Mesuré : le joueur observé n'était trouvé que dans 47 % des images d'une vidéo (92 % sur les autres).
-    white_discs(cv2.morphologyEx(white, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (OPEN_DISC_PX, OPEN_DISC_PX))), opened=True)
+    white_discs(cv2.morphologyEx(white, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (OPEN_DISC_PX, OPEN_DISC_PX))), dedupe=True)
     # Le joueur observé fusionné avec une zone claire de la carte (Polaris) : cherché par son chiffre noir sur disque blanc, hors zones de départ.
     for disc, team, unsure in _glyph_discs(hsv, scale, found, hint):
         waiting = _is_waiting_circle(disc, spawn_colors)

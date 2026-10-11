@@ -122,7 +122,7 @@ export function VideoPlayer({ videoId, duration }: { videoId: number; duration: 
           </div>
         )}
       </div>
-      <PlayerControls key={videoId} video={ref} duration={duration} />
+      <PlayerControls key={videoId} video={ref} duration={duration} fps={video?.fps ?? 30} />
     </div>
   );
 }

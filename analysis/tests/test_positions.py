@@ -218,3 +218,34 @@ def test_a_disc_without_a_readable_ring_is_kept_only_with_the_observed_player_hi
     assert minimap._glyph_discs(hsv, minimap._scale(img), []) == []
     found = minimap._glyph_discs(hsv, minimap._scale(img), [], ("A", 3))
     assert [(team, unsure) for _, team, unsure in found] == [("A", True)]
+
+
+def test_wall_lines_are_the_thin_fixed_white_strokes_not_discs():
+    import cv2
+    import numpy as np
+
+    import map_mask
+
+    img = np.full((254, 460, 3), 20, np.uint8)
+    cv2.line(img, (60, 120), (400, 120), (255, 255, 255), 1)  # trait de mur (OpenCV 5 trace 3 pixels pour une épaisseur de 1)
+    cv2.circle(img, (200, 60), 9, (255, 255, 255), -1)  # icône de station : un disque, pas un mur
+    lines = map_mask.wall_lines_from_median(img)
+    assert lines[120, 250] == 255 and lines[60, 200] == 0
+
+
+def test_the_observed_disc_next_to_a_wall_is_still_found_when_the_wall_lines_are_given():
+    import cv2
+    import numpy as np
+
+    import minimap
+
+    img = np.full((254, 460, 3), 20, np.uint8)
+    cv2.line(img, (60, 128), (400, 128), (255, 255, 255), 1)  # mur blanc qui touche le disque
+    cv2.circle(img, (200, 120), 12, (40, 130, 235), 2)  # liseré orange
+    cv2.circle(img, (200, 120), 9, (255, 255, 255), -1)
+    cv2.rectangle(img, (197, 114), (203, 126), (20, 20, 20), -1)  # chiffre
+    walls = np.zeros((254, 460), np.uint8)
+    walls[126:131, 50:410] = 255
+    found = [d for d in minimap.find_markers(img, {}, None, walls) if d["spectated"]]
+    assert len(found) == 1 and found[0]["axis"] is not None  # trouvé, direction mesurée sur la silhouette sans le trait de mur
+    assert abs(found[0]["x"] - 200 / 460) < 0.02 and abs(found[0]["y"] - 120 / 254) < 0.03

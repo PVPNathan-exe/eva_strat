@@ -1,4 +1,4 @@
-// Barre de lecture sous la vidéo : lecture/pause, ±5 s, position, vitesse et son.
+// Barre de lecture sous la vidéo : lecture/pause, ±5 s, ±1 s, ±1 image, position, vitesse et son.
 // L'état lecture/pause vient des événements du <video> ; les déplacements passent par requestSeek.
 
 import { useEffect, useState } from 'react';
@@ -8,9 +8,10 @@ import { useAnalysisStore } from '../../store/analysisStore';
 
 const RATES = [0.5, 1, 1.5, 2, 4];
 
-export function PlayerControls({ video, duration }: { video: React.RefObject<HTMLVideoElement | null>; duration: number }) {
+export function PlayerControls({ video, duration, fps }: { video: React.RefObject<HTMLVideoElement | null>; duration: number; fps: number }) {
   const currentTime = useAnalysisStore((s) => s.currentTime);
   const requestSeek = useAnalysisStore((s) => s.requestSeek);
+  const game = useAnalysisStore((s) => s.games.find((g) => g.id === s.selectedGameId));
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [rate, setRate] = useState(1);
@@ -38,6 +39,15 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
   };
 
   const skip = (delta: number) => requestSeek(Math.min(duration, Math.max(0, currentTime + delta)));
+
+  // Pas fin pour la relecture : une image de la vidéo (1 / fps) ou une seconde. La vidéo est mise en pause pour que l'image reste fixe.
+  const nudge = (delta: number) => {
+    const el = video.current;
+    el?.pause();
+    // On part de la position réelle de la vidéo (l'événement timeupdate n'arrive que toutes les ~250 ms : des clics rapprochés partiraient d'une position périmée).
+    requestSeek(Math.min(duration, Math.max(0, (el ? el.currentTime : currentTime) + delta)));
+  };
+  const frame = 1 / (fps > 0 ? fps : 30);
 
   const jump = () => {
     if (goto.trim() === '') return;
@@ -70,6 +80,10 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
         {playing ? <Pause className="ic" /> : <Play className="ic" />}
       </button>
       <button onClick={() => skip(-5)}>−5 s</button>
+      <button onClick={() => nudge(-1)} title="Reculer d'une seconde">−1 s</button>
+      <button onClick={() => nudge(-frame)} title="Image précédente de la vidéo">−1 i</button>
+      <button onClick={() => nudge(frame)} title="Image suivante de la vidéo">+1 i</button>
+      <button onClick={() => nudge(1)} title="Avancer d'une seconde">+1 s</button>
       <button onClick={() => skip(5)}>+5 s</button>
       <input
         className="controls__seek"
@@ -95,8 +109,13 @@ export function PlayerControls({ video, duration }: { video: React.RefObject<HTM
         onBlur={jump}
       />
       <span className="controls__time">
-        {formatTime(currentTime)} / {formatTime(duration)}
+        {formatTime(Math.floor(currentTime))}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, '0')} / {formatTime(duration)}
       </span>
+      {game && currentTime >= game.start_s && currentTime <= game.end_s && (
+        <span className="controls__time" title="Temps de la game sélectionnée, comme dans la reconstitution">
+          game {formatTime(Math.floor(currentTime - game.start_s))}.{String(Math.floor(((currentTime - game.start_s) % 1) * 100)).padStart(2, '0')}
+        </span>
+      )}
       <select value={rate} onChange={(e) => changeRate(Number(e.target.value))} title="Vitesse">
         {RATES.map((r) => (
           <option key={r} value={r}>{r}×</option>

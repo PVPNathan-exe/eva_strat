@@ -220,6 +220,13 @@ def spawns_for(map_name):
     return {team: tuple(rect) for team, rect in zones.items()}
 
 
+def wall_lines_for(map_name):
+    """Traits de murs d'une carte (tableau uint8) ou None : effacés de la minimap avant la recherche du disque du joueur observé (voir map_mask.py)."""
+    import map_mask
+
+    return map_mask.load_lines(map_name)
+
+
 def walk_mask_for(map_name):
     """Masque des zones praticables d'une carte (tableau booléen) ou None si la carte n'en a pas (voir map_mask.py)."""
     import map_mask

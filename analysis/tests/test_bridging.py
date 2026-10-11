@@ -419,3 +419,13 @@ def test_a_gap_whose_detour_dwarfs_the_distance_keeps_the_player_in_place():
     tracking._WALK.difference_update(_block(0.46, 0.45, 0.54, 0.55))  # mur de 0,08 entre les deux
     path = tracking.route((0.44, 0.50), (0.56, 0.50), gap_s=20.0)
     assert tracking._along(path, 0.5) == (0.44, 0.50)  # 4 m en ligne droite, un détour de dizaines de mètres : il reste en place
+
+
+def test_the_enemy_heading_comes_from_the_two_spawn_zones_and_breaks_a_tie_in_the_gaze_sense():
+    spawns = {"A": (0.0, 0.4, 0.26, 0.82), "B": (0.74, 0.4, 1.0, 0.82)}
+    heading = tracking._enemy_headings(spawns)
+    assert heading["A"] == 0.0 and heading["B"] == 180.0  # orange regarde vers la droite, bleu vers la gauche
+    assert tracking._enemy_headings({}) == {}
+    obs = {k: (90.0, 0.0) for k in range(5)}  # axe vertical, sens indécidable
+    out = tracking._choose_directions(obs, enemy=45.0)
+    assert all(abs(((a - 45 + 180) % 360) - 180) < 100 for a in out.values())  # le sens retenu est celui qui regarde vers le camp ennemi

@@ -905,7 +905,18 @@ def _wall_penalty(pos, angle):
     return 0.0
 
 
-def _choose_directions(obs, moves=None, positions=None):
+ENEMY_WEIGHT = 0.6  # préférence pour le sens qui regarde vers le camp ennemi (un joueur regarde d'où viennent les ennemis, même quand personne n'est là) : tranche le sens d'un regard ambigu
+
+def _enemy_headings(spawns):
+    """{équipe: cap (degrés) vers le camp ennemi} d'après les zones de départ de la carte : du centre de la zone de son équipe au centre de l'autre. Vide sans zones."""
+    if not spawns or "A" not in spawns or "B" not in spawns:
+        return {}
+    centre = {t: ((r[0] + r[2]) / 2, (r[1] + r[3]) / 2) for t, r in spawns.items()}
+    heading = lambda a, b: math.degrees(math.atan2(centre[b][1] - centre[a][1], centre[b][0] - centre[a][0])) % 360
+    return {"A": heading("A", "B"), "B": heading("B", "A")}
+
+
+def _choose_directions(obs, moves=None, positions=None, enemy=None):
     """obs : {indice: (axe, asymétrie)} -> {indice: angle}. Programmation dynamique sur le sens (axe ou axe + 180) :
     chaque lecture « vote » pour le sens de son asymétrie, proportionnellement à sa netteté, et un retournement d'une
     lecture à l'autre coûte cher. Un sens isolé et douteux est donc corrigé, un vrai demi-tour soutenu est conservé.
@@ -930,6 +941,8 @@ def _choose_directions(obs, moves=None, positions=None):
             cost += weight * (1 - math.cos(math.radians(ang[k][c] - heading))) / 2
         if positions:
             cost += WALL_WEIGHT * _wall_penalty(positions.get(k), ang[k][c])
+        if enemy is not None:
+            cost += ENEMY_WEIGHT * (1 - math.cos(math.radians(ang[k][c] - enemy))) / 2
         return cost
 
     cost = [[unary(keys[0], 0), unary(keys[0], 1)]]
@@ -1137,6 +1150,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     crosses = _attach_crosses([t for t in dead_tracks if len(t.pts) >= 2], placed, step_s, deaths, times)
 
     half = max(1, round(SMOOTH_S / step_s / 2))
+    enemy_heading = _enemy_headings(spawns)
     by_slot = {}
     for t in placed:
         by_slot.setdefault(t.slot, []).append(t)
@@ -1180,7 +1194,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     speed = math.hypot(dx, dy) / dt
                     if speed >= MOVE_MIN_SPEED:
                         moves[k] = (math.degrees(math.atan2(dy, dx)) % 360, speed)
-            chosen = _choose_directions(obs, moves, {k: (t.pts[k]["x"], t.pts[k]["y"]) for k in idx})
+            chosen = _choose_directions(obs, moves, {k: (t.pts[k]["x"], t.pts[k]["y"]) for k in idx}, enemy_heading.get(t.team))
             smooth = _smooth_angles({k: chosen.get(k) for k in idx}, half)
             for k in idx:
                 d = t.pts[k]
@@ -1246,7 +1260,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 27  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 29  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
