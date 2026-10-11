@@ -100,16 +100,16 @@ def _station_cells():
     return {_cell(pt): pt for pair in _TELEPORTS for pt in pair}
 
 
-def _cell_route(start, goal, ok):
+def _cell_route(start, goal, ok, rides=True):
     """Plus court trajet de cases de start à goal par les passages `ok`, tyroliennes comprises (coût fixe). Liste de (case, arrivée par tyrolienne) ou None.
     Recherche de Dijkstra, mémorisée par couple de cases (la mémoire est vidée à chaque game)."""
-    key = (start, goal)
+    key = (start, goal, rides)
     if key in _ROUTES:
         return _ROUTES[key]
     import heapq
 
     jumps = {}
-    for a, b in _TELEPORTS:
+    for a, b in (_TELEPORTS if rides else []):
         jumps.setdefault(_cell(a), []).append(_cell(b))
         jumps.setdefault(_cell(b), []).append(_cell(a))
     best, came, heap, expanded = {start: 0.0}, {}, [(0.0, start)], 0
@@ -139,7 +139,7 @@ def _cell_route(start, goal, ok):
     return result
 
 
-def _route_path(a, b, detour=ROUTE_DETOUR):
+def _route_path(a, b, detour=ROUTE_DETOUR, rides=True):
     """Trajet de a à b par les passages connus (tyroliennes comprises), raccourci en ligne droite là où c'est praticable. Liste de points ; None si aucun
     trajet n'existe ou s'il dépasse `detour` fois le trajet direct (detour=None : sans limite). Ligne droite [a, b] si elle est praticable."""
     straight = math.hypot(b[0] - a[0], b[1] - a[1])
@@ -147,7 +147,7 @@ def _route_path(a, b, detour=ROUTE_DETOUR):
     ok = _WALK | _around(start) | _around(goal) | set(_station_cells())
     if _line_walkable(a, b, ok):
         return [a, b]
-    nodes = _cell_route(start, goal, ok)
+    nodes = _cell_route(start, goal, ok, rides)
     if nodes is None:
         return None
     stations = _station_cells()
@@ -177,14 +177,14 @@ def _path_m(path):
     return sum(0.0 if (p, q) in _JUMPS or _tp_linked(p, q) else math.hypot((q[0] - p[0]) * ARENA_M[0], (q[1] - p[1]) * ARENA_M[1]) for p, q in zip(path, path[1:]))
 
 
-def route(a, b, gap_s=None):
+def route(a, b, gap_s=None, rides=True):
     """Trajet de a à b pour combler un trou : par les passages et les tyroliennes si la carte les connaît (aussi long soit-il : on ne traverse jamais un mur),
     sinon en ligne droite. S'il n'existe aucun trajet entre les deux points, ou si le joueur devrait dépasser V_MAX_MS pour le faire dans le temps du trou
-    (gap_s), il reste en a jusqu'à sa réapparition en b (saut sans trajet) : un déplacement impossible n'est jamais dessiné."""
+    (gap_s), il reste en a jusqu'à sa réapparition en b (saut sans trajet) : un déplacement impossible n'est jamais dessiné. rides=False : sans tyrolienne."""
     if not _WALK or math.hypot(b[0] - a[0], b[1] - a[1]) < 2 * WALK_CELL:
         path = [a, b]
     else:
-        path = _route_path(a, b, detour=None)
+        path = _route_path(a, b, detour=None, rides=rides)
         if path is None:
             _JUMPS.add((a, b))
             return [a, b]
@@ -194,12 +194,15 @@ def route(a, b, gap_s=None):
     return path
 
 
-def walk_distance(a, b):
-    """Longueur du trajet praticable de a à b (tyroliennes gratuites), ou None si aucun trajet n'existe. Sans carte des passages : distance directe."""
+RIDE_MIN_CONF = 0.7  # une tyrolienne n'est supposée dans un trou que si l'arrivée est une vraie lecture (numérotée ou sûre), pas une pastille récupérée sans numéro
+
+
+def walk_distance(a, b, rides=True):
+    """Longueur du trajet praticable de a à b (tyroliennes gratuites si rides), ou None si aucun trajet n'existe. Sans carte des passages : distance directe."""
     straight = math.hypot(b[0] - a[0], b[1] - a[1])
     if not _WALK or straight < 2 * WALK_CELL:
         return straight
-    path = _route_path(a, b, detour=None)
+    path = _route_path(a, b, detour=None, rides=rides)
     return None if path is None else _path_length(path)
 
 
@@ -298,7 +301,10 @@ def _best_matching(costs, n_dets):
     return best[1]
 
 
-def _link(frames, step_s):
+NOISE_MAX = 6.0  # une image dont la couleur d'équipe non expliquée dépasse ce nombre d'équivalents de pastille est contaminée (frame_noise.py)
+
+
+def _link(frames, step_s, contaminated=None):
     """Étape 1 : trajectoires de pastilles vivantes et de croix, par équipe."""
     max_miss = max(1, round(MAX_MISS_S / step_s))
     alive_tracks, dead_tracks = [], []
@@ -332,7 +338,7 @@ def _link(frames, step_s):
                 open_[i].add(fi, living[j])
                 taken.add(j)
             for j, d in enumerate(living):
-                if j not in taken:
+                if j not in taken and not (contaminated and fi in contaminated and not d.get("number")):  # image contaminée : pas de nouvelle trajectoire sans numéro
                     alive_tracks.append(Track(team, fi, d))
 
             open_x = [t for t in dead_tracks if t.team == team and 0 < fi - t.last <= 3]
@@ -348,7 +354,7 @@ def _link(frames, step_s):
                 if match:
                     used.add(match)
                     match.add(fi, d)
-                else:
+                elif not (contaminated and fi in contaminated):  # image contaminée : une croix isolée est une strie de lumière
                     dead_tracks.append(Track(team, fi, d, dead=True))
     return alive_tracks, dead_tracks
 
@@ -503,12 +509,20 @@ ELIM_SPEED = 0.35  # ...cette vitesse maximale (par seconde) × temps écoulé e
 def _elimination_ok(t, same_slot, step_s):
     """Une trajectoire sans numéro ne reçoit le seul joueur libre « par élimination » que si c'est plausible : assez longue pour ne pas être
     du bruit (reflet bleu de l'eau, tache du décor), ou assez proche, au regard du temps écoulé, de la dernière position connue de ce joueur."""
-    if (t.last - t.first + 1) * step_s >= ELIM_MIN_S or not same_slot:
+    if not same_slot:
         return True
     near = min(same_slot, key=lambda o: min(abs(t.first - o.last), abs(o.first - t.last)))
     a, b = (near, t) if near.last <= t.first else (t, near)
     gap_s = max(b.first - a.last, 0) * step_s
-    dist = math.hypot(a.pos[0] - b.pts[b.first]["x"], a.pos[1] - b.pts[b.first]["y"])
+    start = (b.pts[b.first]["x"], b.pts[b.first]["y"])
+    if _WALK and not _tp_linked(a.pos, start):
+        # atteignable par les couloirs, sans tyrolienne supposée (une trajectoire sans numéro ne prouve pas qu'il en a pris une), à vitesse humaine
+        path = _route_path(a.pos, start, detour=None, rides=False)
+        if path is None or _path_m(path) > V_MAX_MS * gap_s + MOVE_SLACK_M:
+            return False
+    if (t.last - t.first + 1) * step_s >= ELIM_MIN_S:
+        return True
+    dist = math.hypot(a.pos[0] - start[0], a.pos[1] - start[1])
     return dist <= ELIM_BASE + ELIM_SPEED * gap_s
 
 
@@ -668,7 +682,7 @@ def _persistent(dets, fi, d):
     return False
 
 
-def recover_from_unused(rows, runs, frames, states, step_s, put):
+def recover_from_unused(rows, runs, frames, states, step_s, put, contaminated=None):
     """« Mieux regarder » : à chaque image, un joueur vivant (bandeau) sans position est cherché parmi les pastilles que personne n'a prises,
     près de l'endroit où il devrait être. Une pastille blanche (joueur observé ou station de tyrolienne) n'est acceptée que pour le joueur
     que le bandeau dit observé. Plusieurs trous dans la même équipe : on prend les paires les plus proches d'abord."""
@@ -696,13 +710,14 @@ def recover_from_unused(rows, runs, frames, states, step_s, put):
                     continue
                 if not on_walkable((d["x"], d["y"])):
                     continue  # hors de tout passage connu : reflet de lumière, pas un joueur
-                if not d.get("number") and not _persistent(dets, fi, d):
+                if not d.get("number") and ((contaminated and fi in contaminated) or not _persistent(dets, fi, d)):
                     continue  # une pastille sans numéro qui n'apparaît pas dans les images voisines : strie de lumière, pas un joueur
                 if d.get("number") and d["number"] != _number_of(slot) and d["number"] in {_number_of(s) for s in SLOTS[team]}:
                     continue  # un autre joueur de l'équipe, lu avec certitude
                 dist = math.hypot(d["x"] - ex, d["y"] - ey)
-                if dist <= reach or (_NEAR and _tp_linked((ex, ey), (d["x"], d["y"]))):
-                    walked = walk_distance((ex, ey), (d["x"], d["y"])) if _NEAR else dist
+                rides = bool(d.get("number"))  # une pastille sans numéro ne prouve pas une tyrolienne (strie de lumière près d'une station)
+                if dist <= reach or (_NEAR and rides and _tp_linked((ex, ey), (d["x"], d["y"]))):
+                    walked = walk_distance((ex, ey), (d["x"], d["y"]), rides) if _NEAR else dist
                     if walked is not None and walked <= reach + 0.03:  # la distance réelle (couloirs et tyroliennes) compte, pas la ligne droite à travers les murs
                         pairs.append((dist, slot, i))
         used_slots, used_dets = set(), set()
@@ -717,14 +732,40 @@ def recover_from_unused(rows, runs, frames, states, step_s, put):
     return placed
 
 
+CONF_SPAWN_GUESS = 0.2  # confiance d'un joueur placé au point de réapparition de son équipe faute de toute lecture pendant sa vie
+
+
+def _spawn_points(rows, runs):
+    """Point de réapparition de chaque équipe : médiane des premières positions lues au début des vies des joueurs de l'équipe (None si aucune)."""
+    firsts = {"A": [], "B": []}
+    for slot, rs in runs.items():
+        for s, e in rs:
+            for k in range(s, e + 1):
+                r = rows.get((k, slot))
+                if r and r[7] and r[8] >= RIDE_MIN_CONF:
+                    firsts["A" if slot <= 4 else "B"].append((r[4], r[5]))
+                    break
+    out = {}
+    for team, pts in firsts.items():
+        if len(pts) >= 3:
+            xs, ys = sorted(p[0] for p in pts), sorted(p[1] for p in pts)
+            out[team] = (xs[len(xs) // 2], ys[len(ys) // 2])
+    return out
+
+
 def bridge_gaps(rows, runs, step_s, put):
     """Aucun joueur vivant ne disparaît : dans chaque période vivante, un trou entre deux lectures est comblé en reliant les deux points
     visibles, le début est rempli par la première position connue (réapparition) et la fin par la dernière (jusqu'à la mort)."""
     lead, trail = max(1, round(LEAD_MAX_S / step_s)), max(1, round(TRAIL_MAX_S / step_s))
+    spawn = _spawn_points(rows, runs)
     for slot, rs in runs.items():
         for s, e in rs:
             seen = [k for k in range(s, e + 1) if rows.get((k, slot)) and rows[(k, slot)][7]]
-            if not seen:
+            if not seen:  # vie entière sans une seule lecture (réapparu puis tué aussitôt) : au point de réapparition de son équipe
+                team = "A" if slot <= 4 else "B"
+                if team in spawn:
+                    for k in range(s, e + 1):
+                        put(k, slot, team, spawn[team][0], spawn[team][1], None, True, CONF_SPAWN_GUESS)
                 continue
             first, last = rows[(seen[0], slot)], rows[(seen[-1], slot)]
             for k in range(max(s, seen[0] - lead), seen[0]):
@@ -736,7 +777,7 @@ def bridge_gaps(rows, runs, step_s, put):
                     continue
                 ra, rb = rows[(a, slot)], rows[(b, slot)]
                 teleport = _tp_linked((ra[4], ra[5]), (rb[4], rb[5])) and (b - a) * step_s <= TP_MAX_GAP_S
-                path = None if teleport else route((ra[4], ra[5]), (rb[4], rb[5]), (b - a) * step_s)
+                path = None if teleport else route((ra[4], ra[5]), (rb[4], rb[5]), (b - a) * step_s, rb[8] >= RIDE_MIN_CONF)
                 for k in range(a + 1, b):
                     if rows.get((k, slot)):
                         continue
@@ -950,7 +991,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -959,6 +1000,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     qui guide le comblement des trous (on ne traverse plus les murs).
     walk_mask : masque booléen des zones praticables de la carte (map_mask.load), facultatif : il remplace la carte apprise, refuse les détections hors des couloirs
     et donne la distance réelle (par les couloirs et les tyroliennes) pour accepter une pastille récupérée.
+    noise : {indice d'image: couleur d'équipe non expliquée, en équivalents de pastille} (frame_noise.py), facultatif : une image contaminée (stries de lumière)
+    ne crée pas de trajectoire et ne sert pas à récupérer une pastille sans numéro.
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
@@ -982,7 +1025,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     else:
         _WALK.update(walk_grid(own + list(walk_points or [])))
     deaths = confirmed_deaths(deaths, dead, times, step_s)
-    alive_tracks, dead_tracks = _link(frames, step_s)
+    contaminated = {fi for fi, v in (noise or {}).items() if v > NOISE_MAX}
+    alive_tracks, dead_tracks = _link(frames, step_s, contaminated)
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
     _assign(alive_tracks, step_s, dead)
     placed = [t for t in alive_tracks if t.slot is not None]
@@ -1007,7 +1051,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
             for a, b in zip(idx, idx[1:]):
                 pa, pb = t.pts[a], t.pts[b]
                 teleport = _tp_linked((pa["x"], pa["y"]), (pb["x"], pb["y"]))
-                path = None if teleport or b - a <= 2 else route((pa["x"], pa["y"]), (pb["x"], pb["y"]), (b - a) * step_s)
+                path = None if teleport or b - a <= 2 else route((pa["x"], pa["y"]), (pb["x"], pb["y"]), (b - a) * step_s, t.how >= RIDE_MIN_CONF)
                 for k in range(a + 1, b):
                     r = (k - a) / (b - a)
                     if teleport:  # station de tyrolienne : à l'entrée jusqu'au milieu du trou, puis à la sortie
@@ -1048,7 +1092,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
             pa, pb = a.pts[ia], b.pts[ib]
             ang_a, ang_b = rows[(ia, slot)][6], rows[(ib, slot)][6]
             teleport = _tp_linked((pa["x"], pa["y"]), (pb["x"], pb["y"]))
-            path = None if teleport else route((pa["x"], pa["y"]), (pb["x"], pb["y"]), (ib - ia) * step_s)
+            path = None if teleport else route((pa["x"], pa["y"]), (pb["x"], pb["y"]), (ib - ia) * step_s, b.how >= RIDE_MIN_CONF)
             for k in range(ia + 1, ib):
                 r = (k - ia) / (ib - ia)
                 if (k, slot) not in rows and teleport:  # station de tyrolienne : à l'entrée jusqu'au milieu du trou, puis à la sortie
@@ -1071,7 +1115,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
         del rows[key]
     if states and dead:
         runs = alive_runs(states, dead)
-        recover_from_unused(rows, runs, frames, states, step_s, put)
+        recover_from_unused(rows, runs, frames, states, step_s, put, contaminated)
         bridge_gaps(rows, runs, step_s, put)
     _add_known_deaths(rows, deaths or [], times, step_s, put)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
@@ -1098,7 +1142,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 14  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 18  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

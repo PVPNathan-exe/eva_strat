@@ -54,6 +54,20 @@ def _color_mask(hsv, bounds):
     return cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
 
 
+COARSE = (64, 36)  # grille (largeur, hauteur) de la carte grossière des couleurs d'équipe
+
+
+def coarse_colour_map(crop):
+    """Part de pixels de la couleur de chaque équipe dans chaque case d'une grille grossière : tableau uint8 (hauteur, largeur, 2) = (orange, bleu),
+    avec les bornes permissives (pastilles atténuées comprises). Sert à mesurer la couleur d'équipe qui n'est pas un joueur (frame_noise.py)."""
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    out = np.zeros((COARSE[1], COARSE[0], 2), np.uint8)
+    for i, bounds in enumerate((ORANGE_DIM, BLUE_DIM)):
+        mask = cv2.inRange(hsv, np.array(bounds[0]), np.array(bounds[1])).astype(np.float32)
+        out[:, :, i] = np.clip(cv2.resize(mask, COARSE, interpolation=cv2.INTER_AREA), 0, 255).astype(np.uint8)
+    return out
+
+
 def _split_blob(mask, label_img, i, expected):
     """Une pastille de plus d'une surface normale : deux joueurs superposés. On les sépare par k-means sur les pixels."""
     ys, xs = np.nonzero(label_img == i)

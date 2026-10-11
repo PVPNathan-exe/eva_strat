@@ -336,3 +336,16 @@ def test_a_player_standing_on_a_zipline_station_is_kept_with_a_map_mask():
     frames = [(i, round(i * 0.2, 2), [{"team": "A", "x": station[0], "y": station[1], "number": 1, "slot": 1, "angle": 0.0, "alive": True, "spectated": False}]) for i in range(20)]
     rows = tracking.solve(frames, 0.2, teleports=[(station, (0.2, 0.5))], walk_mask=mask)
     assert len(rows) == 20 and all((r[4], r[5]) == station for r in rows)
+
+
+def test_a_life_with_no_reading_is_placed_at_the_team_spawn_point():
+    # trois vies lues qui commencent près de (0,8 ; 0,6), puis une vie du joueur 1 sans aucune lecture
+    rows = {}
+    runs = {2: [(0, 4), (20, 24), (40, 44)], 3: [(0, 4)], 1: [(60, 63)]}
+    for slot, spans in runs.items():
+        for a, b in spans:
+            if slot != 1:
+                for k in range(a, b + 1):
+                    rows[(k, slot)] = row(k, slot, 0.80, 0.60)
+    tracking.bridge_gaps(rows, runs, STEP, make_put(rows))
+    assert all((k, 1) in rows and rows[(k, 1)][4:6] == (0.80, 0.60) and rows[(k, 1)][8] == tracking.CONF_SPAWN_GUESS for k in range(60, 64))

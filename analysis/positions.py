@@ -5,7 +5,10 @@ ensuite ces pastilles dans le temps et attribue les slots 1 à 8 à l'ensemble d
 illisibles, les croisements et les disparitions passagères.
 """
 
+import numpy as np
+
 import banners
+import frame_noise
 import minimap
 import timer
 import tracking
@@ -23,7 +26,7 @@ def _detect_one(crop):
     global _templates
     if _templates is None:
         _templates = minimap.load_digit_templates()
-    return [{k: v for k, v in m.items() if k != "glyph"} for m in minimap.find_markers(crop, _templates)]
+    return [{k: v for k, v in m.items() if k != "glyph"} for m in minimap.find_markers(crop, _templates)], minimap.coarse_colour_map(crop)
 
 
 MAX_WORKERS = 3  # volontairement bas : le PC reste utilisable pendant une analyse
@@ -75,16 +78,22 @@ def _low_priority():
 
 
 def detect_frames(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, workers=None):
-    """Détections brutes de la minimap à cadence régulière : [(indice, t, [pastilles])], sans suivi.
+    """Détections brutes de la minimap à cadence régulière : [(indice, t, [pastilles])], sans suivi (voir detect_frames_and_noise)."""
+    return detect_frames_and_noise(video, game, zone, width, height, emit, wait, step_s, workers)[0]
+
+
+def detect_frames_and_noise(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, workers=None):
+    """Détections brutes de la minimap à cadence régulière et contamination de couleur de chaque image : ([(indice, t, [pastilles])], [bruit par image]).
     Les images sont décodées par ffmpeg puis lues par plusieurs processus (une game de 4 minutes passe de quelques minutes à moins d'une)."""
     workers = _workers() if workers is None else workers
-    frames = []
+    frames, coarse = [], []
     start, end = game["start_s"], game["end_s"]
     crops = timer.iter_crops(video, zone, width, height, step_s=step_s, t0=start, t1=end)
 
     def finish(batch, results):
-        for (t, _), detections in zip(batch, results):
+        for (t, _), (detections, grid) in zip(batch, results):
             frames.append((len(frames), t, detections))
+            coarse.append(grid)
         if emit and batch:
             emit(min(100, 100 * (batch[-1][0] - start) / max(end - start, 1)))
 
@@ -93,7 +102,7 @@ def detect_frames(video, game, zone, width, height, emit=None, wait=None, step_s
             if wait:
                 wait()
             finish([(t, crop)], [_detect_one(crop)])
-        return frames
+        return frames, frame_noise.frame_noise(np.array(coarse), frames)
     from concurrent.futures import ProcessPoolExecutor
 
     with ProcessPoolExecutor(max_workers=workers, initializer=_low_priority) as pool:
@@ -107,7 +116,7 @@ def detect_frames(video, game, zone, width, height, emit=None, wait=None, step_s
                 batch = []
         if batch:
             finish(batch, list(pool.map(_detect_one, [c for _, c in batch])))
-    return frames
+    return frames, frame_noise.frame_noise(np.array(coarse), frames)
 
 
 def detect_states(video, game, zone_a, zone_b, width, height, wait=None, step_s=STEP_S):
@@ -127,4 +136,5 @@ def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STE
     """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance).
     deaths : [(t, slot)] morts connues par le killfeed. bars : (zone du bandeau gauche, zone du bandeau droit) pour guider le suivi."""
     states = detect_states(video, game, bars[0], bars[1], width, height, wait, step_s) if bars else None
-    return tracking.solve(detect_frames(video, game, zone, width, height, emit, wait, step_s), step_s, deaths, states, teleports, walk_points, walk_mask)
+    frames, noise = detect_frames_and_noise(video, game, zone, width, height, emit, wait, step_s)
+    return tracking.solve(frames, step_s, deaths, states, teleports, walk_points, walk_mask, dict(enumerate(noise)))
