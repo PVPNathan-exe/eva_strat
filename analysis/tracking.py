@@ -167,13 +167,28 @@ def _route_path(a, b, detour=ROUTE_DETOUR):
     return out
 
 
-def route(a, b):
+ARENA_M = (31.0, 16.5)  # taille d'une arène en mètres (largeur, hauteur) : la minimap est normalisée sur chacune de ses deux directions
+V_MAX_MS = 10.0  # vitesse maximale d'un joueur (m/s) : sur 46 401 pas lus avec certitude, 11 seulement dépassent 10 m/s (99,9e centile : 7,2 m/s)
+MOVE_SLACK_M = 1.5  # marge (m) sur le trajet d'un trou : position du centre d'une pastille, arrondis
+
+
+def _path_m(path):
+    """Longueur d'un trajet en mètres (tyroliennes et sauts sans trajet ne comptent pas)."""
+    return sum(0.0 if (p, q) in _JUMPS or _tp_linked(p, q) else math.hypot((q[0] - p[0]) * ARENA_M[0], (q[1] - p[1]) * ARENA_M[1]) for p, q in zip(path, path[1:]))
+
+
+def route(a, b, gap_s=None):
     """Trajet de a à b pour combler un trou : par les passages et les tyroliennes si la carte les connaît (aussi long soit-il : on ne traverse jamais un mur),
-    sinon en ligne droite. S'il n'existe aucun trajet entre les deux points, le joueur reste en a jusqu'à sa réapparition en b (saut sans trajet)."""
+    sinon en ligne droite. S'il n'existe aucun trajet entre les deux points, ou si le joueur devrait dépasser V_MAX_MS pour le faire dans le temps du trou
+    (gap_s), il reste en a jusqu'à sa réapparition en b (saut sans trajet) : un déplacement impossible n'est jamais dessiné."""
     if not _WALK or math.hypot(b[0] - a[0], b[1] - a[1]) < 2 * WALK_CELL:
-        return [a, b]
-    path = _route_path(a, b, detour=None)
-    if path is None:
+        path = [a, b]
+    else:
+        path = _route_path(a, b, detour=None)
+        if path is None:
+            _JUMPS.add((a, b))
+            return [a, b]
+    if gap_s is not None and _path_m(path) > V_MAX_MS * gap_s + MOVE_SLACK_M:
         _JUMPS.add((a, b))
         return [a, b]
     return path
@@ -635,6 +650,24 @@ def _expected(rows, slot, k, run, step_s):
     return a[4] + (b[4] - a[4]) * f, a[5] + (b[5] - a[5]) * f, min(k - before, after - k) * step_s
 
 
+PERSIST_FRAMES = 3  # une pastille récupérée doit se retrouver dans au moins 2 des images voisines (jusqu'à cet écart)...
+PERSIST_STEP = 0.05  # ...à cette distance par image d'écart au plus (un joueur ne bouge pas plus vite ; une tache de lumière balaie l'écran en quelques images)
+
+
+def _persistent(dets, fi, d):
+    """Vrai si la détection d se retrouve (même équipe, proche, en tenant compte de l'écart d'images) dans au moins deux images voisines : un joueur dure,
+    un reflet ou une strie de lumière apparaît une image ou deux, ou se déplace trop vite."""
+    seen = 0
+    for k in range(fi - PERSIST_FRAMES, fi + PERSIST_FRAMES + 1):
+        if k == fi:
+            continue
+        if any(o["team"] == d["team"] and o["alive"] == d["alive"] and math.hypot(o["x"] - d["x"], o["y"] - d["y"]) <= PERSIST_STEP * abs(k - fi) + 0.01 for o in dets.get(k, [])):
+            seen += 1
+            if seen >= 2:
+                return True
+    return False
+
+
 def recover_from_unused(rows, runs, frames, states, step_s, put):
     """« Mieux regarder » : à chaque image, un joueur vivant (bandeau) sans position est cherché parmi les pastilles que personne n'a prises,
     près de l'endroit où il devrait être. Une pastille blanche (joueur observé ou station de tyrolienne) n'est acceptée que pour le joueur
@@ -663,6 +696,8 @@ def recover_from_unused(rows, runs, frames, states, step_s, put):
                     continue
                 if not on_walkable((d["x"], d["y"])):
                     continue  # hors de tout passage connu : reflet de lumière, pas un joueur
+                if not d.get("number") and not _persistent(dets, fi, d):
+                    continue  # une pastille sans numéro qui n'apparaît pas dans les images voisines : strie de lumière, pas un joueur
                 if d.get("number") and d["number"] != _number_of(slot) and d["number"] in {_number_of(s) for s in SLOTS[team]}:
                     continue  # un autre joueur de l'équipe, lu avec certitude
                 dist = math.hypot(d["x"] - ex, d["y"] - ey)
@@ -701,7 +736,7 @@ def bridge_gaps(rows, runs, step_s, put):
                     continue
                 ra, rb = rows[(a, slot)], rows[(b, slot)]
                 teleport = _tp_linked((ra[4], ra[5]), (rb[4], rb[5])) and (b - a) * step_s <= TP_MAX_GAP_S
-                path = None if teleport else route((ra[4], ra[5]), (rb[4], rb[5]))
+                path = None if teleport else route((ra[4], ra[5]), (rb[4], rb[5]), (b - a) * step_s)
                 for k in range(a + 1, b):
                     if rows.get((k, slot)):
                         continue
@@ -972,7 +1007,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
             for a, b in zip(idx, idx[1:]):
                 pa, pb = t.pts[a], t.pts[b]
                 teleport = _tp_linked((pa["x"], pa["y"]), (pb["x"], pb["y"]))
-                path = None if teleport or b - a <= 2 else route((pa["x"], pa["y"]), (pb["x"], pb["y"]))
+                path = None if teleport or b - a <= 2 else route((pa["x"], pa["y"]), (pb["x"], pb["y"]), (b - a) * step_s)
                 for k in range(a + 1, b):
                     r = (k - a) / (b - a)
                     if teleport:  # station de tyrolienne : à l'entrée jusqu'au milieu du trou, puis à la sortie
@@ -1013,7 +1048,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
             pa, pb = a.pts[ia], b.pts[ib]
             ang_a, ang_b = rows[(ia, slot)][6], rows[(ib, slot)][6]
             teleport = _tp_linked((pa["x"], pa["y"]), (pb["x"], pb["y"]))
-            path = None if teleport else route((pa["x"], pa["y"]), (pb["x"], pb["y"]))
+            path = None if teleport else route((pa["x"], pa["y"]), (pb["x"], pb["y"]), (ib - ia) * step_s)
             for k in range(ia + 1, ib):
                 r = (k - ia) / (ib - ia)
                 if (k, slot) not in rows and teleport:  # station de tyrolienne : à l'entrée jusqu'au milieu du trou, puis à la sortie
@@ -1063,7 +1098,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 12  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 14  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

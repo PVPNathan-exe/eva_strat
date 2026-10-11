@@ -75,23 +75,37 @@ def det(team, x, y, number=None, spectated=False):
 
 
 def test_an_unused_marker_near_the_expected_place_fills_a_hole():
-    rows = {(0, 1): row(0, 1, 0.50, 0.50), (2, 1): row(2, 1, 0.54, 0.50)}
-    frames = [(k, k * STEP, []) for k in range(3)]
-    frames[1] = (1, STEP, [det("A", 0.52, 0.51)])
-    tracking.recover_from_unused(rows, {1: [(0, 2)]}, frames, states({1: [(0, 2)]}, 3), STEP, make_put(rows))
-    assert rows[(1, 1)][4:6] == (0.52, 0.51)
+    rows = {(0, 1): row(0, 1, 0.50, 0.50), (8, 1): row(8, 1, 0.58, 0.50)}
+    frames = [(k, k * STEP, [det("A", 0.50 + 0.01 * k, 0.51)] if 1 <= k <= 7 else []) for k in range(9)]  # la pastille dure plusieurs images
+    tracking.recover_from_unused(rows, {1: [(0, 8)]}, frames, states({1: [(0, 8)]}, 9), STEP, make_put(rows))
+    assert rows[(4, 1)][4:6] == (0.54, 0.51)
+
+
+def test_a_marker_seen_in_a_single_frame_is_a_light_streak_not_a_player():
+    rows = {(0, 1): row(0, 1, 0.50, 0.50), (8, 1): row(8, 1, 0.58, 0.50)}
+    frames = [(k, k * STEP, [det("A", 0.52, 0.51)] if k == 4 else []) for k in range(9)]
+    tracking.recover_from_unused(rows, {1: [(0, 8)]}, frames, states({1: [(0, 8)]}, 9), STEP, make_put(rows))
+    assert (4, 1) not in rows
+
+
+def test_a_marker_sweeping_the_screen_is_not_a_player():
+    rows = {(0, 1): row(0, 1, 0.50, 0.50), (8, 1): row(8, 1, 0.50, 0.50)}
+    frames = [(k, k * STEP, [det("A", 0.50 + 0.06 * (k - 4), 0.50)] if 2 <= k <= 6 else []) for k in range(9)]  # strie de lumière : 0,06 par image
+    tracking.recover_from_unused(rows, {1: [(0, 8)]}, frames, states({1: [(0, 8)]}, 9), STEP, make_put(rows))
+    assert (4, 1) not in rows
 
 
 def test_a_white_marker_is_taken_only_for_the_observed_player():
-    rows = {(0, 1): row(0, 1, 0.50, 0.50), (2, 1): row(2, 1, 0.50, 0.50)}
+    rows = {(0, 1): row(0, 1, 0.50, 0.50), (8, 1): row(8, 1, 0.50, 0.50)}
     white = det("A", 0.50, 0.50, spectated=True)  # disque blanc : joueur observé, ou station de tyrolienne
-    frames = [(0, 0.0, []), (1, STEP, [white]), (2, 2 * STEP, [])]
-    st = states({1: [(0, 2)]}, 3)
-    tracking.recover_from_unused(rows, {1: [(0, 2)]}, frames, st, STEP, make_put(rows))
-    assert (1, 1) not in rows  # le bandeau ne dit pas que le joueur 1 est observé
-    st[1][1]["spectated"] = True
-    tracking.recover_from_unused(rows, {1: [(0, 2)]}, frames, st, STEP, make_put(rows))
-    assert (1, 1) in rows
+    frames = [(k, k * STEP, [white] if 1 <= k <= 7 else []) for k in range(9)]
+    st = states({1: [(0, 8)]}, 9)
+    tracking.recover_from_unused(rows, {1: [(0, 8)]}, frames, st, STEP, make_put(rows))
+    assert (4, 1) not in rows  # le bandeau ne dit pas que le joueur 1 est observé
+    for k in st:
+        st[k][1]["spectated"] = True
+    tracking.recover_from_unused(rows, {1: [(0, 8)]}, frames, st, STEP, make_put(rows))
+    assert (4, 1) in rows
 
 
 def test_a_marker_read_as_another_player_is_not_taken():
