@@ -133,6 +133,39 @@ def _orientation(blob):
     return angle, axis, skew
 
 
+TIP_OPEN_PX = 5  # ouverture qui retire les traits de mur fins collés au disque observé avant de chercher sa pointe
+TIP_TRUST = 0.35  # netteté de la pointe à partir de laquelle elle donne la direction du disque blanc
+TIP_MIN_SHARE = 0.05  # décalage du liseré (en rayons du disque) en dessous duquel il n'y a pas de pointe
+TIP_FULL_SHARE = 0.3  # ... et à partir duquel la pointe est jugée nette
+
+
+def _tip(body, rim):
+    """Direction de la pointe d'une pastille en forme d'épingle (disque plus une pointe) : (angle 0-360, netteté 0-1) ou None.
+    body : le disque blanc sans les traits de mur fins ; rim : les pixels de la couleur d'équipe autour. Le liseré fait le tour du disque et s'allonge du côté de
+    la pointe : le centre de gravité du liseré, relatif au centre du disque (centre du plus grand cercle inscrit), donne la direction. Les traits de mur, blancs,
+    n'y comptent pas."""
+    cnts, _ = cv2.findContours(body, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not cnts or not rim.any():
+        return None
+    solid = np.zeros_like(body)
+    cv2.drawContours(solid, [max(cnts, key=cv2.contourArea)], -1, 1, cv2.FILLED)
+    dt = cv2.distanceTransform(solid, cv2.DIST_L2, 3)
+    radius = float(dt.max())
+    if radius < 3:
+        return None
+    ys, xs = np.nonzero(dt >= 0.9 * radius)
+    cx, cy = xs.mean(), ys.mean()
+    ry, rx = np.nonzero(rim)
+    near = np.hypot(rx - cx, ry - cy) <= 2.2 * radius
+    if near.sum() < 8:
+        return None
+    vx, vy = rx[near].mean() - cx, ry[near].mean() - cy
+    strength = math.hypot(vx, vy) / radius
+    if strength < TIP_MIN_SHARE:
+        return None
+    return math.degrees(math.atan2(vy, vx)) % 360, min(1.0, strength / TIP_FULL_SHARE)
+
+
 def _solidity(blob):
     """Surface / surface de l'enveloppe convexe : ~0,95 pour une pastille, ~0,6 pour une croix (joueur mort)."""
     cnts, _ = cv2.findContours(blob, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -354,13 +387,17 @@ def find_markers(crop, templates=None, hint=None, walls=None):
     scale = _scale(crop)
     found = []
 
-    def add(blob, team, alive, spectated, silhouette=None, no_digit=False, require_digit=False):
+    def add(blob, team, alive, spectated, silhouette=None, no_digit=False, require_digit=False, tip_silhouette=None):
         m = cv2.moments(blob, binaryImage=True)
         if not m["m00"]:
             return
         glyph = _glyph(gray, blob)
         # Direction mesurée sur la silhouette complète (pour le joueur observé : blanc + liseré coloré, dont la pointe est plus nette).
         orient = _orientation(silhouette if silhouette is not None else blob) if alive else None
+        tip = _tip(*tip_silhouette) if alive and tip_silhouette is not None else None
+        if spectated and tip and tip[1] >= TIP_TRUST and orient:
+            # disque blanc : la pointe du liseré (insensible aux traits de mur) remplace la forme de la silhouette quand elle est nette
+            orient = (tip[0], tip[0] % 180, (1.0 if tip[0] < 180 else -1.0) * 0.25 * tip[1])
         # Pastille atténuée : le numéro y est mal lu (un 1 passe pour un 2), on ne s'y fie pas ; le suivi la relie par sa position.
         number = None if no_digit else (_read_blue_digit(glyph, templates) if team == "B" else _read_digit(glyph, templates))
         if require_digit and number is None:
@@ -375,6 +412,8 @@ def find_markers(crop, templates=None, hint=None, walls=None):
                 "angle": orient[0] if orient else None,
                 "axis": orient[1] if orient else None,
                 "skew": orient[2] if orient else None,
+                "tip": tip[0] if tip else None,
+                "tip_strength": tip[1] if tip else None,
                 "alive": alive,
                 "spectated": spectated,
                 "glyph": glyph,
@@ -444,6 +483,8 @@ def find_markers(crop, templates=None, hint=None, walls=None):
                 # Le liseré coloré qui entoure la pastille blanche en dessine la pointe : on l'ajoute pour mesurer la direction.
                 rim = (_color_mask(hsv, RING_ORANGE if team == "A" else RING_BLUE) > 0) & (ring > 0)
                 silhouette = cv2.morphologyEx(np.maximum(blob, rim.astype(np.uint8)), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+                # Pointe : le trait de mur collé au disque est retiré par ouverture (il est plus fin que le disque) plutôt que par effacement de ses pixels, qui coupait le haut du disque.
+                tip_sil = (cv2.morphologyEx(blob, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (TIP_OPEN_PX, TIP_OPEN_PX))), rim.astype(np.uint8))
                 if wall_px is not None:
                     silhouette[wall_px] = 0  # le mur collé au disque ne tire plus la direction
                 if dedupe:  # seulement un disque que les passes précédentes n'ont pas trouvé
@@ -451,7 +492,7 @@ def find_markers(crop, templates=None, hint=None, walls=None):
                     ox, oy = m["m10"] / m["m00"] / w, m["m01"] / m["m00"] / h
                     if any(d["team"] == team and d["spectated"] and math.hypot(d["x"] - ox, d["y"] - oy) < OPEN_DISC_SEPARATION for d in found):
                         continue
-                add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT)  # halo pâle : le numéro doit être lisible
+                add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT, tip_silhouette=tip_sil)  # halo pâle : le numéro doit être lisible
     white_discs(white)
     # Un disque posé contre un trait blanc du plan fusionne avec lui et la tache n'a plus la forme d'un disque : on retire les traits fins (ouverture) pour
     # retrouver le disque seul. Mesuré : le joueur observé n'était trouvé que dans 47 % des images d'une vidéo (92 % sur les autres).

@@ -109,3 +109,46 @@ def test_banner_death_hands_over_to_the_map_cross():
     times = {k: k * STEP for k in range(12)}
     tracking._add_banner_deaths(rows, dead, times, STEP, lambda fi, slot, team, x, y, angle, alive, conf: rows.__setitem__((fi, slot), row(fi, slot, x, y, conf, int(alive))))
     assert (5, 4) in rows and (6, 4) in rows and (8, 4) not in rows
+
+
+def test_steady_positions_remove_the_jitter_of_a_stopped_player_but_keep_a_walk():
+    jitter = table(*[row(k, 1, 0.5, 0.443 if (k // 6) % 2 == 0 else 0.42) for k in range(60)])
+    tracking.steady_positions(jitter)
+    ys = [jitter[(k, 1)][5] for k in range(10, 50)]
+    assert max(abs(b - a) for a, b in zip(ys, ys[1:])) < 0.005  # plus de saut de 0,023 d'un coup : une dérive lente
+    walk = table(*[row(k, 2, 0.2 + 0.01 * k, 0.5) for k in range(60)])
+    tracking.steady_positions(walk)
+    assert all(abs(walk[(k, 2)][4] - (0.2 + 0.01 * k)) < 1e-3 for k in range(60))
+
+
+def test_gaze_of_unsure_rows_does_not_spin_between_sure_readings():
+    rows = table(row(0, 1, 0.5, 0.5, conf=1.0, angle=150.0), *[row(k, 1, 0.5, 0.5, conf=0.4, angle=(337.0 if k % 2 else 98.0)) for k in range(1, 9)], row(9, 1, 0.5, 0.5, conf=1.0, angle=140.0))
+    tracking.steady_gaze(rows, STEP)
+    assert all(abs(((rows[(k, 1)][6] - 145 + 180) % 360) - 180) < 15 for k in range(1, 9))
+    assert rows[(0, 1)][6] == 150.0 and rows[(9, 1)][6] == 140.0
+
+
+def test_still_player_gaze_ignores_isolated_half_turns():
+    rows = table(*[row(k, 1, 0.5, 0.5, angle=(270.0 if k == 9 else 90.0)) for k in range(20)])
+    tracking.steady_still_gaze(rows)
+    assert rows[(9, 1)][6] == 90.0
+
+
+def test_merged_tail_is_cut_so_the_real_continuation_gets_the_number():
+    def track(first, last, points, votes_slot):
+        t = tracking.Track("B", first, {"x": points[0][0], "y": points[0][1], "slot": votes_slot})
+        for k, (x, y) in zip(range(first + 1, last + 1), points[1:]):
+            t.add(k, {"x": x, "y": y, "slot": votes_slot})
+        return t
+
+    six_before = track(0, 9, [(0.8 - 0.01 * k, 0.6) for k in range(10)], 5)  # le 6 arrive de la droite
+    eight = track(0, 30, [(0.64, 0.6)] * 31, 7)  # le 8 posé, avec des lectures aux images 0 à 9 puis 20 à 30
+    for k in range(10, 20):
+        del eight.pts[k]
+    eight.first, eight.last = 0, 30
+    tail = {k: {"x": 0.64, "y": 0.6, "slot": 5} for k in range(10, 14)}  # la fin du 6 collée au 8 caché
+    for k, d in tail.items():
+        six_before.add(k, d)
+    six_after = track(10, 25, [(0.64, 0.6 - 0.03 * k) for k in range(16)], 5)  # la vraie suite du 6 repart vers le haut
+    assert tracking.trim_merged_tails([six_before, eight, six_after]) == 1
+    assert six_before.last == 9

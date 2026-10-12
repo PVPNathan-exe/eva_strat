@@ -401,6 +401,54 @@ def _gap_cost(a, b, step_s, max_gap=None, max_dist=None):
     return dist + 0.01 * gap
 
 
+TRIM_MIN_FRAMES = 2  # images où la fin d'une trajectoire doit coller à celle d'un autre joueur pour être jugée « fondue » dans lui
+
+
+def _recount_votes(t):
+    t.votes = Counter()
+    for d in t.pts.values():
+        t._vote(d)
+    t.first, t.last = min(t.pts), max(t.pts)
+
+
+TRIM_NEAR_FRAMES = 15  # une trajectoire Z est « là » à une image donnée si elle a un point à cet écart d'images au plus...
+TRIM_NEAR_DIST = 0.03  # ...à cette distance au plus de la détection
+
+
+def _near_track(z, k, det):
+    """Vrai si la trajectoire z a, dans les TRIM_NEAR_FRAMES images autour de k, un point collé à la détection det (z est probablement cachée sous elle à l'image k)."""
+    return any(abs(j - k) <= TRIM_NEAR_FRAMES and math.hypot(d["x"] - det["x"], d["y"] - det["y"]) <= TRIM_NEAR_DIST for j, d in z.pts.items())
+
+
+def trim_merged_tails(tracks):
+    """Deux joueurs de la même équipe qui se croisent forment une seule tache : la trajectoire de l'un peut suivre la tache jusque sur l'autre joueur (le 6 qui
+    traverse le 8 posé, de 0:04 à 0:05), puis la vraie suite du 6, qui repart, reste sans joueur parce que le numéro 6 est déjà pris. Quand la fin d'une trajectoire
+    X colle à celle d'un autre joueur Z (autre numéro dominant) et chevauche en un autre endroit une trajectoire Y qui porte le même numéro que X, la fin de X
+    est une copie de Z : on la coupe, et Y reprend le joueur. Renvoie le nombre de trajectoires coupées."""
+    cut = 0
+    for x in tracks:
+        dom = x.dominant()
+        if dom is None:
+            continue
+        for y in tracks:
+            if y is x or y.team != x.team or y.dominant() != dom or not _overlap(x, y) or not _conflict(x, y):
+                continue
+            span = [k for k in x.pts if k >= y.first]
+            for z in tracks:
+                if z is x or z is y or z.team != x.team or z.dominant() in (None, dom):
+                    continue
+                copy = [k for k in span if _near_track(z, k, x.pts[k])]
+                if len(copy) >= TRIM_MIN_FRAMES and len(copy) >= 0.6 * len(span):
+                    first_copy = min(copy)
+                    for k in [k for k in x.pts if k >= first_copy]:
+                        del x.pts[k]
+                    if x.pts:
+                        _recount_votes(x)
+                        cut += 1
+                    break
+    return cut
+
+
 DEAD_TRACK_SHARE = 0.5  # une trajectoire ne peut pas appartenir à un joueur dont le bandeau est grisé pendant plus de cette part de sa durée
 MIN_ALIVE_SHARE = 0.2  # un bandeau « mort » plus de 80 % de la game est probablement mal lu : on ne s'en sert pas
 
@@ -987,6 +1035,8 @@ def bridge_gaps(rows, runs, step_s, put):
 
 SKEW_FULL = 0.25  # asymétrie à partir de laquelle le sens est considéré comme sûr
 MOVE_WEIGHT = 1.5  # poids du critère « le regard suit le déplacement » dans le choix du sens
+OBSERVED_FOLLOW_SPEED = 0.03  # vitesse (relative à la minimap, par seconde) à partir de laquelle le regard du joueur observé suit son cap
+MOVE_BREAK_DIST = 0.12  # un pas plus grand entre deux lectures successives coupe la trajectoire pour mesurer le cap
 MOVE_MIN_SPEED = 0.02  # en dessous, le joueur est à l'arrêt : son regard n'a aucun lien avec un déplacement
 MOVE_SPEED_FULL = 0.08  # vitesse (normalisée, par seconde) à partir de laquelle ce critère a son poids plein
 FLIP_COST = 2.5  # coût d'un retournement de sens entre deux lectures successives
@@ -1275,6 +1325,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     contaminated = {fi for fi, v in (noise or {}).items() if v > NOISE_MAX}
     alive_tracks, dead_tracks = _link(frames, step_s, contaminated)
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
+    trim_merged_tails(alive_tracks)
+    alive_tracks = [t for t in alive_tracks if t.pts]
     _assign(alive_tracks, step_s, dead)
     placed = [t for t in alive_tracks if t.slot is not None]
     crosses = _attach_crosses([t for t in dead_tracks if len(t.pts) >= 2], placed, step_s, deaths, times)
@@ -1316,14 +1368,27 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     obs[k] = (d["angle"] % 180, 1.0 if d["angle"] < 180 else -1.0)
             # Cap et vitesse de déplacement (différence centrée sur quelques lectures voisines).
             moves = {}
+            # Un saut (tyrolienne, trou) coupe la trajectoire : la vitesse et le cap se mesurent d'un seul côté, jamais à travers (sinon le regard d'un joueur qui
+            # court vers une station pointait vers sa sortie, à l'autre bout de la carte).
+            seg, parts = 0, []
             for j, k in enumerate(idx):
-                a, b = idx[max(0, j - 2)], idx[min(len(idx) - 1, j + 2)]
+                if j and (_tp_linked((t.pts[idx[j - 1]]["x"], t.pts[idx[j - 1]]["y"]), (t.pts[k]["x"], t.pts[k]["y"])) or math.hypot(t.pts[k]["x"] - t.pts[idx[j - 1]]["x"], t.pts[k]["y"] - t.pts[idx[j - 1]]["y"]) > MOVE_BREAK_DIST):
+                    seg += 1
+                parts.append(seg)
+            for j, k in enumerate(idx):
+                lo = next(i for i in range(max(0, j - 2), j + 1) if parts[i] == parts[j])
+                hi = next(i for i in range(min(len(idx) - 1, j + 2), j - 1, -1) if parts[i] == parts[j])
+                a, b = idx[lo], idx[hi]
                 dt = times.get(b, 0.0) - times.get(a, 0.0)
                 if b != a and dt > 0:
                     dx, dy = t.pts[b]["x"] - t.pts[a]["x"], t.pts[b]["y"] - t.pts[a]["y"]
                     speed = math.hypot(dx, dy) / dt
                     if speed >= MOVE_MIN_SPEED:
                         moves[k] = (math.degrees(math.atan2(dy, dx)) % 360, speed)
+            for k in list(obs):  # disque blanc en mouvement : sa forme ne dit presque rien du regard (mesuré : au hasard, axe faux une fois sur deux), le cap le dit
+                if k in moves and t.pts[k].get("spectated") and moves[k][1] >= OBSERVED_FOLLOW_SPEED:
+                    heading = moves[k][0]
+                    obs[k] = (heading % 180, (1.0 if heading < 180 else -1.0) * SKEW_FULL)
             chosen = _choose_directions(obs, moves, {k: (t.pts[k]["x"], t.pts[k]["y"]) for k in idx}, enemy_heading.get(t.team))
             smooth = _smooth_angles({k: chosen.get(k) for k in idx}, half)
             for k in idx:
@@ -1372,6 +1437,10 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     _add_banner_deaths(rows, dead, times, step_s, put)
     remove_excursions(rows, step_s)
     smooth_unsure(rows)
+    steady_positions(rows)
+    snap_to_walkable(rows)
+    steady_gaze(rows, step_s)
+    steady_still_gaze(rows)
     separate_players(rows)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
 
@@ -1462,6 +1531,133 @@ def drop_isolated_reads(rows):
                     del rows[(k, slot)]
                     dropped += 1
     return dropped
+
+
+GAZE_HOLD_S = 3.0  # une ligne peu sûre prend le regard des lectures sûres voisines jusqu'à cet écart
+
+
+def steady_gaze(rows, step_s):
+    """Le regard d'une position reconstituée ou récupérée (confiance sous READ_MIN_CONF) n'est pas une mesure : il ne doit pas faire de demi-tour ni de tour complet
+    d'une ligne à l'autre (le 8 observé tournait sur lui-même à 0:51). Il est interpolé, par le plus court arc, entre les deux lectures sûres voisines qui en ont un
+    (celle d'un seul côté si l'autre manque, jusqu'à GAZE_HOLD_S). Les lectures sûres ne sont jamais modifiées."""
+    hold = round(GAZE_HOLD_S / step_s)
+    by_slot = {}
+    for (k, slot), r in rows.items():
+        if r[7]:
+            by_slot.setdefault(slot, []).append(k)
+    changed = 0
+    for slot, frames in by_slot.items():
+        frames.sort()
+        sure = [k for k in frames if rows[(k, slot)][8] >= READ_MIN_CONF and rows[(k, slot)][6] is not None]
+        if not sure:
+            continue
+        import bisect
+
+        for k in frames:
+            r = rows[(k, slot)]
+            if r[8] >= READ_MIN_CONF:
+                continue
+            i = bisect.bisect_left(sure, k)
+            before = sure[i - 1] if i > 0 and k - sure[i - 1] <= hold else None
+            after = sure[i] if i < len(sure) and sure[i] - k <= hold else None
+            if before is None and after is None:
+                continue
+            if before is None or after is None:
+                angle = rows[(before if after is None else after, slot)][6]
+            else:
+                a, b = rows[(before, slot)][6], rows[(after, slot)][6]
+                angle = (a + (((b - a + 180) % 360) - 180) * (k - before) / (after - before)) % 360
+            if r[6] is None or abs(((r[6] - angle + 180) % 360) - 180) > 20:
+                rows[(k, slot)] = r[:6] + (round(angle, 1),) + r[7:]
+                changed += 1
+    return changed
+
+
+SNAP_MAX = 0.06  # une position vivante hors des couloirs est ramenée au passage le plus proche si il est à moins de cela
+
+
+def snap_to_walkable(rows):
+    """Un joueur peut être collé à un mur, jamais hors des limites de la carte : une position vivante hors des passages connus (lissage, centre d'un disque coupé
+    par un trait de mur) est ramenée au centre de la case praticable la plus proche. Sans carte des passages, rien n'est fait."""
+    if not _WALK:
+        return 0
+    moved = 0
+    reach = int(SNAP_MAX / WALK_CELL) + 1
+    for key, r in list(rows.items()):
+        if not r[7] or on_walkable((r[4], r[5])):
+            continue
+        ci, cj = _cell((r[4], r[5]))
+        best = None
+        for di in range(-reach, reach + 1):
+            for dj in range(-reach, reach + 1):
+                if (ci + di, cj + dj) in _WALK:
+                    cx, cy = (ci + di + 0.5) * WALK_CELL, (cj + dj + 0.5) * WALK_CELL
+                    d = math.hypot(cx - r[4], cy - r[5])
+                    if d <= SNAP_MAX and (best is None or d < best[0]):
+                        best = (d, cx, cy)
+        if best:
+            rows[key] = r[:4] + (round(best[1], 4), round(best[2], 4)) + r[6:]
+            moved += 1
+    return moved
+
+
+GAZE_STILL_FRAMES = 8  # images de chaque côté de la fenêtre où le regard d'un joueur arrêté est stabilisé
+GAZE_STILL_SPREAD = 0.03  # le joueur est arrêté si toute la fenêtre tient dans ce carré (relatif à la minimap)
+
+
+def _circular_median(angles):
+    """Angle de la liste qui minimise la somme des écarts angulaires aux autres (un retournement isolé de 180 degrés n'est jamais retenu)."""
+    return min(angles, key=lambda a: sum(abs((a - b + 180) % 360 - 180) for b in angles))
+
+
+def steady_still_gaze(rows):
+    """Un joueur arrêté ne fait pas des demi-tours à chaque image : la forme de son disque, presque ronde, donne un sens qui bascule (le 8 observé à 0:35, le 3 à
+    2:15). Son regard devient la médiane circulaire de la fenêtre quand le joueur est resté dans GAZE_STILL_SPREAD ; un vrai tour qui dure plus que la moitié de la
+    fenêtre est conservé."""
+    snap = {key: (r[4], r[5], r[6]) for key, r in rows.items() if r[7] and r[6] is not None}
+    changed = 0
+    for (k, slot), (x, y, ang) in snap.items():
+        win = [snap[(k + j, slot)] for j in range(-GAZE_STILL_FRAMES, GAZE_STILL_FRAMES + 1) if (k + j, slot) in snap]
+        if len(win) < GAZE_STILL_FRAMES:
+            continue
+        if max(p[0] for p in win) - min(p[0] for p in win) > GAZE_STILL_SPREAD or max(p[1] for p in win) - min(p[1] for p in win) > GAZE_STILL_SPREAD:
+            continue
+        med = _circular_median([p[2] for p in win])
+        if abs((med - ang + 180) % 360 - 180) > 1:
+            r = rows[(k, slot)]
+            rows[(k, slot)] = r[:6] + (round(med, 1),) + r[7:]
+            changed += 1
+    return changed
+
+
+STEADY_FRAMES = 15  # images de chaque côté de la fenêtre de la médiane pour un joueur qui ne bouge presque pas
+STEADY_RAMP = 5  # puis moyenne sur cette demi-fenêtre : un changement de position devient une dérive lente, pas un saut
+STEADY_SPREAD = 0.045  # la fenêtre ne doit pas s'étendre de plus que cela (relatif à la minimap) : au-delà, le joueur bouge vraiment
+
+
+def steady_positions(rows):
+    """Un joueur qui ne bouge pas ne doit pas « sauter » d'un point à l'autre : le centre du disque blanc de l'observé change de 0,4 m selon le fond (le 8 à 0:35 et
+    à 1:02) et le joueur paraît se téléporter. Quand toute la fenêtre (STEADY_FRAMES de chaque côté) tient dans STEADY_SPREAD, la position devient la médiane de la
+    fenêtre, adoucie par une moyenne glissante. Un joueur qui avance régulièrement garde sa position (la médiane d'une droite est son centre)."""
+    snap = {key: (r[4], r[5]) for key, r in rows.items() if r[7]}
+    med = {}
+    for (k, slot) in snap:
+        win = [snap[(k + j, slot)] for j in range(-STEADY_FRAMES, STEADY_FRAMES + 1) if (k + j, slot) in snap]
+        if len(win) < STEADY_FRAMES:
+            continue
+        xs, ys = sorted(p[0] for p in win), sorted(p[1] for p in win)
+        if xs[-1] - xs[0] > STEADY_SPREAD or ys[-1] - ys[0] > STEADY_SPREAD:
+            continue
+        med[(k, slot)] = (xs[len(xs) // 2], ys[len(ys) // 2])
+    moved = 0
+    for (k, slot), _ in med.items():
+        around = [med[(k + j, slot)] for j in range(-STEADY_RAMP, STEADY_RAMP + 1) if (k + j, slot) in med]
+        mx, my = sum(p[0] for p in around) / len(around), sum(p[1] for p in around) / len(around)
+        r = rows[(k, slot)]
+        if abs(mx - r[4]) > 1e-4 or abs(my - r[5]) > 1e-4:
+            rows[(k, slot)] = r[:4] + (round(mx, 4), round(my, 4)) + r[6:]
+            moved += 1
+    return moved
 
 
 EXC_MAX_S = 8.0  # aller-retour : un joueur qui part et revient dans ce temps...
@@ -1593,7 +1789,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 32  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 33  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
