@@ -109,6 +109,7 @@ export function analysisPlugin(): Plugin {
       const weaponsDir = join(root, 'analysis', 'weapon_icons');
       const iconFixScript = join(root, 'analysis', 'icon_fix.py');
       const resolveScript = join(root, 'analysis', 'resolve.py');
+      const annotationScript = join(root, 'analysis', 'map_annotations.py');
       let resolving = false;
       let iconFixQueue: Promise<unknown> = Promise.resolve();
 
@@ -252,6 +253,22 @@ export function analysisPlugin(): Plugin {
               return sendJson(res, 500, { error: (err as Error).message });
             } finally {
               resolving = false;
+            }
+          }
+          // Applique la cartographie enregistrée d'une carte aux fichiers du programme (masque, murs, tyroliennes, portes, départs, alignement).
+          if (url.pathname === '/api/map-annotations/apply' && method === 'POST') {
+            const map = url.searchParams.get('map') ?? '';
+            if (!/^[\w .-]+$/.test(map)) return sendJson(res, 400, { error: 'Paramètre map manquant' });
+            try {
+              const out = await new Promise<string>((resolve, reject) => {
+                execFile(python, [annotationScript, '--map', map, '--db', dbPath], { timeout: 120000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, cwd: root }, (err, stdout, stderr) => {
+                  if (err) return reject(new Error(`L'application a échoué : ${(stderr || err.message).trim().split(/\r?\n/).slice(-2).join(' ')}`));
+                  return resolve(stdout);
+                });
+              });
+              return sendJson(res, 200, JSON.parse(out.trim().split(/\r?\n/).pop() ?? '{}'));
+            } catch (err) {
+              return sendJson(res, 500, { error: (err as Error).message });
             }
           }
           const weapon = /^\/api\/weapons\/([A-Z]\d+)(\/icon)?$/.exec(url.pathname);

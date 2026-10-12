@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { mapsWithReading } from '../../lib/mapReading';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { CorridorMap } from './CorridorMap';
+import { MapMapping } from './MapMapping';
 import { ShapeViewer } from './ShapeViewer';
 
 export function ReadingTab() {
@@ -63,6 +64,12 @@ export function ReadingTab() {
           </>
         )}
       </section>
+      {maps.length > 0 && (
+        <section className="reading__section reading__section--wide">
+          <h3>Cartographie à la main : {map}</h3>
+          <MapMapping key={map} map={map} />
+        </section>
+      )}
     </div>
   );
 }

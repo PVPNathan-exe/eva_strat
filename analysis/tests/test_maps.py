@@ -79,3 +79,90 @@ def test_a_team_can_have_several_start_rectangles():
     assert not tracking._in_spawn({"team": "A", "x": 0.15, "y": 0.5}, spawns)
     assert tracking._in_spawn({"team": "A", "x": 0.5, "y": 0.5}, {})  # carte sans zone : tout point passe
     assert set(tracking._enemy_headings(spawns)) == {"A", "B"}
+
+
+# --- cartographie à la main (map_annotations.py) ---
+
+import json
+import sqlite3
+
+import pytest
+
+import map_annotations
+
+
+def test_classify_uses_the_nearest_colour_within_its_tolerance():
+    img = np.zeros((1, 3, 3), np.uint8)
+    img[0, 0] = (100, 100, 100)  # BGR identique en RGB
+    img[0, 1] = (100, 100, 109)  # BGR : RVB (109, 100, 100)
+    img[0, 2] = (100, 100, 160)
+    colors = [{"rgb": [100, 100, 100], "tol": 10, "cls": "sol"}, {"rgb": [110, 100, 100], "tol": 10, "cls": "mur"}]
+    labels = map_annotations.classify(img, colors)
+    assert labels[0].tolist() == [map_annotations.CODES["sol"], map_annotations.CODES["mur"], 0]
+
+
+def test_a_tp_path_inside_the_floor_is_walkable_but_a_tp_path_over_a_wall_is_not():
+    labels = np.zeros((40, 40), np.uint8)
+    labels[:, :] = map_annotations.CODES["mur"]
+    labels[5:35, 5:35] = map_annotations.CODES["sol"]
+    labels[20, 5:35] = map_annotations.CODES["tp"]  # trait de tyrolienne qui traverse le sol
+    labels[20, 36:39] = map_annotations.CODES["tp"]  # le même trait au-dessus du mur
+    walk = map_annotations.walkable_from_classes(labels)
+    assert walk[20, 20] and not walk[20, 37]
+    assert not walk[2, 2]
+
+
+def test_doors_are_walkable_and_the_door_line_is_drawn_walkable():
+    labels = np.full((40, 40), map_annotations.CODES["mur"], np.uint8)
+    labels[10:12, 10:30] = map_annotations.CODES["porte"]
+    labels[20:22, 10:30] = map_annotations.CODES["porte_vitre"]
+    walk = map_annotations.walkable_from_classes(labels)
+    assert walk[10, 20] and walk[20, 20]
+    map_annotations.draw_doors(walk, [{"from": [0.1, 0.8], "to": [0.9, 0.8], "glass": False}])
+    assert walk[31, 20]
+
+
+def test_validate_refuses_three_spawn_zones_for_a_team_and_unknown_classes():
+    ok = {"colors": [], "spawns": {"A": [[0.1, 0.1, 0.2, 0.2]] * 2}}
+    assert map_annotations.validate(ok)["spawns"]["A"]
+    with pytest.raises(ValueError):
+        map_annotations.validate({"spawns": {"A": [[0.1, 0.1, 0.2, 0.2]] * 3}})
+    with pytest.raises(ValueError):
+        map_annotations.validate({"colors": [{"rgb": [1, 2, 3], "cls": "lave"}]})
+    with pytest.raises(ValueError):
+        map_annotations.validate({"doors": [{"from": [0.1, 0.1], "to": [2, 0.1]}]})
+
+
+def test_apply_writes_mask_walls_teleports_spawns_and_doors(tmp_path, monkeypatch):
+    monkeypatch.setattr(map_annotations, "MASK_DIR", tmp_path)
+    for name in ("TELEPORTS", "SPAWNS", "INSETS", "DOORS"):
+        monkeypatch.setattr(map_annotations, name, tmp_path / f"{name}.json")
+    img = np.zeros((50, 50, 3), np.uint8)
+    img[:, :] = (0, 0, 200)  # BGR : rouge = mur
+    img[10:40, 10:40] = (90, 90, 90)  # sol
+    cv2.imwrite(str(tmp_path / "Test_mediane.png"), img)
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE map_annotations (map TEXT PRIMARY KEY, data TEXT NOT NULL, updated TEXT)")
+    data = {
+        "colors": [{"rgb": [90, 90, 90], "tol": 5, "cls": "sol"}, {"rgb": [200, 0, 0], "tol": 5, "cls": "mur"}],
+        "tps": [{"from": [0.2, 0.2], "to": [0.8, 0.8]}],
+        "doors": [{"from": [0.1, 0.5], "to": [0.9, 0.5], "glass": True}],
+        "spawns": {"A": [[0.1, 0.1, 0.2, 0.2]], "B": [[0.7, 0.7, 0.8, 0.8], [0.1, 0.7, 0.2, 0.8]]},
+        "inset": {"l": 0.01, "t": 0.02, "r": 0.03, "b": 0.04},
+    }
+    conn.execute("INSERT INTO map_annotations VALUES ('Test', ?, NULL)", (json.dumps(data),))
+    summary = map_annotations.apply(conn, "Test")
+    assert summary["tyroliennes"] == 1 and summary["portes"] == 1 and summary["alignement"]
+    mask = cv2.imread(str(tmp_path / "Test.png"), cv2.IMREAD_GRAYSCALE)
+    assert mask.shape == (400, 400) and mask[200, 200] == 255 and mask[10, 10] == 0
+    assert cv2.imread(str(tmp_path / "Test_lignes.png"), cv2.IMREAD_GRAYSCALE)[10, 10] == 255
+    assert json.loads((tmp_path / "SPAWNS.json").read_text())["Test"]["B"] == [[0.7, 0.7, 0.8, 0.8], [0.1, 0.7, 0.2, 0.8]]
+    assert json.loads((tmp_path / "TELEPORTS.json").read_text())["Test"] == [[[0.2, 0.2], [0.8, 0.8]]]
+    (tmp_path / "SPAWNS.json").write_text(json.dumps({"Test": {"A": [0.0, 0.0, 0.1, 0.1], "B": [0.9, 0.9, 1.0, 1.0]}}))
+    only_a = dict(data, spawns={"A": [[0.1, 0.1, 0.2, 0.2]], "B": []})
+    conn.execute("UPDATE map_annotations SET data = ? WHERE map = 'Test'", (json.dumps(only_a),))
+    map_annotations.apply(conn, "Test")
+    kept = json.loads((tmp_path / "SPAWNS.json").read_text())["Test"]
+    assert kept["A"] == [0.1, 0.1, 0.2, 0.2] and kept["B"] == [0.9, 0.9, 1.0, 1.0]  # l'équipe sans zone saisie garde la sienne
+    assert map_annotations.apply(conn, "Inconnue") is None

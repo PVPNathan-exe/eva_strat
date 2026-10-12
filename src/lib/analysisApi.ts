@@ -55,6 +55,9 @@ export const analysisApi = {
   deleteMark: (id: number) => fetch(`/api/marks/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
   resolveGame: (gameId: number) => fetch(`/api/games/${gameId}/resolve`, jsonInit('POST', {})).then(parse<{ ok: true }>),
   flags: (gameId: number) => fetch(`/api/flags?game=${gameId}`, { cache: 'no-store' }).then(parse<GameFlags>),
+  mapAnnotation: (map: string) => fetch(`/api/map-annotations?map=${encodeURIComponent(map)}`, { cache: 'no-store' }).then(parse<{ data: unknown; updated: string } | null>),
+  saveMapAnnotation: (map: string, data: unknown) => fetch(`/api/map-annotations?map=${encodeURIComponent(map)}`, jsonInit('PUT', { data })).then(parse<{ ok: true }>),
+  applyMapAnnotation: (map: string) => fetch(`/api/map-annotations/apply?map=${encodeURIComponent(map)}`, jsonInit('POST', {})).then(parse<Record<string, unknown>>),
   reliability: (map: string) => fetch(`/api/reliability?map=${encodeURIComponent(map)}`).then(parse<Reliability | null>),
   samples: (gameId: number) => fetch(`/api/samples?game=${gameId}`).then(parse<Sample[]>),
   createGame: (videoId: number, start: number, end: number, map?: string) =>

@@ -166,3 +166,10 @@ CREATE TABLE IF NOT EXISTS capture_state (
   team TEXT,
   PRIMARY KEY (game_id, t, point)
 );
+
+-- Cartographie à la main d'une carte (onglet Lecture) : couleurs rangées en classes, tyroliennes, portes, zones de départ, alignement sur le plan (map_annotations.py).
+CREATE TABLE IF NOT EXISTS map_annotations (
+  map TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  updated TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

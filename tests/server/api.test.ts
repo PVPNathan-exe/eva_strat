@@ -331,3 +331,17 @@ test('les corrections à la main (position et regard) se créent, se listent et 
   assert.equal(handleApi(ctx, 'DELETE', `/api/marks/${markId}`, q(), undefined).status, 200);
   assert.equal((handleApi(ctx, 'GET', '/api/marks', q(`game=${id}`), undefined).json as unknown[]).length, 1);
 });
+
+test('cartographie à la main : enregistrement, relecture et refus des entrées invalides', () => {
+  const ctx = testContext();
+  assert.equal(handleApi(ctx, 'GET', '/api/map-annotations', q('map=Atlantis'), undefined).json, null);
+  const data = { colors: [{ rgb: [10, 20, 30], tol: 8, cls: 'porte_vitre' }], tps: [], spawns: { A: [], B: [] } };
+  assert.equal(handleApi(ctx, 'PUT', '/api/map-annotations', q('map=Atlantis'), { data }).status, 200);
+  const back = JSON.parse(JSON.stringify(handleApi(ctx, 'GET', '/api/map-annotations', q('map=Atlantis'), undefined).json)) as { data: typeof data };
+  assert.equal(back.data.colors[0].cls, 'porte_vitre');
+  const again = handleApi(ctx, 'PUT', '/api/map-annotations', q('map=Atlantis'), { data: { colors: [] } });
+  assert.equal(again.status, 200);
+  assert.equal(handleApi(ctx, 'PUT', '/api/map-annotations', q('map=../etc'), { data }).status, 400);
+  assert.equal(handleApi(ctx, 'PUT', '/api/map-annotations', q('map=Atlantis'), { data: [1] }).status, 400);
+  assert.equal(handleApi(ctx, 'PUT', '/api/map-annotations', q('map=Atlantis'), {}).status, 400);
+});

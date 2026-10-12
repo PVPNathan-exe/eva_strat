@@ -249,6 +249,28 @@ function createMark(ctx: ApiContext, payload: Row): ApiResult {
   return reply(201, { id: Number(res.lastInsertRowid) });
 }
 
+/** Cartographie à la main d'une carte (couleurs, tyroliennes, portes, départs, alignement) : un document JSON par carte, validé en détail par analysis/map_annotations.py à l'application. */
+const MAP_NAME = /^[\w .-]+$/;
+const ANNOTATION_MAX_BYTES = 200_000;
+
+function getMapAnnotation(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const map = query.get('map');
+  if (!map || !MAP_NAME.test(map)) return fail('Paramètre map manquant');
+  const row = ctx.db.prepare('SELECT data, updated FROM map_annotations WHERE map = ?').get(map) as { data: string; updated: string } | undefined;
+  return reply(200, row ? { data: JSON.parse(row.data), updated: row.updated } : null);
+}
+
+function putMapAnnotation(ctx: ApiContext, query: URLSearchParams, payload: Row): ApiResult {
+  const map = query.get('map');
+  if (!map || !MAP_NAME.test(map)) return fail('Paramètre map manquant');
+  const data = payload.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return fail('Annotation illisible');
+  const text = JSON.stringify(data);
+  if (text.length > ANNOTATION_MAX_BYTES) return fail('Annotation trop volumineuse');
+  ctx.db.prepare("INSERT INTO map_annotations (map, data, updated) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(map) DO UPDATE SET data = excluded.data, updated = CURRENT_TIMESTAMP").run(map, text);
+  return reply(200, { ok: true });
+}
+
 function getReliability(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const map = query.get('map');
   if (!map || !/^[\w .-]+$/.test(map)) return fail('Paramètre map manquant');
@@ -401,6 +423,10 @@ export function handleApi(
   if (markMatch && method === 'DELETE') {
     ctx.db.prepare('DELETE FROM user_marks WHERE id = ?').run(Number(markMatch[1]));
     return reply(200, { ok: true });
+  }
+  if (pathname === '/api/map-annotations') {
+    if (method === 'GET') return getMapAnnotation(ctx, query);
+    if (method === 'PUT') return putMapAnnotation(ctx, query, payload);
   }
   if (method === 'GET' && pathname === '/api/reliability') return getReliability(ctx, query);
   if (pathname === '/api/comments') {
