@@ -3,7 +3,7 @@
 
 import type { Inset } from './planInsets';
 
-export type ClassName = 'sol' | 'mur' | 'tir' | 'vue' | 'tp' | 'porte' | 'porte_vitre';
+export type ClassName = 'sol' | 'mur' | 'tir' | 'vue' | 'porte' | 'porte_vitre';
 export type Team = 'A' | 'B';
 export type Point = [number, number]; // fractions de l'image (0 à 1)
 export type Rect = [number, number, number, number]; // x0, y0, x1, y1
@@ -17,8 +17,29 @@ export interface Segment {
   from: Point;
   to: Point;
 }
-export interface Door extends Segment {
+/** Station de tyrolienne : un cercle (centre, rayon en fraction de la largeur) et la direction par laquelle on y entre ou on en sort (degrés, 0 = droite, 90 = bas ; null = aucune). */
+export interface Station {
+  x: number;
+  y: number;
+  r: number;
+  angle: number | null;
+}
+/** Une tyrolienne : deux stations, valable dans les deux sens. */
+export interface TeleportPair {
+  a: Station;
+  b: Station;
+}
+export type OpeningKind = 'porte' | 'fenetre' | 'mur';
+/**
+ * Porte, fenêtre ou mur tracé en trait. Une porte se traverse (vitrée ou non : on voit à travers) ; une fenêtre ne se traverse pas et ne se tire pas : on voit seulement à travers ;
+ * un mur ne se traverse pas (par exemple un mur dans un carré de capture).
+ * side : 0 = visible des deux côtés ; 1 ou -1 = sens unique, on ne voit à travers que depuis le côté où le produit vectoriel (to - from) x (point - from) a ce signe
+ * (axes de l'image, y vers le bas).
+ */
+export interface Opening extends Segment {
+  kind: OpeningKind;
   glass: boolean;
+  side: -1 | 0 | 1;
 }
 export interface LandmarkPair {
   minimap: Point;
@@ -26,14 +47,21 @@ export interface LandmarkPair {
 }
 export interface MapAnnotation {
   colors: PickedColor[];
-  tps: Segment[];
-  doors: Door[];
+  tps: TeleportPair[];
+  doors: Opening[];
   spawns: Record<Team, Rect[]>;
+  capture: Point[][]; // zones des points de capture (forme libre, au moins 3 points) : zones jouables
   pairs: LandmarkPair[];
   inset: Inset | null;
 }
 
 export const MAX_SPAWNS_PER_TEAM = 2;
+export const MAX_CAPTURE_ZONES = 8;
+export const MAX_POLYGON_POINTS = 80;
+export const MIN_POLYGON_POINTS = 3;
+const CLOSE_DISTANCE = 0.02; // un clic à cette distance du premier point ferme la forme (fraction de la largeur)
+export const DEFAULT_STATION_RADIUS = 0.02;
+export const MAX_STATION_RADIUS = 0.2;
 export const DEFAULT_TOLERANCE = 10;
 export const MAX_TOLERANCE = 120;
 
@@ -43,17 +71,48 @@ export const CLASS_INFO: { name: ClassName; label: string; help: string; preview
   { name: 'mur', label: 'Mur', help: 'ni passage, ni vue, ni tir', preview: [255, 59, 59] },
   { name: 'tir', label: 'Tir par-dessus', help: 'on tire au-dessus mais on ne passe pas', preview: [255, 159, 28] },
   { name: 'vue', label: 'Vue seulement', help: 'on voit à travers : ni tir, ni passage', preview: [61, 139, 255] },
-  { name: 'tp', label: 'Chemin de tyrolienne', help: 'ignoré : ce n\'est pas un mur', preview: [190, 120, 255] },
   { name: 'porte', label: 'Porte (hachures)', help: 'on la traverse', preview: [255, 214, 10] },
   { name: 'porte_vitre', label: 'Porte vitrée', help: 'on la traverse et on voit à travers', preview: [90, 220, 235] },
 ];
 
 export const classCode = (name: ClassName) => CLASS_INFO.findIndex((c) => c.name === name) + 1; // 0 : aucune classe
 
-export const emptyAnnotation = (): MapAnnotation => ({ colors: [], tps: [], doors: [], spawns: { A: [], B: [] }, pairs: [], inset: null });
+export const emptyAnnotation = (): MapAnnotation => ({ colors: [], tps: [], doors: [], spawns: { A: [], B: [] }, capture: [], pairs: [], inset: null });
 
 const isPoint = (p: unknown): p is Point => Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === 'number' && v >= 0 && v <= 1);
 const isRect = (r: unknown): r is Rect => Array.isArray(r) && r.length === 4 && r.every((v) => typeof v === 'number' && v >= 0 && v <= 1) && r[0] < r[2] && r[1] < r[3];
+
+const readStation = (s: unknown): Station | null => {
+  const v = s as Station | undefined;
+  if (!v || ![v.x, v.y, v.r].every((n) => typeof n === 'number') || v.x < 0 || v.x > 1 || v.y < 0 || v.y > 1 || v.r <= 0 || v.r > MAX_STATION_RADIUS) return null;
+  return { x: v.x, y: v.y, r: v.r, angle: typeof v.angle === 'number' ? ((v.angle % 360) + 360) % 360 : null };
+};
+
+/** Tyrolienne lue du serveur : deux stations, ou une ancienne flèche {from, to} (stations sans direction, rayon par défaut). */
+function readPair(t: unknown): TeleportPair | null {
+  const v = t as { a?: unknown; b?: unknown; from?: unknown; to?: unknown } | undefined;
+  if (v?.a) {
+    const a = readStation(v.a);
+    const b = readStation(v.b);
+    return a && b ? { a, b } : null;
+  }
+  if (isPoint(v?.from) && isPoint(v?.to)) {
+    return { a: { x: v.from[0], y: v.from[1], r: DEFAULT_STATION_RADIUS, angle: null }, b: { x: v.to[0], y: v.to[1], r: DEFAULT_STATION_RADIUS, angle: null } };
+  }
+  return null;
+}
+
+/** Les 4 coins d'un rectangle, dans l'ordre. */
+export const polygonFromRect = (r: Rect): Point[] => [[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]];
+
+const readPolygon = (z: unknown): Point[] | null =>
+  Array.isArray(z) && z.length >= MIN_POLYGON_POINTS && z.length <= MAX_POLYGON_POINTS && z.every(isPoint) ? (z as Point[]).map((p) => [p[0], p[1]] as Point) : null;
+
+/** Vrai si le clic `p` est assez près du premier point de la forme pour la fermer (la forme a déjà au moins 3 points). */
+export function closesPolygon(points: Point[], p: Point, aspect: number): boolean {
+  if (points.length < MIN_POLYGON_POINTS) return false;
+  return Math.hypot(p[0] - points[0][0], (p[1] - points[0][1]) / aspect) <= CLOSE_DISTANCE;
+}
 
 /** Annotation lue du serveur, débarrassée de tout ce qui est invalide (une version plus ancienne ou abîmée ne doit pas faire planter l'outil). */
 export function sanitize(raw: unknown): MapAnnotation {
@@ -67,10 +126,21 @@ export function sanitize(raw: unknown): MapAnnotation {
       out.colors.push({ rgb: rgb as PickedColor['rgb'], tol: clampTolerance((c as PickedColor).tol), cls: (c as PickedColor).cls });
     }
   }
-  for (const t of Array.isArray(r.tps) ? r.tps : []) if (isPoint(t?.from) && isPoint(t?.to)) out.tps.push({ from: t.from, to: t.to });
-  for (const d of Array.isArray(r.doors) ? r.doors : []) if (isPoint(d?.from) && isPoint(d?.to)) out.doors.push({ from: d.from, to: d.to, glass: Boolean(d.glass) });
+  for (const t of Array.isArray(r.tps) ? r.tps : []) {
+    const pair = readPair(t);
+    if (pair) out.tps.push(pair);
+  }
+  for (const d of Array.isArray(r.doors) ? r.doors : []) {
+    if (!isPoint(d?.from) || !isPoint(d?.to)) continue;
+    const kind: OpeningKind = d.kind === 'fenetre' || d.kind === 'mur' ? d.kind : 'porte';
+    out.doors.push({ from: d.from, to: d.to, kind, glass: kind === 'porte' && Boolean(d.glass), side: (kind === 'fenetre' || (kind === 'porte' && d.glass)) && (d.side === 1 || d.side === -1) ? d.side : 0 });
+  }
   const sp = (r.spawns ?? {}) as Record<string, unknown>;
   for (const team of ['A', 'B'] as const) out.spawns[team] = (Array.isArray(sp[team]) ? (sp[team] as unknown[]) : []).filter(isRect).slice(0, MAX_SPAWNS_PER_TEAM);
+  for (const z of Array.isArray(r.capture) ? (r.capture as unknown[]) : []) {
+    const polygon = isRect(z) ? polygonFromRect(z) : readPolygon(z);
+    if (polygon && out.capture.length < MAX_CAPTURE_ZONES) out.capture.push(polygon);
+  }
   for (const p of Array.isArray(r.pairs) ? r.pairs : []) if (isPoint(p?.minimap) && isPoint(p?.plan)) out.pairs.push({ minimap: p.minimap, plan: p.plan });
   const i = r.inset as Inset | null | undefined;
   if (i && ['l', 't', 'r', 'b'].every((k) => typeof (i as unknown as Record<string, unknown>)[k] === 'number')) out.inset = { l: i.l, t: i.t, r: i.r, b: i.b };
@@ -114,6 +184,39 @@ export function classifyImage(rgba: Uint8ClampedArray, colors: PickedColor[]): U
     }
   }
   return labels;
+}
+
+/** Rayon (fraction de la largeur) d'un cercle de station tiré du centre au point `edge`, pour une image de `aspect` = largeur / hauteur ; borné ; DEFAULT_STATION_RADIUS si trop petit. */
+export function stationRadius(centre: Point, edge: Point, aspect: number): number {
+  const r = Math.hypot(edge[0] - centre[0], (edge[1] - centre[1]) / aspect);
+  return r < 0.005 ? DEFAULT_STATION_RADIUS : Math.min(r, MAX_STATION_RADIUS);
+}
+
+/** Direction (degrés, 0 = droite, 90 = bas) du centre vers `to` dans l'image réelle ; null si `to` est dans le cercle (pas de direction donnée). */
+export function stationAngle(centre: Point, to: Point, radius: number, aspect: number): number | null {
+  const dx = to[0] - centre[0];
+  const dy = (to[1] - centre[1]) / aspect;
+  if (Math.hypot(dx, dy) <= radius) return null;
+  return (((Math.atan2(dy, dx) * 180) / Math.PI) + 360) % 360;
+}
+
+/** Côté (1 ou -1) du trait from-to où se trouve `p`, dans l'image réelle (`aspect` = largeur / hauteur) ; 0 si `p` est sur le trait. */
+export function sideOf(from: Point, to: Point, p: Point, aspect: number): -1 | 0 | 1 {
+  const cross = (to[0] - from[0]) * aspect * (p[1] - from[1]) - (to[1] - from[1]) * ((p[0] - from[0]) * aspect);
+  return cross > 1e-12 ? 1 : cross < -1e-12 ? -1 : 0;
+}
+
+/** Flèche de vision d'une porte ou fenêtre à sens unique : de la face d'où l'on voit vers l'autre face, centrée sur le trait ; null si elle se voit des deux côtés. */
+export function visionArrow(from: Point, to: Point, side: -1 | 0 | 1, aspect: number, length = 0.03): [Point, Point] | null {
+  if (side === 0) return null;
+  const tx = (to[0] - from[0]) * aspect;
+  const ty = to[1] - from[1];
+  const norm = Math.hypot(tx, ty);
+  if (norm === 0) return null;
+  const nx = (-ty / norm) * side * length;
+  const ny = (tx / norm) * side * length;
+  const mid: Point = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+  return [[mid[0] + nx / aspect, mid[1] + ny], [mid[0] - nx / aspect, mid[1] - ny]];
 }
 
 /** Rectangle normalisé (coins dans l'ordre) à partir de deux points du glisser ; null s'il est trop petit pour être voulu. */

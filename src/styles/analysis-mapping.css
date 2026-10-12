@@ -59,7 +59,56 @@
 
 .mapping__tp {
   stroke: var(--c-ok);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 4;
+  opacity: 0.8;
+}
+
+.mapping__station {
+  fill: var(--c-ok);
+  fill-opacity: 0.15;
+  stroke: var(--c-ok);
   stroke-width: 2;
+}
+
+.mapping__station--draft {
+  stroke: var(--c-text);
+  stroke-dasharray: 4 3;
+}
+
+.mapping__station-dir {
+  stroke: var(--c-ok);
+  stroke-width: 2.5;
+}
+
+.mapping__window {
+  stroke: var(--c-blue);
+  stroke-width: 3;
+  stroke-dasharray: 2 3;
+}
+
+.mapping__wall {
+  stroke: var(--c-danger);
+  stroke-width: 3;
+}
+
+.mapping__vision {
+  stroke: var(--c-warn);
+  stroke-width: 2;
+}
+
+.mapping__capture {
+  fill: var(--c-ok);
+  fill-opacity: 0.12;
+  stroke: var(--c-ok);
+  stroke-width: 2;
+}
+
+.mapping__pending-line {
+  stroke: var(--c-text);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  opacity: 0.8;
 }
 
 .mapping__arrowhead {
@@ -112,6 +161,13 @@
   image-rendering: pixelated;
   border: 1px solid var(--c-border-strong);
   background: var(--c-surface);
+}
+
+.mapping__draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
 }
 
 .mapping__readout {

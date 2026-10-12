@@ -1,8 +1,9 @@
-// Médiane de la minimap d'une carte, agrandie au pixel près, avec l'aperçu des classes de couleur et les éléments tracés (tyroliennes, portes, zones de départ, repères).
+// Médiane de la minimap d'une carte, agrandie au pixel près, avec l'aperçu des classes de couleur et les éléments tracés (tyroliennes, portes, fenêtres, zones de capture et de départ, repères).
 // Le clic est interprété par l'outil actif (voir MapMapping) : cette zone ne fait que dessiner et rendre la position du pointeur en pixel de la médiane et en fraction.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CLASS_INFO, classifyImage, type MapAnnotation, type Point, type Rect } from '../../lib/mapAnnotation';
+import { CLASS_INFO, classifyImage, type MapAnnotation, type Point } from '../../lib/mapAnnotation';
+import { MappingShapes, type Draft } from './MappingShapes';
 
 export interface Pixel {
   x: number; // pixel de la médiane
@@ -15,8 +16,7 @@ interface Props {
   annotation: MapAnnotation;
   zoom: number; // 0 : ajusté à la largeur disponible
   preview: boolean; // coloriser les pixels classés
-  pendingPoint: Point | null; // premier clic d'un tracé en cours
-  dragRect: Rect | null; // rectangle en cours de tracé
+  draft: Draft; // tracé en cours
   onImage: (image: ImageData) => void;
   onHover: (pixel: Pixel | null) => void;
   onDown: (pixel: Pixel) => void;
@@ -47,9 +47,7 @@ function useImageData(url: string): ImageData | null {
   return data;
 }
 
-const pct = (v: number) => v * 100;
-
-export function MappingCanvas({ url, annotation, zoom, preview, pendingPoint, dragRect, onImage, onHover, onDown, onMove, onUp }: Props) {
+export function MappingCanvas({ url, annotation, zoom, preview, draft, onImage, onHover, onDown, onMove, onUp }: Props) {
   const image = useImageData(url);
   const base = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLCanvasElement>(null);
@@ -115,32 +113,7 @@ export function MappingCanvas({ url, annotation, zoom, preview, pendingPoint, dr
       >
         <canvas ref={base} className="mapping__canvas" />
         <canvas ref={layer} className="mapping__canvas mapping__canvas--layer" />
-        <svg className="mapping__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-          <defs>
-            <marker id="mapping-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-              <path d="M0,0 L10,5 L0,10 z" className="mapping__arrowhead" />
-            </marker>
-          </defs>
-          {annotation.tps.map((t, i) => (
-            <line key={`tp${i}`} x1={pct(t.from[0])} y1={pct(t.from[1])} x2={pct(t.to[0])} y2={pct(t.to[1])} className="mapping__tp" markerStart="url(#mapping-arrow)" markerEnd="url(#mapping-arrow)" vectorEffect="non-scaling-stroke" />
-          ))}
-          {annotation.doors.map((d, i) => (
-            <line key={`door${i}`} x1={pct(d.from[0])} y1={pct(d.from[1])} x2={pct(d.to[0])} y2={pct(d.to[1])} className={d.glass ? 'mapping__door mapping__door--glass' : 'mapping__door'} vectorEffect="non-scaling-stroke" />
-          ))}
-          {(['A', 'B'] as const).flatMap((team) =>
-            annotation.spawns[team].map((r, i) => (
-              <rect key={`${team}${i}`} x={pct(r[0])} y={pct(r[1])} width={pct(r[2] - r[0])} height={pct(r[3] - r[1])} className={`mapping__spawn mapping__spawn--${team}`} vectorEffect="non-scaling-stroke" />
-            )),
-          )}
-          {dragRect && <rect x={pct(dragRect[0])} y={pct(dragRect[1])} width={pct(dragRect[2] - dragRect[0])} height={pct(dragRect[3] - dragRect[1])} className="mapping__spawn mapping__spawn--drag" vectorEffect="non-scaling-stroke" />}
-          {annotation.pairs.map((p, i) => (
-            <g key={`pair${i}`}>
-              <line x1={pct(p.minimap[0]) - 1} y1={pct(p.minimap[1])} x2={pct(p.minimap[0]) + 1} y2={pct(p.minimap[1])} className="mapping__landmark" vectorEffect="non-scaling-stroke" />
-              <line x1={pct(p.minimap[0])} y1={pct(p.minimap[1]) - 1} x2={pct(p.minimap[0])} y2={pct(p.minimap[1]) + 1} className="mapping__landmark" vectorEffect="non-scaling-stroke" />
-            </g>
-          ))}
-          {pendingPoint && <circle cx={pct(pendingPoint[0])} cy={pct(pendingPoint[1])} r={0.9} className="mapping__pending" vectorEffect="non-scaling-stroke" />}
-        </svg>
+        {image && <MappingShapes annotation={annotation} draft={draft} aspect={image.width / image.height} />}
       </div>
     </div>
   );

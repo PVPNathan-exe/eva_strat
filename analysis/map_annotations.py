@@ -1,4 +1,4 @@
-"""Cartographie à la main d'une carte (onglet Lecture, « Cartographie ») : couleurs de la minimap rangées en classes, tyroliennes en flèches, zones de départ, alignement sur le plan.
+"""Cartographie à la main d'une carte (onglet Lecture, « Cartographie ») : couleurs de la minimap rangées en classes, tyroliennes en paires de cercles, portes et fenêtres, carrés de capture, zones de départ, alignement sur le plan.
 
   python analysis/map_annotations.py --map Atlantis          applique l'annotation enregistrée de la carte aux fichiers du programme
   python analysis/map_annotations.py --all                   toutes les cartes annotées
@@ -8,15 +8,17 @@ L'utilisateur choisit des couleurs à la pipette (au pixel près) sur la médian
   mur         ni praticable, ni traversable par la vue ou le tir ;
   tir         on tire au-dessus mais on ne passe pas (couverture basse) ;
   vue         on voit à travers mais on ne tire pas et on ne passe pas (vitre) ;
-  tp          chemin d'une tyrolienne : ignoré (ce n'est pas un mur : il ne coupe pas le sol qu'il traverse) ;
   porte       porte hachurée : on la traverse (praticable) ;
   porte_vitre porte avec une vitre : on la traverse et on voit à travers.
-Les portes peuvent aussi être tracées en traits (extrémité à extrémité, avec ou sans vitre) : le trait est rendu praticable.
-Chaque pixel prend la classe de la couleur choisie la plus proche, à moins de la tolérance de cette couleur. Les tyroliennes sont des flèches entre deux stations, valables dans les deux sens ; le trait qui les relie sur la minimap a souvent la couleur des murs : sous la flèche, les pixels
-non praticables entourés de sol sont rendus praticables (le trait ne coupe pas le sol), sans toucher aux vrais murs épais. Les tyroliennes sont des flèches, les zones de
-départ des rectangles (deux au plus par équipe), l'alignement sur le plan stratégique des paires de points (minimap, plan).
-Sorties : <Carte>.png (praticable : sol, plus les pixels « tp » entourés de sol), <Carte>_lignes.png (murs), <Carte>_classes.png (toutes les classes), map_teleports.json,
-map_spawns.json et map_plan_insets.json. Une annotation l'emporte sur ce que les détections automatiques avaient trouvé."""
+Les portes, les fenêtres et les murs se tracent aussi en traits (extrémité à extrémité) : une porte (vitrée ou non) est rendue praticable, une fenêtre est « vue seulement » (ni passage ni
+tir), un trait de mur est infranchissable (mur dans un carré de capture) ; l'une comme l'autre peut être à sens unique (on ne voit à travers que d'un côté, noté `side`). Les zones des points de capture (forme libre : le carré n'est pas toujours fermé, comme sur Polaris) sont jouables : sol sous les pixels sans classe, les murs classés ou tracés dedans restent des murs.
+Chaque pixel prend la classe de la couleur choisie la plus proche, à moins de la tolérance de cette couleur.
+Les tyroliennes sont des paires de cercles : une station chacun (centre, rayon, direction par laquelle on y entre ou on en sort), valables dans les deux sens. Le trait qui relie
+les deux centres sur la minimap a souvent la couleur des murs : sous ce trait, les pixels non praticables entourés de sol sont rendus praticables (le trait ne coupe pas le sol),
+sans toucher aux vrais murs épais. Les zones de départ sont des rectangles (deux au plus par équipe), l'alignement sur le plan stratégique des paires de points (minimap, plan).
+Sorties : <Carte>.png (praticable : sol, portes, tracé des tyroliennes entouré de sol), <Carte>_lignes.png (murs), <Carte>_classes.png (toutes les classes), map_teleports.json
+(centres des paires), map_stations.json (rayon et direction), map_doors.json (portes et fenêtres), map_capture.json, map_spawns.json et map_plan_insets.json. Une annotation l'emporte sur ce que les détections
+automatiques avaient trouvé."""
 
 import argparse
 import json
@@ -32,16 +34,23 @@ MASK_DIR = HERE / "map_masks"
 TELEPORTS = HERE / "map_teleports.json"
 SPAWNS = HERE / "map_spawns.json"
 INSETS = HERE / "map_plan_insets.json"
-DOORS = HERE / "map_doors.json"
+DOORS = HERE / "map_doors.json"  # portes et fenêtres tracées : extrémités, genre, vitre, sens unique (côté qui voit)
+CAPTURE = HERE / "map_capture.json"  # zones des points de capture : polygones (zones jouables)
+STATIONS = HERE / "map_stations.json"  # rayon et direction d'entrée et de sortie de chaque station (map_teleports.json ne garde que les centres)
 SIZE = 400  # côté du masque enregistré (comme map_mask.py)
-CLASSES = ("sol", "mur", "tir", "vue", "tp", "porte", "porte_vitre")
+CLASSES = ("sol", "mur", "tir", "vue", "porte", "porte_vitre")
+LEGACY_CLASSES = ("tp",)  # ancienne classe « chemin de tyrolienne » : ignorée à la lecture (remplacée par les cercles de stations)
 PASSABLE = ("sol", "porte", "porte_vitre")  # classes où l'on marche
+DEFAULT_STATION_RADIUS = 0.02
+MAX_STATION_RADIUS = 0.2
 MAX_REFUSED = 0.01  # un masque qui refuserait plus de cette part des lectures sûres de la carte n'est pas écrit (un masque juste en refuse 0,05 % ou moins)
 TP_BAND_PX = 5  # largeur de la bande sous une flèche de tyrolienne où un trait fin est rendu au sol
 DOOR_WIDTH_PX = 3  # épaisseur d'un trait de porte sur la médiane
 CODES = {name: i + 1 for i, name in enumerate(CLASSES)}  # 0 : aucune classe
-MAX_SPAWNS = 2  # zones de départ par équipe
-TP_FLOOR_SHARE = 0.5  # un pixel « tp » est du sol si au moins cette part de ses voisins l'est
+MAX_SPAWNS = 2
+MAX_CAPTURE_ZONES = 8
+MAX_POLYGON_POINTS = 80  # zones de départ par équipe
+TP_FLOOR_SHARE = 0.5  # un pixel sous le tracé d'une tyrolienne est du sol si au moins cette part de ses voisins l'est
 TP_NEIGHBOURHOOD = 7
 
 
@@ -62,11 +71,8 @@ def classify(median_bgr, colors):
 
 
 def walkable_from_classes(labels):
-    """Masque praticable (bool, taille de l'image de classes) : le sol, plus les pixels du chemin d'une tyrolienne qui sont entourés de sol (le trait traverse le sol sans le couper)."""
-    floor = np.isin(labels, [CODES[c] for c in PASSABLE]).astype(np.uint8)
-    tp = (labels == CODES["tp"]).astype(np.uint8)
-    share = cv2.boxFilter(floor.astype(np.float32), -1, (TP_NEIGHBOURHOOD, TP_NEIGHBOURHOOD))
-    return (floor > 0) | ((tp > 0) & (share >= TP_FLOOR_SHARE))
+    """Masque praticable (bool, taille de l'image de classes) : le sol et les portes."""
+    return np.isin(labels, [CODES[c] for c in PASSABLE])
 
 
 def open_tp_paths(walk, tps):
@@ -84,15 +90,58 @@ def open_tp_paths(walk, tps):
     walk |= (band > 0) & (share >= TP_FLOOR_SHARE)
 
 
-def draw_doors(walk, doors):
-    """Rend praticable (sur place) chaque trait de porte tracé à la main."""
-    h, w = walk.shape
+def _line_layer(shape, segments):
+    """Image bool où les traits (extrémités en fractions) sont dessinés."""
+    h, w = shape
     layer = np.zeros((h, w), np.uint8)
-    for d in doors:
+    for d in segments:
         a = (round(d["from"][0] * (w - 1)), round(d["from"][1] * (h - 1)))
         b = (round(d["to"][0] * (w - 1)), round(d["to"][1] * (h - 1)))
         cv2.line(layer, a, b, 255, DOOR_WIDTH_PX)
-    walk |= layer > 0
+    return layer > 0
+
+
+def burn_shapes(labels, doors, capture):
+    """Grave dans l'image de classes ce qui est tracé à la main : carrés de capture (sol sous les seuls pixels sans classe : un mur, un tir par-dessus ou une vue seulement
+    déjà classés dans le carré restent ce qu'ils sont), puis portes (porte, ou porte vitrée), fenêtres (vue seulement) et traits de mur."""
+    h, w = labels.shape
+    for polygon in capture:
+        shape = np.zeros((h, w), np.uint8)
+        cv2.fillPoly(shape, [np.array([[round(x * (w - 1)), round(y * (h - 1))] for x, y in polygon], np.int32)], 255)
+        labels[(shape > 0) & (labels == 0)] = CODES["sol"]
+    for kind, glass, code in (("porte", False, CODES["porte"]), ("porte", True, CODES["porte_vitre"]), ("fenetre", False, CODES["vue"]), ("mur", False, CODES["mur"])):
+        labels[_line_layer(labels.shape, [d for d in doors if d["kind"] == kind and d["glass"] == glass])] = code
+
+
+def _station(s):
+    """Station de tyrolienne propre : centre dans la minimap, rayon (fraction de la largeur), direction d'entrée et de sortie en degrés (0 = droite, 90 = bas) ou None."""
+    ok = isinstance(s, dict) and all(isinstance(s.get(k), (int, float)) for k in ("x", "y", "r")) and 0 <= s["x"] <= 1 and 0 <= s["y"] <= 1 and 0 < s["r"] <= MAX_STATION_RADIUS
+    angle = s.get("angle") if isinstance(s, dict) else None
+    if not ok or not (angle is None or isinstance(angle, (int, float))):
+        raise ValueError(f"station invalide : {s}")
+    return {"x": s["x"], "y": s["y"], "r": s["r"], "angle": None if angle is None else float(angle) % 360}
+
+
+def _pair(t, unit):
+    """Paire de stations {a, b}, ou ancienne flèche {from, to} (stations sans direction, rayon par défaut)."""
+    if isinstance(t, dict) and "a" in t:
+        a, b = _station(t["a"]), _station(t["b"])
+    elif isinstance(t, dict) and unit(t.get("from")) and unit(t.get("to")):
+        a, b = (_station({"x": p[0], "y": p[1], "r": DEFAULT_STATION_RADIUS}) for p in (t["from"], t["to"]))
+    else:
+        raise ValueError(f"tyrolienne invalide : {t}")
+    return {"a": a, "b": b, "from": [a["x"], a["y"]], "to": [b["x"], b["y"]]}
+
+
+def _polygon(z, unit):
+    """Zone de capture : liste d'au moins 3 points (forme libre, pas forcément un carré fermé), ou ancien rectangle [x0, y0, x1, y1] lu comme ses 4 coins."""
+    if isinstance(z, list) and len(z) == 4 and all(isinstance(v, (int, float)) for v in z):
+        if not (all(0 <= v <= 1 for v in z) and z[0] < z[2] and z[1] < z[3]):
+            raise ValueError(f"zone de capture invalide : {z}")
+        return [[z[0], z[1]], [z[2], z[1]], [z[2], z[3]], [z[0], z[3]]]
+    if not (isinstance(z, list) and 3 <= len(z) <= MAX_POLYGON_POINTS and all(unit(p) for p in z)):
+        raise ValueError(f"zone de capture invalide : {z}")
+    return [[p[0], p[1]] for p in z]
 
 
 def validate(data):
@@ -102,20 +151,19 @@ def validate(data):
     colors = []
     for c in data.get("colors", []):
         rgb = c.get("rgb")
+        if c.get("cls") in LEGACY_CLASSES:
+            continue
         if c.get("cls") not in CODES or not (isinstance(rgb, list) and len(rgb) == 3 and all(isinstance(v, int) and 0 <= v <= 255 for v in rgb)):
             raise ValueError(f"couleur invalide : {c}")
         colors.append({"rgb": rgb, "tol": max(0, min(int(c.get("tol", 10)), 120)), "cls": c["cls"]})
     unit = lambda p: isinstance(p, list) and len(p) == 2 and all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in p)
-    tps = []
-    for t in data.get("tps", []):
-        if not (unit(t.get("from")) and unit(t.get("to"))):
-            raise ValueError(f"tyrolienne invalide : {t}")
-        tps.append({"from": t["from"], "to": t["to"]})
+    tps = [_pair(t, unit) for t in data.get("tps", [])]
     doors = []
     for d in data.get("doors", []):
         if not (unit(d.get("from")) and unit(d.get("to"))):
             raise ValueError(f"porte invalide : {d}")
-        doors.append({"from": d["from"], "to": d["to"], "glass": bool(d.get("glass"))})
+        kind = d.get("kind") if d.get("kind") in ("fenetre", "mur") else "porte"
+        doors.append({"from": d["from"], "to": d["to"], "kind": kind, "glass": kind == "porte" and bool(d.get("glass")), "side": d["side"] if (kind == "fenetre" or (kind == "porte" and d.get("glass"))) and d.get("side") in (-1, 1) else 0})
     spawns = {}
     for team in ("A", "B"):
         rects = data.get("spawns", {}).get(team, [])
@@ -128,7 +176,10 @@ def validate(data):
     inset = data.get("inset")
     if inset is not None and not (isinstance(inset, dict) and all(isinstance(inset.get(k), (int, float)) for k in ("l", "t", "r", "b"))):
         raise ValueError("alignement invalide")
-    return {"colors": colors, "tps": tps, "doors": doors, "spawns": spawns, "inset": inset, "pairs": data.get("pairs", [])}
+    capture = [_polygon(z, unit) for z in data.get("capture", [])]
+    if len(capture) > MAX_CAPTURE_ZONES:
+        raise ValueError(f"au plus {MAX_CAPTURE_ZONES} zones de capture")
+    return {"colors": colors, "tps": tps, "doors": doors, "capture": capture, "spawns": spawns, "inset": inset, "pairs": data.get("pairs", [])}
 
 
 def annotation_of(conn, map_name):
@@ -164,11 +215,12 @@ def apply(conn, map_name):
         return None
     data = validate(raw)
     summary = {"map": map_name}
-    if data["colors"]:
+    if data["colors"] or data["capture"] or data["doors"]:
         labels = classify(median, data["colors"])
+        burn_shapes(labels, data["doors"], data["capture"])
         walk = walkable_from_classes(labels)
         open_tp_paths(walk, data["tps"])
-        draw_doors(walk, data["doors"])
+        walk &= ~_line_layer(walk.shape, [d for d in data["doors"] if d["kind"] != "porte"])  # fenêtres et traits de mur ne se traversent pas, même sous une flèche de tyrolienne
         mask = cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST)
         summary["praticable"] = round(float(walk.mean()), 3)
         refused = refused_share(conn, map_name, mask)
@@ -184,10 +236,16 @@ def apply(conn, map_name):
             cv2.imwrite(str(MASK_DIR / f"{map_name}_classes.png"), labels)
             summary["classes"] = {name: int((labels == code).sum()) for name, code in CODES.items()}
     if data["doors"]:
-        _merge_json(DOORS, map_name, [{"from": d["from"], "to": d["to"], "glass": d["glass"]} for d in data["doors"]])
-        summary["portes"] = len(data["doors"])
+        _merge_json(DOORS, map_name, data["doors"])
+        summary["portes"] = sum(d["kind"] == "porte" for d in data["doors"])
+        summary["fenetres"] = sum(d["kind"] == "fenetre" for d in data["doors"])
+        summary["murs_traces"] = sum(d["kind"] == "mur" for d in data["doors"])
+    if data["capture"]:
+        _merge_json(CAPTURE, map_name, data["capture"])
+        summary["zones_de_capture"] = len(data["capture"])
     if data["tps"]:
         _merge_json(TELEPORTS, map_name, [[[round(t["from"][0], 4), round(t["from"][1], 4)], [round(t["to"][0], 4), round(t["to"][1], 4)]] for t in data["tps"]])
+        _merge_json(STATIONS, map_name, [{"a": t["a"], "b": t["b"]} for t in data["tps"]])
         summary["tyroliennes"] = len(data["tps"])
     if any(data["spawns"].values()):
         known = json.loads(SPAWNS.read_text(encoding="utf-8")).get(map_name, {}) if SPAWNS.exists() else {}

@@ -1,39 +1,59 @@
-// Cartographie à la main d'une carte (onglet Lecture, sous la carte des couloirs) : pipette au pixel pour ranger les couleurs de la minimap en classes (sol, mur, tir
-// par-dessus, vue seulement, chemin de tyrolienne, portes), flèches pour les tyroliennes, traits de portes, zones de départ (2 au plus par équipe) et alignement sur le plan.
-// L'annotation est enregistrée en base, puis « Appliquer » la traduit en masque, murs, tyroliennes, départs et cadre (analysis/map_annotations.py).
+// Cartographie à la main d'une carte (onglet Lecture, section pleine largeur) : pipette au pixel près pour ranger les couleurs de la minimap en classes (sol, mur, tir par-dessus,
+// vue seulement, portes), stations de tyrolienne en cercles avec leur direction, portes et fenêtres tracées en traits (sens unique possible), carrés des points de capture
+// (zones jouables), zones de départ (2 au plus par équipe) et alignement sur le plan. L'annotation est enregistrée en base, puis « Appliquer » la traduit en masque, murs,
+// tyroliennes, portes, départs et cadre (analysis/map_annotations.py).
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import {
   addSpawn,
   alignmentError,
-  rectFrom,
-  solveAlignment,
+  closesPolygon,
   pixelColor,
+  polygonFromRect,
+  rectFrom,
+  sideOf,
+  solveAlignment,
+  stationAngle,
+  stationRadius,
   upsertColor,
+  MAX_CAPTURE_ZONES,
+  MAX_POLYGON_POINTS,
+  MIN_POLYGON_POINTS,
   MAX_SPAWNS_PER_TEAM,
   type ClassName,
   type MapAnnotation,
+  type Opening,
   type Point,
-  type Rect,
   type Team,
 } from '../../lib/mapAnnotation';
 import { readingOf } from '../../lib/mapReading';
 import { ColorPanel, Loupe } from './MappingColors';
 import { MappingCanvas, type Pixel } from './MappingCanvas';
 import { MappingPlan } from './MappingPlan';
+import type { Draft } from './MappingShapes';
 import { useMapAnnotation } from './useMapAnnotation';
 
-type Tool = 'colors' | 'tps' | 'doors' | 'spawns' | 'align';
+type Tool = 'colors' | 'tps' | 'openings' | 'capture' | 'spawns' | 'align';
 const TOOLS: { id: Tool; label: string }[] = [
   { id: 'colors', label: 'Couleurs' },
   { id: 'tps', label: 'Tyroliennes' },
-  { id: 'doors', label: 'Portes' },
+  { id: 'openings', label: 'Portes et fenêtres' },
+  { id: 'capture', label: 'Points de capture' },
   { id: 'spawns', label: 'Départs' },
   { id: 'align', label: 'Alignement' },
 ];
+const OPENING_KINDS = [
+  { id: 'porte', label: 'Porte (on la traverse)' },
+  { id: 'porte_vitre', label: 'Porte vitrée (on la traverse et on voit à travers)' },
+  { id: 'fenetre', label: 'Fenêtre (on voit seulement à travers)' },
+  { id: 'mur', label: 'Trait de mur (infranchissable, par exemple dans un carré de capture)' },
+] as const;
+type OpeningChoice = (typeof OPENING_KINDS)[number]['id'];
 const ZOOMS = [0, 1, 2, 3, 4, 6]; // 0 : ajusté à la largeur
+const NO_DRAFT: Draft = { pending: null, circle: null, awaitingDirection: false, first: null, segment: null, rect: null, poly: [], cursor: null };
 const point = (p: Point) => p.map((v) => v.toFixed(3)).join(', ');
+const direction = (angle: number | null) => (angle === null ? 'sans direction' : `direction ${Math.round(angle)} degrés`);
 
 export function MapMapping({ map }: { map: string }) {
   const reading = readingOf(map);
@@ -45,65 +65,155 @@ export function MapMapping({ map }: { map: string }) {
   const [preview, setPreview] = useState(true);
   const [image, setImage] = useState<ImageData | null>(null);
   const [hover, setHover] = useState<Pixel | null>(null);
-  const [pending, setPending] = useState<Point | null>(null); // premier clic d'une flèche, d'un trait de porte ou d'un repère
-  const [glass, setGlass] = useState(false);
+  const [draft, setDraftState] = useState<Draft>(NO_DRAFT);
+  const draftRef = useRef<Draft>(NO_DRAFT); // lu par les gestes rapides (clic, glisser) avant que le rendu ne soit refait
+  const setDraft = (d: Draft) => {
+    draftRef.current = d;
+    setDraftState(d);
+  };
+  const [opening, setOpening] = useState<OpeningChoice>('porte');
+  const [oneWay, setOneWay] = useState(false);
   const [team, setTeam] = useState<Team>('A');
-  const [drag, setDrag] = useState<{ from: Point; to: Point } | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  const dragRect: Rect | null = drag ? rectFrom(drag.from, drag.to, 0) : null;
+  const aspect = image ? image.width / image.height : 1;
+  const canOneWay = opening === 'fenetre' || opening === 'porte_vitre'; // une porte sans vitre ou un mur ne laisse rien voir
   const inset = useMemo(() => solveAlignment(annotation.pairs), [annotation.pairs]);
   const error = inset ? alignmentError(annotation.pairs, inset) : null;
+  const drawing = JSON.stringify(draft) !== JSON.stringify(NO_DRAFT);
 
   if (!reading.medianUrl) return <p className="games__empty">Pas de médiane de minimap pour {map} (analysis/map_mask.py).</p>;
 
-  const chooseTool = (t: Tool) => {
-    setTool(t);
-    setPending(null);
-    setDrag(null);
+  const reset = () => {
+    setDraft(NO_DRAFT);
     setNote(null);
   };
+  const chooseTool = (t: Tool) => {
+    setTool(t);
+    reset();
+  };
+
+  // Tyrolienne : cercle (glisser du centre au bord), puis un clic donne la direction d'entrée et de sortie (un clic dans le cercle : aucune direction) ; deux stations font une paire.
+  const finishStation = (p: Point) => {
+    const d = draftRef.current;
+    const c = d.circle;
+    if (!c) return;
+    const station = { x: c.c[0], y: c.c[1], r: c.r, angle: stationAngle(c.c, p, c.r, aspect) };
+    if (d.first) {
+      const pair = { a: d.first, b: station };
+      update((a) => ({ ...a, tps: [...a.tps, pair] }));
+      setDraft(NO_DRAFT);
+    } else {
+      setDraft({ ...NO_DRAFT, first: station });
+    }
+  };
+
+  const addOpening = (from: Point, to: Point, side: Opening['side']) =>
+    update((a) => ({ ...a, doors: [...a.doors, { from, to, kind: opening === 'fenetre' || opening === 'mur' ? opening : 'porte', glass: opening === 'porte_vitre', side }] }));
 
   const onDown = (p: Pixel) => {
+    const d = draftRef.current;
     setNote(null);
     if (tool === 'colors' && image) {
       update((a) => ({ ...a, colors: upsertColor(a.colors, pixelColor(image, p.x, p.y), cls) }));
-    } else if (tool === 'tps' || tool === 'doors' || tool === 'align') {
-      if (!pending || tool === 'align') return setPending(p.frac); // repère : le second clic se fait sur le plan
-      update((a) => (tool === 'tps' ? { ...a, tps: [...a.tps, { from: pending, to: p.frac }] } : { ...a, doors: [...a.doors, { from: pending, to: p.frac, glass }] }));
-      setPending(null);
-    } else if (tool === 'spawns') {
-      setDrag({ from: p.frac, to: p.frac });
+    } else if (tool === 'tps') {
+      if (d.circle && d.awaitingDirection) return finishStation(p.frac);
+      setDraft({ ...d, circle: { c: p.frac, r: stationRadius(p.frac, p.frac, aspect) }, awaitingDirection: false });
+    } else if (tool === 'openings') {
+      if (d.segment) {
+        const side = sideOf(d.segment.from, d.segment.to, p.frac, aspect);
+        if (side === 0) return;
+        addOpening(d.segment.from, d.segment.to, side);
+        return setDraft(NO_DRAFT);
+      }
+      if (!d.pending) return setDraft({ ...NO_DRAFT, pending: p.frac });
+      if (oneWay && canOneWay) return setDraft({ ...NO_DRAFT, segment: { from: d.pending, to: p.frac } });
+      addOpening(d.pending, p.frac, 0);
+      setDraft(NO_DRAFT);
+    } else if (tool === 'capture' || tool === 'spawns') {
+      // glisser trace un rectangle ; un simple clic (capture) pose un point de la forme libre
+      setDraft({ ...d, rect: [p.frac[0], p.frac[1], p.frac[0], p.frac[1]], cursor: p.frac });
+    } else if (tool === 'align') {
+      setDraft({ ...NO_DRAFT, pending: p.frac }); // le second clic se fait sur le plan
     }
   };
+
   const onMove = (p: Pixel) => {
-    if (drag) setDrag({ ...drag, to: p.frac });
+    const d = draftRef.current;
+    if (tool === 'tps' && d.circle && !d.awaitingDirection) {
+      setDraft({ ...d, circle: { c: d.circle.c, r: stationRadius(d.circle.c, p.frac, aspect) } });
+    } else if ((tool === 'capture' || tool === 'spawns') && d.rect) {
+      const r = rectFrom([d.rect[0], d.rect[1]], p.frac, 0);
+      setDraft({ ...d, rect: r ?? d.rect, cursor: p.frac });
+    } else if (d.pending || d.circle || d.segment) {
+      setDraft({ ...d, cursor: p.frac });
+    }
   };
+
   const onUp = (p: Pixel) => {
-    if (!drag) return;
-    const rect = rectFrom(drag.from, p.frac);
-    setDrag(null);
-    if (!rect) return;
-    const next = addSpawn(annotation.spawns, team, rect);
-    if (!next) return setNote(`L'équipe ${team} a déjà ${MAX_SPAWNS_PER_TEAM} zones de départ : retire-en une d'abord.`);
-    update((a) => ({ ...a, spawns: next }));
+    const d = draftRef.current;
+    if (tool === 'tps' && d.circle && !d.awaitingDirection) {
+      return setDraft({ ...d, awaitingDirection: true, cursor: p.frac });
+    }
+    if ((tool === 'capture' || tool === 'spawns') && d.rect) {
+      const rect = rectFrom([d.rect[0], d.rect[1]], p.frac);
+      const keep = { ...d, rect: null };
+      if (tool === 'capture') {
+        if (annotation.capture.length >= MAX_CAPTURE_ZONES) {
+          setDraft(NO_DRAFT);
+          return setNote(`Au plus ${MAX_CAPTURE_ZONES} zones de capture.`);
+        }
+        // glisser sans forme en cours : un rectangle ; sinon (ou simple clic) : un point de la forme libre, et un clic sur le premier point la ferme
+        if (rect && d.poly.length === 0) {
+          setDraft(NO_DRAFT);
+          return update((a) => ({ ...a, capture: [...a.capture, polygonFromRect(rect)] }));
+        }
+        if (closesPolygon(d.poly, p.frac, aspect)) return closePolygon(d.poly);
+        if (d.poly.length >= MAX_POLYGON_POINTS) return setDraft(keep);
+        return setDraft({ ...keep, poly: [...d.poly, p.frac] });
+      }
+      setDraft(NO_DRAFT);
+      if (!rect) return;
+      const next = addSpawn(annotation.spawns, team, rect);
+      if (!next) return setNote(`L'équipe ${team} a déjà ${MAX_SPAWNS_PER_TEAM} zones de départ : retire-en une d'abord.`);
+      update((a) => ({ ...a, spawns: next }));
+    }
+  };
+
+  const closePolygon = (points: Point[]) => {
+    if (points.length < MIN_POLYGON_POINTS) return;
+    update((a) => ({ ...a, capture: [...a.capture, points] }));
+    setDraft(NO_DRAFT);
   };
 
   const onPlanClick = (p: Point) => {
-    if (!pending) return;
+    const minimap = draftRef.current.pending;
+    if (!minimap) return;
     update((a) => {
-      const pairs = [...a.pairs, { minimap: pending, plan: p }];
+      const pairs = [...a.pairs, { minimap, plan: p }];
       return { ...a, pairs, inset: solveAlignment(pairs) ?? a.inset };
     });
-    setPending(null);
+    setDraft(NO_DRAFT);
   };
 
-  const removeSegment = (key: 'tps' | 'doors', i: number) => update((a) => ({ ...a, [key]: a[key].filter((_, j) => j !== i) }) as MapAnnotation);
+  const without = <K extends 'tps' | 'doors' | 'capture'>(key: K, i: number) => update((a) => ({ ...a, [key]: a[key].filter((_, j) => j !== i) }) as MapAnnotation);
   const removePair = (i: number) =>
     update((a) => {
       const pairs = a.pairs.filter((_, j) => j !== i);
       return { ...a, pairs, inset: solveAlignment(pairs) };
     });
+
+  let hint = '';
+  if (tool === 'capture') hint = draft.poly.length > 0 ? `Forme libre : ${draft.poly.length} point(s). Clique les autres coins ; un clic sur le premier point (ou « Fermer la forme ») la ferme.` : 'Glisse pour un rectangle, ou clique les coins d\'une forme libre (le point n\'est pas toujours un carré fermé).';
+  if (tool === 'tps') {
+    if (draft.awaitingDirection) hint = "Clique par où l'on entre et l'on sort de la tyrolienne (un clic dans le cercle : aucune direction).";
+    else if (draft.first) hint = "Station posée. Glisse du centre au bord de l'autre station pour tracer son cercle.";
+    else hint = "Glisse du centre au bord d'une station de tyrolienne pour tracer son cercle, puis clique sa direction. Deux stations font une tyrolienne, valable dans les deux sens.";
+  } else if (tool === 'openings') {
+    if (draft.segment) hint = "Clique le côté d'où l'on voit à travers (sens unique).";
+    else if (draft.pending) hint = "Clique l'autre bout du trait.";
+    else hint = "Clique les deux bouts du trait. Coche « sens unique » si l'on ne voit à travers que d'un côté : un troisième clic désigne ce côté.";
+  }
 
   return (
     <div className="mapping">
@@ -130,24 +240,15 @@ export function MapMapping({ map }: { map: string }) {
 
       <div className="mapping__body">
         <div className="mapping__left">
-          {loaded && (
-            <MappingCanvas
-              url={reading.medianUrl}
-              annotation={annotation}
-              zoom={zoom}
-              preview={preview}
-              pendingPoint={pending}
-              dragRect={dragRect}
-              onImage={setImage}
-              onHover={setHover}
-              onDown={onDown}
-              onMove={onMove}
-              onUp={onUp}
-            />
-          )}
+          {loaded && <MappingCanvas url={reading.medianUrl} annotation={annotation} zoom={zoom} preview={preview} draft={draft} onImage={setImage} onHover={setHover} onDown={onDown} onMove={onMove} onUp={onUp} />}
         </div>
         <div className="mapping__right">
           <Loupe image={image} pixel={hover} />
+          <div className="mapping__draft-actions">
+            <button onClick={() => closePolygon(draft.poly)} disabled={!(tool === 'capture' && draft.poly.length >= MIN_POLYGON_POINTS)}>Fermer la forme</button>
+            <button onClick={reset} disabled={!drawing}>Annuler le tracé</button>
+          </div>
+          {hint && <p className="mapping__hint">{hint}</p>}
           {tool === 'colors' && (
             <ColorPanel
               annotation={annotation}
@@ -160,34 +261,50 @@ export function MapMapping({ map }: { map: string }) {
           {tool === 'tps' && (
             <div>
               <p className="mapping__hint">
-                Clique une station, puis l'autre : une flèche à deux pointes est tracée (la tyrolienne marche dans les deux sens). Trace la flèche le long du trait qui relie les deux
-                stations : sous elle, ce trait (de la couleur des murs) ne compte plus comme un mur, tant qu'il est fin et posé sur du sol. Garde la couleur des murs dans la classe Mur.
+                Le trait qui relie les deux centres sur la minimap a souvent la couleur des murs : sous ce trait, tant qu'il est fin et posé sur du sol, il ne compte plus comme un mur.
+                Garde la couleur des murs dans la classe Mur.
               </p>
               <ul className="mapping__list">
                 {annotation.tps.map((t, i) => (
                   <li key={i}>
-                    Tyrolienne {i + 1} : ({point(t.from)}) et ({point(t.to)})
-                    <button onClick={() => removeSegment('tps', i)}>Retirer</button>
+                    Tyrolienne {i + 1} : ({point([t.a.x, t.a.y])}), {direction(t.a.angle)} et ({point([t.b.x, t.b.y])}), {direction(t.b.angle)}
+                    <button onClick={() => without('tps', i)}>Retirer</button>
                   </li>
                 ))}
               </ul>
             </div>
           )}
-          {tool === 'doors' && (
+          {tool === 'openings' && (
             <div>
-              <p className="mapping__hint">
-                Clique les deux bouts d'une porte (hachures) pour la tracer. Une porte se traverse : le trait est rendu praticable. Coche « vitrée » quand la porte a une vitre. Les couleurs de
-                portes se rangent aussi dans « Couleurs » (classes porte et porte vitrée).
-              </p>
+              <div className="mapping__classes">
+                {OPENING_KINDS.map((k) => (
+                  <label key={k.id} className={`mapping__class${opening === k.id ? ' is-on' : ''}`}>
+                    <input type="radio" name="mapping-opening" checked={opening === k.id} onChange={() => setOpening(k.id)} /> {k.label}
+                  </label>
+                ))}
+              </div>
               <label>
-                <input type="checkbox" checked={glass} onChange={(e) => setGlass(e.target.checked)} /> Porte vitrée
+                <input type="checkbox" checked={oneWay} disabled={!canOneWay} onChange={(e) => setOneWay(e.target.checked)} /> Sens unique (fenêtre ou porte vitrée visible d'un seul côté)
               </label>
               <ul className="mapping__list">
                 {annotation.doors.map((d, i) => (
                   <li key={i}>
-                    Porte {i + 1}
-                    {d.glass ? ' vitrée' : ''}
-                    <button onClick={() => removeSegment('doors', i)}>Retirer</button>
+                    {d.kind === 'fenetre' ? 'Fenêtre' : d.kind === 'mur' ? 'Mur' : d.glass ? 'Porte vitrée' : 'Porte'} {i + 1}
+                    {d.side !== 0 ? ' à sens unique' : ''}
+                    <button onClick={() => without('doors', i)}>Retirer</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {tool === 'capture' && (
+            <div>
+              <p className="mapping__hint">Entoure chaque point de capture, en rectangle (glisser) ou en forme libre (clics sur les coins, comme le point central de Polaris qui n'est pas fermé) : c'est une zone jouable, même si sa couleur (teintée par l'équipe qui le tient) n'est pas celle du sol. Les murs de l'intérieur restent des murs : classe leur couleur en Mur, ou trace-les dans « Portes et fenêtres » (trait de mur).</p>
+              <ul className="mapping__list">
+                {annotation.capture.map((_, i) => (
+                  <li key={i}>
+                    Zone {i + 1} ({annotation.capture[i].length} points)
+                    <button onClick={() => without('capture', i)}>Retirer</button>
                   </li>
                 ))}
               </ul>
@@ -220,7 +337,7 @@ export function MapMapping({ map }: { map: string }) {
           {tool === 'align' &&
             (plan ? (
               <>
-                <MappingPlan planUrl={plan} medianUrl={reading.medianUrl} pairs={annotation.pairs} inset={inset ?? annotation.inset} error={error} waiting={pending !== null} overlay onClick={onPlanClick} />
+                <MappingPlan planUrl={plan} medianUrl={reading.medianUrl} pairs={annotation.pairs} inset={inset ?? annotation.inset} error={error} waiting={draft.pending !== null} overlay onClick={onPlanClick} />
                 <ul className="mapping__list">
                   {annotation.pairs.map((_, i) => (
                     <li key={i}>
@@ -249,8 +366,8 @@ export function MapMapping({ map }: { map: string }) {
       {message && <p className={`mapping__message${message.error ? ' mapping__message--error' : ''}`}>{message.text}</p>}
       <p className="corridor__note">
         Atlantis et The Cliff ont un étage et un dessous où l'on peut se trouver : mets en « Sol » les couleurs des deux niveaux, le masque est l'union des deux. « Appliquer » remplace le
-        masque, les tyroliennes, les départs et le cadre de cette carte par ce que tu as saisi, pour ce qui est renseigné (les détections automatiques sont écrasées). Les positions déjà
-        enregistrées d'une game ne changent qu'au prochain recalcul.
+        masque, les tyroliennes, les départs et le cadre de cette carte par ce que tu as saisi, pour ce qui est renseigné (les détections automatiques sont écrasées) ; un masque qui
+        refuserait plus de 1 % des positions sûres de la carte n'est pas écrit. Les positions déjà enregistrées d'une game ne changent qu'au prochain recalcul.
       </p>
     </div>
   );

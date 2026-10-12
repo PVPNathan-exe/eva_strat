@@ -101,15 +101,14 @@ def test_classify_uses_the_nearest_colour_within_its_tolerance():
     assert labels[0].tolist() == [map_annotations.CODES["sol"], map_annotations.CODES["mur"], 0]
 
 
-def test_a_tp_path_inside_the_floor_is_walkable_but_a_tp_path_over_a_wall_is_not():
-    labels = np.zeros((40, 40), np.uint8)
-    labels[:, :] = map_annotations.CODES["mur"]
-    labels[5:35, 5:35] = map_annotations.CODES["sol"]
-    labels[20, 5:35] = map_annotations.CODES["tp"]  # trait de tyrolienne qui traverse le sol
-    labels[20, 36:39] = map_annotations.CODES["tp"]  # le même trait au-dessus du mur
-    walk = map_annotations.walkable_from_classes(labels)
-    assert walk[20, 20] and not walk[20, 37]
-    assert not walk[2, 2]
+def test_station_pairs_keep_radius_and_direction_and_old_arrows_are_still_read():
+    pair = {"a": {"x": 0.1, "y": 0.2, "r": 0.03, "angle": 450}, "b": {"x": 0.8, "y": 0.9, "r": 0.02, "angle": None}}
+    old = {"from": [0.3, 0.3], "to": [0.6, 0.6]}
+    got = map_annotations.validate({"tps": [pair, old], "colors": [{"rgb": [1, 2, 3], "cls": "tp"}]})
+    assert got["tps"][0]["a"]["angle"] == 90.0 and got["tps"][0]["b"]["angle"] is None and got["tps"][0]["from"] == [0.1, 0.2]
+    assert got["tps"][1]["a"]["r"] == map_annotations.DEFAULT_STATION_RADIUS and got["colors"] == []  # ancienne classe « tp » ignorée
+    with pytest.raises(ValueError):
+        map_annotations.validate({"tps": [{"a": {"x": 0.1, "y": 0.2, "r": 0.5}, "b": pair["b"]}]})
 
 
 def test_a_thin_wall_coloured_line_under_a_tp_arrow_becomes_floor_but_a_thick_wall_does_not():
@@ -128,14 +127,58 @@ def test_a_thin_wall_coloured_line_under_a_tp_arrow_becomes_floor_but_a_thick_wa
     assert not w2[30, 30]
 
 
-def test_doors_are_walkable_and_the_door_line_is_drawn_walkable():
+def test_door_colours_are_walkable():
     labels = np.full((40, 40), map_annotations.CODES["mur"], np.uint8)
     labels[10:12, 10:30] = map_annotations.CODES["porte"]
     labels[20:22, 10:30] = map_annotations.CODES["porte_vitre"]
     walk = map_annotations.walkable_from_classes(labels)
     assert walk[10, 20] and walk[20, 20]
-    map_annotations.draw_doors(walk, [{"from": [0.1, 0.8], "to": [0.9, 0.8], "glass": False}])
-    assert walk[31, 20]
+
+
+def test_drawn_doors_open_a_wall_but_windows_stay_closed_even_under_a_tp_arrow():
+    labels = np.full((60, 60), map_annotations.CODES["mur"], np.uint8)
+    labels[:, :25] = map_annotations.CODES["sol"]
+    labels[:, 35:] = map_annotations.CODES["sol"]  # deux sols séparés par un mur de 10 pixels
+    doors = [
+        {"from": [0.4, 0.2], "to": [0.6, 0.2], "kind": "porte", "glass": False, "side": 0},
+        {"from": [0.4, 0.5], "to": [0.6, 0.5], "kind": "porte", "glass": True, "side": 1},
+        {"from": [0.4, 0.8], "to": [0.6, 0.8], "kind": "fenetre", "glass": False, "side": -1},
+    ]
+    map_annotations.burn_shapes(labels, doors, [])
+    assert labels[12, 30] == map_annotations.CODES["porte"] and labels[30, 30] == map_annotations.CODES["porte_vitre"] and labels[47, 30] == map_annotations.CODES["vue"]
+    walk = map_annotations.walkable_from_classes(labels)
+    assert walk[12, 30] and walk[30, 30] and not walk[47, 30]
+    map_annotations.open_tp_paths(walk, [{"from": [0.0, 0.8], "to": [1.0, 0.8]}])
+    walk &= ~map_annotations._line_layer(walk.shape, [d for d in doors if d["kind"] == "fenetre"])
+    assert not walk[47, 30]
+
+
+def test_capture_squares_are_playable_ground_but_walls_inside_stay_walls():
+    labels = np.zeros((50, 50), np.uint8)  # rien de classé : la teinte du carré n'est celle d'aucun sol choisi
+    labels[24:26, 20:30] = map_annotations.CODES["mur"]  # mur classé dans le carré
+    wall = {"from": [0.3, 0.6], "to": [0.7, 0.6], "kind": "mur", "glass": False, "side": 0}  # mur tracé dans le carré
+    map_annotations.burn_shapes(labels, [wall], [map_annotations.validate({"capture": [[0.2, 0.2, 0.8, 0.8]]})["capture"][0]])
+    walk = map_annotations.walkable_from_classes(labels)
+    assert walk[22, 22] and not walk[5, 5]  # le carré est jouable, le reste non
+    assert not walk[24, 25]  # le mur classé reste un mur
+    assert not walk[round(0.6 * 49), 25]  # le trait de mur tracé aussi
+    with pytest.raises(ValueError):
+        map_annotations.validate({"capture": [[0.6, 0.4, 0.4, 0.6]]})
+    with pytest.raises(ValueError):
+        map_annotations.validate({"capture": [[[0.1, 0.1], [0.2, 0.2]]]})  # moins de 3 points
+    # forme libre : un « L » ouvert d'un côté, jouable seulement à l'intérieur de la forme
+    l_shape = [[0.2, 0.2], [0.5, 0.2], [0.5, 0.5], [0.8, 0.5], [0.8, 0.8], [0.2, 0.8]]
+    labels = np.zeros((50, 50), np.uint8)
+    map_annotations.burn_shapes(labels, [], [map_annotations.validate({"capture": [l_shape]})["capture"][0]])
+    walk = map_annotations.walkable_from_classes(labels)
+    assert walk[35, 15] and walk[15, 15] and walk[35, 35] and not walk[15, 40]
+    got = map_annotations.validate({"doors": [{"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "fenetre", "glass": True, "side": 5}]})
+    assert got["doors"][0] == {"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "fenetre", "glass": False, "side": 0}
+    one_way = map_annotations.validate({"doors": [
+        {"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "porte", "glass": True, "side": 1},
+        {"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "porte", "glass": False, "side": 1},
+    ]})["doors"]
+    assert [d["side"] for d in one_way] == [1, 0]  # sens unique : fenêtre ou porte vitrée seulement
 
 
 def test_validate_refuses_three_spawn_zones_for_a_team_and_unknown_classes():
@@ -151,7 +194,7 @@ def test_validate_refuses_three_spawn_zones_for_a_team_and_unknown_classes():
 
 def test_apply_writes_mask_walls_teleports_spawns_and_doors(tmp_path, monkeypatch):
     monkeypatch.setattr(map_annotations, "MASK_DIR", tmp_path)
-    for name in ("TELEPORTS", "SPAWNS", "INSETS", "DOORS"):
+    for name in ("TELEPORTS", "SPAWNS", "INSETS", "DOORS", "STATIONS", "CAPTURE"):
         monkeypatch.setattr(map_annotations, name, tmp_path / f"{name}.json")
     img = np.zeros((50, 50, 3), np.uint8)
     img[:, :] = (0, 0, 200)  # BGR : rouge = mur
@@ -162,19 +205,22 @@ def test_apply_writes_mask_walls_teleports_spawns_and_doors(tmp_path, monkeypatc
     conn.execute("CREATE TABLE map_annotations (map TEXT PRIMARY KEY, data TEXT NOT NULL, updated TEXT)")
     data = {
         "colors": [{"rgb": [90, 90, 90], "tol": 5, "cls": "sol"}, {"rgb": [200, 0, 0], "tol": 5, "cls": "mur"}],
-        "tps": [{"from": [0.2, 0.2], "to": [0.8, 0.8]}],
-        "doors": [{"from": [0.1, 0.5], "to": [0.9, 0.5], "glass": True}],
+        "tps": [{"a": {"x": 0.2, "y": 0.2, "r": 0.03, "angle": 90}, "b": {"x": 0.8, "y": 0.8, "r": 0.03, "angle": None}}],
+        "doors": [{"from": [0.1, 0.5], "to": [0.9, 0.5], "kind": "fenetre", "glass": False, "side": 1}],
+        "capture": [[0.45, 0.45, 0.55, 0.55]],
         "spawns": {"A": [[0.1, 0.1, 0.2, 0.2]], "B": [[0.7, 0.7, 0.8, 0.8], [0.1, 0.7, 0.2, 0.8]]},
         "inset": {"l": 0.01, "t": 0.02, "r": 0.03, "b": 0.04},
     }
     conn.execute("INSERT INTO map_annotations VALUES ('Test', ?, NULL)", (json.dumps(data),))
     summary = map_annotations.apply(conn, "Test")
-    assert summary["tyroliennes"] == 1 and summary["portes"] == 1 and summary["alignement"]
+    assert summary["tyroliennes"] == 1 and summary["fenetres"] == 1 and summary["zones_de_capture"] == 1 and summary["alignement"]
     mask = cv2.imread(str(tmp_path / "Test.png"), cv2.IMREAD_GRAYSCALE)
-    assert mask.shape == (400, 400) and mask[200, 200] == 255 and mask[10, 10] == 0
+    assert mask.shape == (400, 400) and mask[150, 200] == 255 and mask[10, 10] == 0
+    assert mask[200, 200] == 0  # la fenêtre tracée au milieu ne se traverse pas
     assert cv2.imread(str(tmp_path / "Test_lignes.png"), cv2.IMREAD_GRAYSCALE)[10, 10] == 255
     assert json.loads((tmp_path / "SPAWNS.json").read_text())["Test"]["B"] == [[0.7, 0.7, 0.8, 0.8], [0.1, 0.7, 0.2, 0.8]]
     assert json.loads((tmp_path / "TELEPORTS.json").read_text())["Test"] == [[[0.2, 0.2], [0.8, 0.8]]]
+    assert json.loads((tmp_path / "STATIONS.json").read_text())["Test"][0]["a"]["angle"] == 90.0
     (tmp_path / "SPAWNS.json").write_text(json.dumps({"Test": {"A": [0.0, 0.0, 0.1, 0.1], "B": [0.9, 0.9, 1.0, 1.0]}}))
     only_a = dict(data, spawns={"A": [[0.1, 0.1, 0.2, 0.2]], "B": []})
     conn.execute("UPDATE map_annotations SET data = ? WHERE map = 'Test'", (json.dumps(only_a),))
