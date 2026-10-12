@@ -8,6 +8,7 @@ import { builtinMaps } from '../../lib/builtinMaps';
 import {
   addSpawn,
   alignmentError,
+  completePair,
   closesPolygon,
   pixelColor,
   polygonFromRect,
@@ -94,13 +95,14 @@ export function MapMapping({ map }: { map: string }) {
   };
 
   // Tyrolienne : cercle (glisser du centre au bord), puis un clic donne la direction d'entrée et de sortie (un clic dans le cercle : aucune direction) ; deux stations font une paire.
-  const finishStation = (p: Point) => {
+  const finishStation = (p: Point | 'opposite') => {
     const d = draftRef.current;
     const c = d.circle;
     if (!c) return;
-    const station = { x: c.c[0], y: c.c[1], r: c.r, angle: stationAngle(c.c, p, c.r, aspect) };
+    const station = { x: c.c[0], y: c.c[1], r: c.r, angle: p === 'opposite' ? null : stationAngle(c.c, p, c.r, aspect) };
     if (d.first) {
-      const pair = { a: d.first, b: station };
+      // règle des 180 degrés : les deux stations d'une tyrolienne ont des directions opposées
+      const pair = completePair(d.first, station);
       update((a) => ({ ...a, tps: [...a.tps, pair] }));
       setDraft(NO_DRAFT);
     } else {
@@ -154,6 +156,8 @@ export function MapMapping({ map }: { map: string }) {
   const onUp = (p: Pixel) => {
     const d = draftRef.current;
     if (tool === 'tps' && d.circle && !d.awaitingDirection) {
+      // la première station a une direction : celle de la seconde est l'opposée, inutile de la cliquer
+      if (d.first && d.first.angle !== null) return finishStation('opposite');
       return setDraft({ ...d, awaitingDirection: true, cursor: p.frac });
     }
     if ((tool === 'capture' || tool === 'spawns') && d.rect && d.anchor) {
@@ -208,8 +212,8 @@ export function MapMapping({ map }: { map: string }) {
   if (tool === 'capture') hint = draft.poly.length > 0 ? `Forme libre : ${draft.poly.length} point(s). Clique les autres coins ; un clic sur le premier point (ou « Fermer la forme ») la ferme.` : 'Glisse pour un rectangle, ou clique les coins d\'une forme libre (le point n\'est pas toujours un carré fermé).';
   if (tool === 'tps') {
     if (draft.awaitingDirection) hint = "Clique par où l'on entre et l'on sort de la tyrolienne (un clic dans le cercle : aucune direction).";
-    else if (draft.first) hint = "Station posée. Glisse du centre au bord de l'autre station pour tracer son cercle.";
-    else hint = "Glisse du centre au bord d'une station de tyrolienne pour tracer son cercle, puis clique sa direction. Deux stations font une tyrolienne, valable dans les deux sens.";
+    else if (draft.first) hint = "Station posée. Glisse du centre au bord de l'autre station pour tracer son cercle (sa direction se déduit de la première : 180 degrés).";
+    else hint = "Glisse du centre au bord d'une station de tyrolienne pour tracer son cercle, puis clique sa direction. Deux stations font une tyrolienne, valable dans les deux sens ; la direction de la seconde est toujours l'opposée de la première (180 degrés).";
   } else if (tool === 'openings') {
     if (draft.segment) hint = "Clique le côté d'où l'on voit à travers (sens unique).";
     else if (draft.pending) hint = "Clique l'autre bout du trait.";

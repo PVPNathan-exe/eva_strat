@@ -103,9 +103,18 @@ def test_classify_uses_the_nearest_colour_within_its_tolerance():
 
 def test_station_pairs_keep_radius_and_direction_and_old_arrows_are_still_read():
     pair = {"a": {"x": 0.1, "y": 0.2, "r": 0.03, "angle": 450}, "b": {"x": 0.8, "y": 0.9, "r": 0.02, "angle": None}}
+    # règle des 180 degrés : cliquées à la main, deux directions ne sont jamais exactement opposées
+    assert map_annotations.opposite_angles(90.0, None) == (90.0, 270.0) and map_annotations.opposite_angles(None, 300.0) == (120.0, 300.0)
+    assert map_annotations.opposite_angles(None, None) == (None, None)
+    a, b = map_annotations.opposite_angles(320.0, 153.0)  # écart réel de 167 degrés : réparti entre les deux (13 degrés d'écart à 180, 6,5 chacun)
+    assert abs(a - 326.5) < 1e-6 and abs(b - 146.5) < 1e-6
+    a, b = map_annotations.opposite_angles(350.0, 190.0)  # autour de 0 et 360
+    assert abs(a - 0.0) < 1e-6 or abs(a - 360.0) < 1e-6
+    again = map_annotations.validate({"tps": [{"a": {"x": 0.1, "y": 0.2, "r": 0.03, "angle": 320.0}, "b": {"x": 0.8, "y": 0.9, "r": 0.02, "angle": 153.0}}]})["tps"][0]
+    assert abs((again["b"]["angle"] - again["a"]["angle"]) % 360 - 180) < 1e-6
     old = {"from": [0.3, 0.3], "to": [0.6, 0.6]}
     got = map_annotations.validate({"tps": [pair, old], "colors": [{"rgb": [1, 2, 3], "cls": "tp"}]})
-    assert got["tps"][0]["a"]["angle"] == 90.0 and got["tps"][0]["b"]["angle"] is None and got["tps"][0]["from"] == [0.1, 0.2]
+    assert got["tps"][0]["a"]["angle"] == 90.0 and got["tps"][0]["b"]["angle"] == 270.0 and got["tps"][0]["from"] == [0.1, 0.2]
     assert got["tps"][1]["a"]["r"] == map_annotations.DEFAULT_STATION_RADIUS and got["colors"] == []  # ancienne classe « tp » ignorée
     with pytest.raises(ValueError):
         map_annotations.validate({"tps": [{"a": {"x": 0.1, "y": 0.2, "r": 0.5}, "b": pair["b"]}]})
@@ -151,6 +160,21 @@ def test_drawn_doors_open_a_wall_but_windows_stay_closed_even_under_a_tp_arrow()
     map_annotations.open_tp_paths(walk, [{"from": [0.0, 0.8], "to": [1.0, 0.8]}])
     walk &= ~map_annotations._line_layer(walk.shape, [d for d in doors if d["kind"] == "fenetre"])
     assert not walk[47, 30]
+
+
+def test_spawn_rectangles_are_playable_ground():
+    labels = np.zeros((50, 50), np.uint8)
+    labels[10:12, 5:15] = map_annotations.CODES["mur"]
+    map_annotations.burn_shapes(labels, [], [], {"A": [[0.1, 0.1, 0.3, 0.5]], "B": []})
+    walk = map_annotations.walkable_from_classes(labels)
+    assert walk[20, 10] and not walk[10, 10] and not walk[40, 40]  # le départ est jouable, un mur classé dedans reste un mur
+
+
+def test_station_discs_are_playable_ground():
+    labels = np.zeros((50, 100), np.uint8)
+    map_annotations.burn_shapes(labels, [], [], None, [{"x": 0.5, "y": 0.5, "r": 0.05, "angle": None}])
+    walk = map_annotations.walkable_from_classes(labels)
+    assert walk[25, 50] and walk[25, 53] and not walk[25, 60] and not walk[2, 2]  # rayon : 5 % de la largeur (5 pixels), cercle rond
 
 
 def test_capture_squares_are_playable_ground_but_walls_inside_stay_walls():

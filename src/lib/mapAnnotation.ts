@@ -94,7 +94,7 @@ function readPair(t: unknown): TeleportPair | null {
   if (v?.a) {
     const a = readStation(v.a);
     const b = readStation(v.b);
-    return a && b ? { a, b } : null;
+    return a && b ? balancePair({ a, b }) : null;
   }
   if (isPoint(v?.from) && isPoint(v?.to)) {
     return { a: { x: v.from[0], y: v.from[1], r: DEFAULT_STATION_RADIUS, angle: null }, b: { x: v.to[0], y: v.to[1], r: DEFAULT_STATION_RADIUS, angle: null } };
@@ -184,6 +184,34 @@ export function classifyImage(rgba: Uint8ClampedArray, colors: PickedColor[]): U
     }
   }
   return labels;
+}
+
+/** Direction opposée (180 degrés d'écart), entre 0 et 360. */
+export const oppositeAngle = (angle: number) => (angle + 180) % 360;
+
+/**
+ * Tyrolienne à partir de ses deux stations, avec la règle des 180 degrés : les directions des deux stations sont opposées. Si l'une des deux est donnée, l'autre s'en déduit
+ * (la première est prioritaire) ; si aucune n'est donnée, la paire n'a pas de direction.
+ */
+export function completePair(a: Station, b: Station): TeleportPair {
+  if (a.angle !== null) return { a, b: { ...b, angle: oppositeAngle(a.angle) } };
+  if (b.angle !== null) return { a: { ...a, angle: oppositeAngle(b.angle) }, b };
+  return { a, b };
+}
+
+/** Moyenne circulaire (degrés, 0 à 360) de deux directions ; la première si elles sont exactement opposées. */
+const circularMean = (u: number, v: number) => {
+  const x = Math.cos((u * Math.PI) / 180) + Math.cos((v * Math.PI) / 180);
+  const y = Math.sin((u * Math.PI) / 180) + Math.sin((v * Math.PI) / 180);
+  return Math.abs(x) + Math.abs(y) < 1e-9 ? u : (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+};
+
+/** Même règle pour une paire lue du serveur (deux directions cliquées à la main, jamais exactement opposées) : l'écart est réparti entre les deux stations. */
+export function balancePair(pair: TeleportPair): TeleportPair {
+  const { a, b } = pair;
+  if (a.angle === null || b.angle === null) return completePair(a, b);
+  const mean = circularMean(a.angle, oppositeAngle(b.angle));
+  return { a: { ...a, angle: mean }, b: { ...b, angle: oppositeAngle(mean) } };
 }
 
 /** Rayon (fraction de la largeur) d'un cercle de station tiré du centre au point `edge`, pour une image de `aspect` = largeur / hauteur ; borné ; DEFAULT_STATION_RADIUS si trop petit. */

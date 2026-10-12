@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addSpawn, alignmentError, closesPolygon, sideOf, stationAngle, visionArrow, stationRadius, classifyImage, rectFrom, sanitize, solveAlignment, upsertColor, type PickedColor } from '../../src/lib/mapAnnotation.ts';
+import { addSpawn, alignmentError, balancePair, completePair, closesPolygon, sideOf, stationAngle, visionArrow, stationRadius, classifyImage, rectFrom, sanitize, solveAlignment, upsertColor, type PickedColor } from '../../src/lib/mapAnnotation.ts';
 
 const px = (...rgbs: number[][]) => Uint8ClampedArray.from(rgbs.flatMap((c) => [...c, 255]));
 
@@ -68,7 +68,7 @@ test('sanitize écarte les valeurs invalides et borne les zones de départ', () 
   assert.equal(a.colors[0].tol, 120);
   assert.equal(a.tps.length, 2); // une ancienne flèche et une paire valides ; flèche hors image et rayon trop grand refusés
   assert.equal(a.tps[1].a.angle, 270);
-  assert.equal(a.tps[1].b.angle, null);
+  assert.equal(a.tps[1].b.angle, 90); // la seconde station prend l'opposée de la première (règle des 180 degrés)
   assert.equal(a.doors[0].glass, true);
   assert.equal(a.doors[0].kind, 'porte');
   assert.deepEqual([a.doors[1].kind, a.doors[1].glass, a.doors[1].side], ['fenetre', false, -1]); // une fenêtre n'est pas une porte vitrée
@@ -125,4 +125,18 @@ test('un clic sur le premier point ferme la forme libre, seulement avec 3 points
   const three: [number, number][] = [...two, [0.5, 0.5]];
   assert.equal(closesPolygon(three, [0.205, 0.21], 2), true);
   assert.equal(closesPolygon(three, [0.4, 0.4], 2), false);
+});
+
+test('les deux stations d\'une tyrolienne ont des directions opposées (180 degrés)', () => {
+  const a = { x: 0.1, y: 0.1, r: 0.02, angle: 90 };
+  const b = { x: 0.9, y: 0.9, r: 0.02, angle: null };
+  assert.equal(completePair(a, b).b.angle, 270); // la seconde se déduit de la première
+  assert.equal(completePair({ ...a, angle: 300 }, b).b.angle, 120); // on repasse par 0 et 360
+  assert.equal(completePair({ ...a, angle: null }, { ...b, angle: 45 }).a.angle, 225); // première sans direction : elle se déduit de la seconde
+  const both = completePair({ ...a, angle: 10 }, { ...b, angle: 100 }); // deux directions à la création : la première l'emporte
+  assert.equal(both.b.angle, 190);
+  const read = balancePair({ a: { ...a, angle: 320 }, b: { ...b, angle: 153 } }); // paire relue : l'écart de 13 degrés est réparti
+  assert.ok(Math.abs((read.a.angle ?? 0) - 326.5) < 1e-9 && Math.abs((read.b.angle ?? 0) - 146.5) < 1e-9);
+  const none = completePair(a && { ...a, angle: null }, b);
+  assert.deepEqual([none.a.angle, none.b.angle], [null, null]);
 });

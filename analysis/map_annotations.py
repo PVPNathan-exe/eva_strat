@@ -11,9 +11,9 @@ L'utilisateur choisit des couleurs à la pipette (au pixel près) sur la médian
   porte       porte hachurée : on la traverse (praticable) ;
   porte_vitre porte avec une vitre : on la traverse et on voit à travers.
 Les portes, les fenêtres et les murs se tracent aussi en traits (extrémité à extrémité) : une porte (vitrée ou non) est rendue praticable, une fenêtre est « vue seulement » (ni passage ni
-tir), un trait de mur est infranchissable (mur dans un carré de capture) ; l'une comme l'autre peut être à sens unique (on ne voit à travers que d'un côté, noté `side`). Les zones des points de capture (forme libre : le carré n'est pas toujours fermé, comme sur Polaris) sont jouables : sol sous les pixels sans classe, les murs classés ou tracés dedans restent des murs.
+tir), un trait de mur est infranchissable (mur dans un carré de capture) ; l'une comme l'autre peut être à sens unique (on ne voit à travers que d'un côté, noté `side`). Les zones des points de capture (forme libre : le carré n'est pas toujours fermé, comme sur Polaris) sont jouables : sol sous les pixels sans classe, les murs classés ou tracés dedans restent des murs. Les zones de départ et les disques des stations de tyrolienne sont jouables de la même façon.
 Chaque pixel prend la classe de la couleur choisie la plus proche, à moins de la tolérance de cette couleur.
-Les tyroliennes sont des paires de cercles : une station chacun (centre, rayon, direction par laquelle on y entre ou on en sort), valables dans les deux sens. Le trait qui relie
+Les tyroliennes sont des paires de cercles : une station chacun (centre, rayon, direction par laquelle on y entre ou on en sort, les deux directions d'une paire étant à 180 degrés l'une de l'autre : l'écart est réparti entre les deux), valables dans les deux sens. Le trait qui relie
 les deux centres sur la minimap a souvent la couleur des murs : sous ce trait, les pixels non praticables entourés de sol sont rendus praticables (le trait ne coupe pas le sol),
 sans toucher aux vrais murs épais. Les zones de départ sont des rectangles (deux au plus par équipe), l'alignement sur le plan stratégique des paires de points (minimap, plan).
 Sorties : <Carte>.png (praticable : sol, portes, tracé des tyroliennes entouré de sol), <Carte>_lignes.png (murs), <Carte>_classes.png (toutes les classes), map_teleports.json
@@ -22,6 +22,7 @@ automatiques avaient trouvé."""
 
 import argparse
 import json
+import math
 import sqlite3
 import sys
 from pathlib import Path
@@ -101,16 +102,37 @@ def _line_layer(shape, segments):
     return layer > 0
 
 
-def burn_shapes(labels, doors, capture):
+def burn_shapes(labels, doors, capture, spawns=None, stations=None):
     """Grave dans l'image de classes ce qui est tracé à la main : carrés de capture (sol sous les seuls pixels sans classe : un mur, un tir par-dessus ou une vue seulement
     déjà classés dans le carré restent ce qu'ils sont), puis portes (porte, ou porte vitrée), fenêtres (vue seulement) et traits de mur."""
     h, w = labels.shape
+    # les zones de départ sont jouables aussi (teintées par l'équipe, leur couleur n'est pas celle du sol) : rectangles remplis comme les zones de capture
+    capture = list(capture) + [[[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]] for rects in (spawns or {}).values() for r in rects]
     for polygon in capture:
         shape = np.zeros((h, w), np.uint8)
         cv2.fillPoly(shape, [np.array([[round(x * (w - 1)), round(y * (h - 1))] for x, y in polygon], np.int32)], 255)
         labels[(shape > 0) & (labels == 0)] = CODES["sol"]
+    for s in stations or []:  # le disque d'une station de tyrolienne : on s'y tient avant de partir et on y arrive
+        shape = np.zeros((h, w), np.uint8)
+        cv2.circle(shape, (round(s["x"] * (w - 1)), round(s["y"] * (h - 1))), max(1, round(s["r"] * w)), 255, -1)
+        labels[(shape > 0) & (labels == 0)] = CODES["sol"]
     for kind, glass, code in (("porte", False, CODES["porte"]), ("porte", True, CODES["porte_vitre"]), ("fenetre", False, CODES["vue"]), ("mur", False, CODES["mur"])):
         labels[_line_layer(labels.shape, [d for d in doors if d["kind"] == kind and d["glass"] == glass])] = code
+
+
+def opposite_angles(a, b):
+    """Règle des 180 degrés : les directions des deux stations d'une tyrolienne sont opposées. Une seule donnée : l'autre s'en déduit ; deux données (cliquées à la main, rarement
+    à 180 degrés exactement) : moyenne circulaire de la première et de l'opposée de la seconde, les deux stations prennent cette direction et son opposée."""
+    if a is None and b is None:
+        return None, None
+    if a is None:
+        return (b + 180) % 360, b
+    if b is None:
+        return a, (a + 180) % 360
+    x = math.cos(math.radians(a)) + math.cos(math.radians(b + 180))
+    y = math.sin(math.radians(a)) + math.sin(math.radians(b + 180))
+    mean = a if abs(x) + abs(y) < 1e-9 else math.degrees(math.atan2(y, x)) % 360
+    return mean, (mean + 180) % 360
 
 
 def _station(s):
@@ -130,6 +152,7 @@ def _pair(t, unit):
         a, b = (_station({"x": p[0], "y": p[1], "r": DEFAULT_STATION_RADIUS}) for p in (t["from"], t["to"]))
     else:
         raise ValueError(f"tyrolienne invalide : {t}")
+    a["angle"], b["angle"] = opposite_angles(a["angle"], b["angle"])
     return {"a": a, "b": b, "from": [a["x"], a["y"]], "to": [b["x"], b["y"]]}
 
 
@@ -217,7 +240,7 @@ def apply(conn, map_name):
     summary = {"map": map_name}
     if data["colors"] or data["capture"] or data["doors"]:
         labels = classify(median, data["colors"])
-        burn_shapes(labels, data["doors"], data["capture"])
+        burn_shapes(labels, data["doors"], data["capture"], data["spawns"], [s for t in data["tps"] for s in (t["a"], t["b"])])
         walk = walkable_from_classes(labels)
         open_tp_paths(walk, data["tps"])
         walk &= ~_line_layer(walk.shape, [d for d in data["doors"] if d["kind"] != "porte"])  # fenêtres et traits de mur ne se traversent pas, même sous une flèche de tyrolienne
