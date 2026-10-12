@@ -72,7 +72,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 - `ingest.py` : source (fichier ou URL yt-dlp). `segments.py` et `timer.py` : games d'après le chrono. `mapname.py` : nom de la carte. `names.py` : pseudos.
 - `banners.py` : vivant ou mort, joueur observé. `loadout.py` : armes et gadget de chaque joueur. `capture.py` : pourcentages de capture.
 - `killfeed.py` : kills (texte lu par OCR, puis pseudos reconnus par leur aspect quand le texte échoue). `weapons.py` : modèles d'icônes (W killfeed, B armes, G gadgets), netteté (`edge_width`).
-- `minimap.py` : pastilles sur la minimap. `positions.py` : lectures régulières. `tracking.py` (598 lignes) : suivi dans le temps et attribution des joueurs 1 à 8.
+- `minimap.py` : pastilles sur la minimap. `positions.py` : lectures régulières. `tracking.py` : suivi dans le temps, attribution des joueurs 1 à 8 et passes finales (aller-retour, lecture isolée, pas impossible, lissage, séparation des joueurs ; tests dans `analysis/tests/test_postpasses.py`).
 - `ocr.py` et `ocr_win.ps1` : reconnaissance de texte de Windows. `recap.py` : bilan de qualité par game.
 - `icon_fix.py` : recalcul des icônes (`candidates`, `rebuild` avec marge élargie, `audit`, `guess`).
 - Outils : `tune.py` (réglage du suivi), `evaluate.py` (accord avec les bandeaux, positions manquantes, sauts, test de trous simulés `--gap-test`), `benchmark.py` (vitesse), `build_templates.py` (chiffres du chrono).
@@ -140,7 +140,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 
 ## Fichiers à surveiller (plus de 400 lignes)
 
-- `analysis/tracking.py` (598) : séparer trajectoires, vote des joueurs et paramètres.
+- `analysis/tracking.py` : séparer trajectoires, vote des joueurs et paramètres.
 - `src/components/analysis/ReplayPanel.tsx` (549) : extraire cadrage, horloge de lecture et dessin du plan.
 - `src/components/MapCanvas.tsx` (516) : un module par outil de dessin et la sélection à part.
 - `analysis/db.py` (402) : répartir les requêtes par domaine (games, kills, positions, commentaires).

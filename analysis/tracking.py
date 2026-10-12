@@ -478,19 +478,25 @@ ANCHOR_WINDOW_S = 3.0  # un disque blanc sans numéro est comparé aux images o�
 ANCHOR_BOTH = (0.08, 0.10)  # tolérance (relative à la minimap) entre deux ancres : base, plus ceci par seconde d'écart à la plus proche
 ANCHOR_ONE = (0.06, 0.25)  # ... avec une seule ancre d'un côté : un joueur qui court peut s'éloigner de 0,25 par seconde
 STATION_NEIGHBOUR_FRAMES = 15  # image sans joueur observé unique : on prend celui des images voisines (jusqu'à cet écart) pour écarter les disques de stations
+STATION_ARRIVAL = 0.08  # ses lectures voisines sont à moins de cela de la station : il y est arrivé à pied
 STATION_NEAR = 0.04  # un disque blanc à moins de cela d'une extrémité de tyrolienne, sans ancre, est le décor de la station
 
 
-def _is_foreign_white(d, observed):
-    """Vrai si la pastille blanche n'est pas le joueur observé : d'une autre équipe, ou portant le numéro d'un autre joueur."""
+def _is_foreign_white(d, observed, t=None, anchors=None):
+    """Vrai si la pastille blanche n'est pas le joueur observé : d'une autre équipe, ou portant le numéro d'un autre joueur. Un disque de la bonne équipe dont le
+    chiffre est mal lu (le 8 lu 6) reste le joueur observé s'il colle à ses lectures numérotées voisines (anchors)."""
     team = "A" if observed <= 4 else "B"
-    return not (d["team"] == team and d.get("number") in (None, _number_of(observed)))
+    if d["team"] != team:
+        return True
+    if d.get("number") in (None, _number_of(observed)):
+        return False
+    return not (anchors and _anchor_ok(d, t, anchors))
 
 
-def _without_foreign_white(dets, observed):
+def _without_foreign_white(dets, observed, t=None, anchors=None):
     """Seul le joueur observé est un disque blanc vivant : les autres disques blancs sont des joueurs morts qui attendent leur réapparition, ou des icônes de
     stations de tyrolienne. Ils ne sont pas des joueurs en jeu et ne doivent pas être suivis (le 9 était attribué au disque d'attente du 7 mort)."""
-    return [d for d in dets if not (d.get("spectated") and _is_foreign_white(d, observed))]
+    return [d for d in dets if not (d.get("spectated") and _is_foreign_white(d, observed, t, anchors))]
 
 
 def _observed_between(fi, single, nearest):
@@ -518,9 +524,11 @@ def _anchor_ok(d, t, anchors):
     near = [a for a in anchors if abs(a[0] - t) <= ANCHOR_WINDOW_S]
     here = (d["x"], d["y"])
     if not near:
-        return not any(math.hypot(here[0] - p[0], here[1] - p[1]) <= STATION_NEAR for pair in _TELEPORTS for p in pair)
+        return not _on_station(d)
     if any(_tp_linked((a[1], a[2]), here) for a in near):
         return True
+    if _on_station(d):  # une icône de station n'est le joueur que s'il vient de la rejoindre à pied (ses lectures voisines sont à côté) : le 2 posé sur une station alors qu'il était sur le point
+        return any(math.hypot(here[0] - a[1], here[1] - a[2]) <= STATION_ARRIVAL for a in near)
     before = max((a for a in near if a[0] <= t), key=lambda a: a[0], default=None)
     after = min((a for a in near if a[0] > t), key=lambda a: a[0], default=None)
     if before and after:
@@ -573,7 +581,7 @@ def anchor_spectated(frames, states, spawns=None):
             # stations qui ne sont pas lui sont retirés (le plus proche voisin)
             effective = _observed_between(fi, single, nearest)
             if effective is not None:
-                dets = _without_foreign_white(dets, effective)
+                dets = _without_foreign_white(dets, effective, t, anchors.get(effective, []))
             elif _TELEPORTS:
                 j = min(nearest, key=lambda k: abs(k - fi))
                 if abs(j - fi) <= STATION_NEIGHBOUR_FRAMES:
@@ -583,16 +591,23 @@ def anchor_spectated(frames, states, spawns=None):
             continue
         slot = watched[0]
         team = "A" if slot <= 4 else "B"
-        dets = _without_foreign_white(dets, slot)
+        dets = [d for d in dets if not (d.get("spectated") and d["team"] != team)]  # un disque blanc de l'autre équipe n'est jamais l'observé
         cands = [d for d in dets if d.get("spectated") and d["team"] == team and d.get("alive", True)]
         mine_waiting = [d for d in waits if d["team"] == team]
+        slot_anchors = anchors.get(slot, [])
+        has_anchors = any(abs(a[0] - t) <= ANCHOR_WINDOW_S for a in slot_anchors)
         pick = next((d for d in cands if d.get("number") == _number_of(slot)), None)
         if pick is None:  # le joueur observé attend peut-être dans sa zone de départ : son disque porte son numéro
             pick = next((d for d in mine_waiting if d.get("number") == _number_of(slot) and d.get("verified")), None)
             if pick is not None:
                 dets = dets + [pick]
-        if pick is None and len(cands) == 1 and not _is_other_player(cands[0], slot) and _anchor_ok(cands[0], t, anchors.get(slot, [])):
+        if pick is None and has_anchors:  # chiffre mal lu (le 8 lu 6) : le disque qui colle à ses lectures numérotées voisines est lui
+            coherent = [d for d in cands if _anchor_ok(d, t, slot_anchors)]
+            if len(coherent) == 1:
+                pick = coherent[0]
+        elif pick is None and len(cands) == 1 and not _is_other_player(cands[0], slot) and _anchor_ok(cands[0], t, slot_anchors):
             pick = cands[0]
+        dets = [d for d in dets if not (d.get("spectated") and d is not pick and d["team"] == team and d.get("number") not in (None, _number_of(slot)))]  # autre numéro : joueur mort qui attend
         if pick is None and not cands:
             mine = [d for d in waits if d["team"] == team]
             dead = sum(1 for s, v in states[fi].items() if (s <= 4) == (team == "A") and not v["alive"])
@@ -924,7 +939,7 @@ def share_stacks(rows, runs, tracks, put):
                     continue  # une autre trajectoire place déjà ce joueur par ici
                 if run is not None and not read_near and (current is None or current[8] < READ_MIN_CONF) and _read_near_stack(rows, other, k, d["x"], d["y"]):
                     mine[k] = t
-                    put(k, other, t.team, d["x"], d["y"], d.get("angle"), True, CONF_STACK)
+                    put(k, other, t.team, d["x"], d["y"], None, True, CONF_STACK)  # son regard est inconnu : on ne copie pas celui du coéquipier
                     placed += 1
     return placed
 
@@ -981,7 +996,7 @@ def _angdist(a, b):
     return abs((a - b + 180) % 360 - 180)
 
 
-WALL_WEIGHT = 0.8  # coût d'un regard qui donne dans un mur à bout portant (la carte des passages le dit) : on regarde où l'on voit, pas contre un mur
+WALL_WEIGHT = 0.4  # coût d'un regard qui donne dans un mur à bout portant (la carte des passages le dit) : on regarde où l'on voit, pas contre un mur
 WALL_LOOK = 0.06  # distance (relative à la minimap) examinée devant le joueur
 
 
@@ -1107,6 +1122,29 @@ def _add_known_deaths(rows, deaths, times, step_s, put):
             if cur and cur[7] and math.hypot(cur[4] - last[4], cur[5] - last[5]) > DEATH_NEAR_DIST:
                 break  # il est déjà revenu en vie, ailleurs
             put(k, slot, last[3], last[4], last[5], None, False, CONF_VOTE * 0.9)
+
+
+def _add_banner_deaths(rows, dead, times, step_s, put):
+    """Le bandeau grisé d'un joueur marque sa mort à l'image près, souvent avant que la croix de la minimap soit lue (croix cachée, ou lue 1 s plus tard).
+    Entre la mort du bandeau et la première croix, le joueur est posé mort à sa dernière position vivante : plus de trou ni de joueur qui disparaît."""
+    ordered = sorted(times)
+    span = max(1, round(DEATH_SHOWN_S / step_s))
+    for slot, frames in dead.items():
+        for f0 in sorted(frames):
+            if f0 - 1 in frames or f0 - 1 not in times:
+                continue  # pas le début d'une mort
+            before = next(((k, rows[(k, slot)]) for k in range(f0 - 1, f0 - 1 - round(3.0 / step_s), -1) if (k, slot) in rows and rows[(k, slot)][7]), None)
+            if before is None:
+                continue
+            last = before[1]
+            for k in range(f0, f0 + span):
+                if k not in times or k not in frames:
+                    break
+                cur = rows.get((k, slot))
+                if cur is not None and not cur[7]:
+                    break  # la croix de la minimap prend le relais
+                if cur is None:
+                    put(k, slot, last[3], last[4], last[5], None, False, CONF_VOTE * 0.9)
 
 
 def _between_angle(smooth, idx, k):
@@ -1327,9 +1365,211 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
         runs = alive_runs(states, dead)
         recover_from_unused(rows, runs, frames, states, step_s, put, contaminated)
         share_stacks(rows, runs, placed, put)
+        drop_isolated_reads(rows)
+        drop_impossible_moves(rows, step_s)
         bridge_gaps(rows, runs, step_s, put)
     _add_known_deaths(rows, deaths or [], times, step_s, put)
+    _add_banner_deaths(rows, dead, times, step_s, put)
+    remove_excursions(rows, step_s)
+    smooth_unsure(rows)
+    separate_players(rows)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
+
+
+IMPOSSIBLE_V_MS = 14.0  # un pas plus rapide que cela (hors tyrolienne) n'est pas un déplacement : une des deux lectures est fausse
+IMPOSSIBLE_MAX_BLOCK_S = 3.0  # on ne retire que des blocs de lectures peu sûres plus courts que cela
+
+
+def drop_impossible_moves(rows, step_s):
+    """Deux lectures successives d'un même joueur à plus de IMPOSSIBLE_V_MS l'une de l'autre (hors tyrolienne) : la moins sûre est fausse (le 4 « se téléporte »
+    sur le point de capture 0,1 s après être resté à côté du 2 : une pastille sans numéro lui avait été attribuée par élimination). Le bloc de lectures peu sûres
+    (confiance sous READ_MIN_CONF) auquel elle appartient est retiré ; le trou est comblé ensuite. Deux lectures sûres ne sont jamais touchées."""
+    max_block = round(IMPOSSIBLE_MAX_BLOCK_S / step_s)
+    dropped = 0
+    for _ in range(3):
+        changed = False
+        by_slot = {}
+        for (k, slot), r in rows.items():
+            if r[7]:
+                by_slot.setdefault(slot, []).append(k)
+        for slot, frames in by_slot.items():
+            frames.sort()
+            for k0, k1 in zip(frames, frames[1:]):
+                if (k0, slot) not in rows or (k1, slot) not in rows:
+                    continue
+                p, q = rows[(k0, slot)], rows[(k1, slot)]
+                if _tp_linked((p[4], p[5]), (q[4], q[5])):
+                    continue
+                dist = math.hypot((q[4] - p[4]) * ARENA_M[0], (q[5] - p[5]) * ARENA_M[1])
+                if dist / max((k1 - k0) * step_s, step_s) <= IMPOSSIBLE_V_MS:
+                    continue
+                weak, start = (p, k0) if p[8] < q[8] else (q, k1)
+                if weak[8] >= READ_MIN_CONF:
+                    continue
+                step = -1 if weak is p else 1  # le bloc s'étend à partir de la lecture douteuse, du côté opposé à l'autre lecture
+                block, k = [], start
+                while (k, slot) in rows and rows[(k, slot)][7] and rows[(k, slot)][8] < READ_MIN_CONF and len(block) <= max_block:
+                    block.append(k)
+                    k += step
+                if len(block) > max_block:
+                    continue
+                for k in block:
+                    del rows[(k, slot)]
+                    dropped += 1
+                changed = True
+        if not changed:
+            break
+    return dropped
+
+
+ISOLATED_MAX_ROWS = 4  # un groupe de lectures de cette taille ou moins, loin des autres, est suspect
+ISOLATED_MIN_GAP = 3  # images de vide de chaque côté pour qu'un groupe soit isolé
+ISOLATED_DETOUR = 2.5  # passer par ce groupe allonge le trajet de plus de ce facteur (plus ISOLATED_SLACK) : lecture d'un autre joueur, ou chiffre mal lu
+ISOLATED_SLACK = 0.12
+
+
+def drop_isolated_reads(rows):
+    """Une lecture isolée (1 à 3 images) loin des lectures voisines du même joueur, qui forcerait un aller-retour (« le 4 saute à l'autre bout de la carte
+    une demi-seconde, puis revient ») est un chiffre mal lu : on la retire, le trou est comblé ensuite comme un autre. Les trajets par tyrolienne sont laissés."""
+    by_slot = {}
+    for (k, slot), r in rows.items():
+        if r[7]:
+            by_slot.setdefault(slot, []).append(k)
+    dropped = 0
+    for slot, frames in by_slot.items():
+        frames.sort()
+        groups = [[frames[0]]]
+        for k in frames[1:]:
+            if k == groups[-1][-1] + 1:
+                groups[-1].append(k)
+            else:
+                groups.append([k])
+        big = [g for g in groups if len(g) > ISOLATED_MAX_ROWS]
+        for g in groups:
+            if len(g) > ISOLATED_MAX_ROWS:
+                continue
+            before = [b for b in big if b[-1] < g[0]]
+            after = [b for b in big if b[0] > g[-1]]
+            if not before or not after or g[0] - before[-1][-1] < ISOLATED_MIN_GAP or after[0][0] - g[-1] < ISOLATED_MIN_GAP:
+                continue
+            a, b = rows[(before[-1][-1], slot)], rows[(after[0][0], slot)]
+            for k in g:
+                p = rows[(k, slot)]
+                if _tp_linked((a[4], a[5]), (p[4], p[5])) or _tp_linked((p[4], p[5]), (b[4], b[5])):
+                    continue
+                via = math.hypot(p[4] - a[4], p[5] - a[5]) + math.hypot(b[4] - p[4], b[5] - p[5])
+                if via > ISOLATED_DETOUR * math.hypot(b[4] - a[4], b[5] - a[5]) + ISOLATED_SLACK:
+                    del rows[(k, slot)]
+                    dropped += 1
+    return dropped
+
+
+EXC_MAX_S = 8.0  # aller-retour : un joueur qui part et revient dans ce temps...
+EXC_DEVIATION = 0.06  # ... en s'écartant d'au moins cela (relatif à la minimap)...
+EXC_RETURN = 0.10  # ... et revient à moins de cela de son point de départ, sans lecture sûre pendant l'écart : écart inventé par un trou mal comblé
+
+
+def remove_excursions(rows, step_s):
+    """Un joueur sans lecture sûre qui s'écarte puis revient près de son point de départ n'a pas fait ce voyage : le trou (« le 4 part tout seul vers le camp ennemi
+    puis revient ») est refermé par une ligne droite entre le dernier point sûr avant et le premier après. Les trajets par une tyrolienne sont laissés."""
+    by_slot = {}
+    for (k, slot), r in rows.items():
+        if r[7]:
+            by_slot.setdefault(slot, {})[k] = r
+    max_len = round(EXC_MAX_S / step_s)
+    fixed = 0
+    for slot, seq in by_slot.items():
+        frames = sorted(seq)
+        i = 0
+        while i < len(frames):
+            if seq[frames[i]][8] >= READ_MIN_CONF:
+                i += 1
+                continue
+            j = i
+            while j + 1 < len(frames) and frames[j + 1] == frames[j] + 1 and seq[frames[j + 1]][8] < READ_MIN_CONF:
+                j += 1
+            run = frames[i : j + 1]
+            before, after = seq.get(frames[i] - 1), seq.get(frames[j] + 1)
+            if before and after and len(run) <= max_len and before[8] >= READ_MIN_CONF and after[8] >= READ_MIN_CONF:
+                a, b = (before[4], before[5]), (after[4], after[5])
+                ride = any(_tp_linked((seq[p][4], seq[p][5]), (seq[q][4], seq[q][5])) for p, q in zip([frames[i] - 1] + run, run + [frames[j] + 1]) if p in seq and q in seq)
+                if not ride and math.hypot(a[0] - b[0], a[1] - b[1]) <= EXC_RETURN and max(math.hypot(seq[k][4] - a[0], seq[k][5] - a[1]) for k in run) >= EXC_DEVIATION:
+                    for n, k in enumerate(run):
+                        f = (n + 1) / (len(run) + 1)
+                        r = rows[(k, slot)]
+                        rows[(k, slot)] = r[:4] + (round(a[0] + (b[0] - a[0]) * f, 4), round(a[1] + (b[1] - a[1]) * f, 4)) + r[6:]
+                    fixed += 1
+            i = j + 1
+    return fixed
+
+
+SMOOTH_FRAMES = 3  # images de chaque côté dont la médiane remplace une position non sûre
+SMOOTH_MAX_MOVE = 0.08  # on ne déplace pas une position de plus que cela (un vrai déplacement n'est pas lissé)
+
+
+def smooth_unsure(rows):
+    """Positions non sûres (trous comblés, pastilles récupérées) : médiane des positions voisines du même joueur (lectures sûres comprises). Un joueur qui ne
+    bouge pas ne « téléporte » plus d'un point à l'autre autour de son point fixe ; les lectures sûres ne sont jamais modifiées."""
+    snapshot = {key: (r[4], r[5]) for key, r in rows.items() if r[7]}
+    for (k, slot), r in list(rows.items()):
+        if not r[7] or r[8] >= READ_MIN_CONF:
+            continue
+        around = [snapshot[(k + j, slot)] for j in range(-SMOOTH_FRAMES, SMOOTH_FRAMES + 1) if (k + j, slot) in snapshot and math.hypot(snapshot[(k + j, slot)][0] - r[4], snapshot[(k + j, slot)][1] - r[5]) <= 2 * SMOOTH_MAX_MOVE]
+        if len(around) < 3:
+            continue
+        mx = sorted(p[0] for p in around)[len(around) // 2]
+        my = sorted(p[1] for p in around)[len(around) // 2]
+        if math.hypot(mx - r[4], my - r[5]) <= SMOOTH_MAX_MOVE:
+            rows[(k, slot)] = r[:4] + (round(mx, 4), round(my, 4)) + r[6:]
+
+
+MIN_SEPARATION = 0.035  # deux joueurs ne se superposent pas complètement : deux joueurs lus avec certitude ne sont jamais plus proches que 0,04 (0,1 % des cas)
+
+
+def separate_players(rows):
+    """Deux joueurs vivants ne peuvent pas occuper le même point. Le moins sûr des deux est écarté de MIN_SEPARATION, dans une direction propre à son joueur (stable
+    d'une image à l'autre, donc sans clignotement) et praticable si la carte des passages est connue. Les lectures sûres ne sont jamais déplacées."""
+    by_frame = {}
+    for (k, slot), r in rows.items():
+        if r[7]:
+            by_frame.setdefault(k, []).append(slot)
+    moved = 0
+    for k, slots in sorted(by_frame.items()):
+        if len(slots) < 2:
+            continue
+        for _ in range(3):  # trois joueurs superposés : plusieurs passes
+            changed = False
+            for i in range(len(slots)):
+                for j in range(i + 1, len(slots)):
+                    a, b = rows[(k, slots[i])], rows[(k, slots[j])]
+                    d = math.hypot(a[4] - b[4], a[5] - b[5])
+                    if d >= MIN_SEPARATION - 0.001:  # tolérance : les positions sont arrondies à 4 décimales
+                        continue
+                    # le moins sûr bouge ; à confiance égale, le joueur de plus grand numéro
+                    mover, other = (b, a) if (b[8], -b[2]) < (a[8], -a[2]) else (a, b)
+                    if mover[8] >= READ_MIN_CONF and other[8] >= READ_MIN_CONF:
+                        continue  # deux lectures sûres : ce sont des mesures, on n'y touche pas
+                    # parmi les points à MIN_SEPARATION de l'autre joueur, le plus proche de la position du même joueur à l'image d'avant (sinon de la sienne) :
+                    # pas de saut d'un côté à l'autre quand ils se frôlent
+                    prev = rows.get((k - 1, mover[2]))
+                    ref = (prev[4], prev[5]) if prev is not None and prev[7] else (mover[4], mover[5])
+                    best = None
+                    for n in range(16):
+                        ang = n * math.pi / 8
+                        cx, cy = other[4] + MIN_SEPARATION * math.cos(ang), other[5] + MIN_SEPARATION * math.sin(ang)
+                        if 0 <= cx <= 1 and 0 <= cy <= 1 and on_walkable((cx, cy)):
+                            dist = math.hypot(cx - ref[0], cy - ref[1])
+                            if best is None or dist < best[0]:
+                                best = (dist, cx, cy)
+                    if best is None:
+                        continue
+                    nx, ny = best[1], best[2]
+                    rows[(k, mover[2])] = mover[:4] + (round(nx, 4), round(ny, 4)) + mover[6:]
+                    moved += 1
+                    changed = True
+            if not changed:
+                break
+    return moved
 
 
 # ---------- réglages ----------
@@ -1353,7 +1593,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 31  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 32  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

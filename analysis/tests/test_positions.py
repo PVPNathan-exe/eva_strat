@@ -266,3 +266,40 @@ def test_superposition_confirms_a_position_only_where_the_real_minimap_shows_a_d
     assert not superpose.supported(hsv, row("A", 100, 200), False)  # rien à cet endroit
     assert not superpose.supported(hsv, row("A", 300, 80), False)  # un disque blanc ne confirme pas un joueur ordinaire
     assert superpose.supported(hsv, row("A", 300, 80), True)  # mais confirme le joueur observé
+
+
+def test_a_capture_percentage_never_drops_and_a_long_gap_between_equal_values_is_constant():
+    import capture
+
+    values = [10, 10, None, None, None, 10, 11, 12, 13, 5, 14, None, None, None, None, None, None, 20]
+    out = dict(capture.clean_series([(float(t), v) for t, v in enumerate(values)], 1.0))
+    assert out[3.0] == 10  # trou de 3 secondes entre deux 10 : constant
+    assert out[9.0] >= 13  # le 5 juste après un 13 est une lecture fausse : remplacée par une valeur qui ne baisse pas
+    assert 14 <= out[14.0] <= 20  # un long trou entre 14 et 20 est comblé en montant
+
+
+def test_pale_end_of_game_digits_are_accepted_only_if_they_extend_the_last_reading(monkeypatch):
+    import capture
+
+    def fake(crop, team, templates, min_score=capture.MIN_SCORE, min_margin=capture.MIN_MARGIN):
+        sure, pale = crop
+        if sure is not None:
+            return sure
+        return pale if min_score < capture.MIN_SCORE else None
+
+    monkeypatch.setattr(capture, "read_value", fake)
+    crops = [(0.0, (90, None)), (1.0, (91, None)), (2.0, (None, 92)), (3.0, (None, 55)), (4.0, (None, 94))]
+    out = dict(capture.read_series(crops, "A", {}))
+    assert out[2.0] == 92 and out[4.0] == 94  # prolongent la lecture
+    assert out[3.0] != 55  # une baisse n'est pas acceptée
+
+
+def test_a_white_disc_with_a_misread_digit_stays_the_observed_player_when_it_follows_the_anchors():
+    anchors = [(9.0, 0.52, 0.44), (11.0, 0.52, 0.44)]
+    misread = {"x": 0.52, "y": 0.44, "team": "B", "number": 6, "spectated": True}
+    far = {"x": 0.20, "y": 0.80, "team": "B", "number": 6, "spectated": True}
+    other_team = {"x": 0.52, "y": 0.44, "team": "A", "number": 8, "spectated": True}
+    assert not tracking._is_foreign_white(misread, 7, 10.0, anchors)  # le 8 (créneau 7) lu 6, collé à ses lectures
+    assert tracking._is_foreign_white(far, 7, 10.0, anchors)  # un autre joueur, ailleurs
+    assert tracking._is_foreign_white(other_team, 7, 10.0, anchors)  # l'autre équipe : jamais l'observé
+    assert tracking._is_foreign_white(misread, 7)  # sans lectures voisines, un autre numéro reste un autre joueur
