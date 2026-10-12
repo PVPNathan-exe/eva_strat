@@ -288,3 +288,25 @@ test('les noms des équipes d\'une game se saisissent et se lisent, et un diminu
   handleApi(ctx, 'PUT', '/api/teams', q(), { tag: 'SNV', name: '' });
   assert.deepEqual(handleApi(ctx, 'GET', '/api/teams', q(), undefined).json, {});
 });
+
+
+test('GET /api/flags renvoie les positions non confirmées et le joueur observé', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  handleApi(ctx, 'POST', '/api/games', q(), { video_id: videoId, start_s: 100, end_s: 700 });
+  const id = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { id: number }[])[0].id;
+  ctx.db.prepare("INSERT INTO sample_flags (game_id, frame, slot, flag) VALUES (?, 12, 3, 'unconfirmed')").run(id);
+  ctx.db.prepare('INSERT INTO observed_segments (game_id, slot, t0, t1) VALUES (?, 8, 114.6, 166.1)').run(id);
+  const res = handleApi(ctx, 'GET', '/api/flags', q(`game=${id}`), undefined);
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(JSON.stringify(res.json)), { unconfirmed: [[12, 3]], observed: [{ slot: 8, t0: 114.6, t1: 166.1 }] });
+  assert.equal(handleApi(ctx, 'GET', '/api/flags', q(), undefined).status, 400);
+});
+
+test('GET /api/reliability renvoie la carte de fiabilité fournie, ou null', () => {
+  const ctx = testContext();
+  assert.equal(handleApi(ctx, 'GET', '/api/reliability', q('map=Polaris'), undefined).json, null);
+  ctx.reliability = (map) => (map === 'Polaris' ? { map, grid: 16, cells: [] } : null);
+  assert.deepEqual(handleApi(ctx, 'GET', '/api/reliability', q('map=Polaris'), undefined).json, { map: 'Polaris', grid: 16, cells: [] });
+  assert.equal(handleApi(ctx, 'GET', '/api/reliability', q('map=../x'), undefined).status, 400);
+});

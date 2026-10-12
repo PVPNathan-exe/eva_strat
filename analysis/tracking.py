@@ -1035,6 +1035,7 @@ def bridge_gaps(rows, runs, step_s, put):
 
 SKEW_FULL = 0.25  # asymétrie à partir de laquelle le sens est considéré comme sûr
 MOVE_WEIGHT = 1.5  # poids du critère « le regard suit le déplacement » dans le choix du sens
+GAZE_DOUBT_SKEW = 0.4  # poids de la forme d'un disque dans une case où les regards se lisent mal (carte de fiabilité)
 OBSERVED_FOLLOW_SPEED = 0.03  # vitesse (relative à la minimap, par seconde) à partir de laquelle le regard du joueur observé suit son cap
 MOVE_BREAK_DIST = 0.12  # un pas plus grand entre deux lectures successives coupe la trajectoire pour mesurer le cap
 MOVE_MIN_SPEED = 0.02  # en dessous, le joueur est à l'arrêt : son regard n'a aucun lien avec un déplacement
@@ -1286,7 +1287,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1299,6 +1300,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     ne crée pas de trajectoire et ne sert pas à récupérer une pastille sans numéro.
     spawns : {"A": (x0, y0, x1, y1), "B": ...} zones de départ de la carte (facultatif) : un disque blanc « qui attend » hors de la zone de départ de son équipe
     (la boîte de capture de Polaris) est un joueur en jeu, pas un mort.
+    reliability : {"grid": n, "gaze": {(i, j)}} cases de la carte où la forme des disques a donné de mauvais regards (reliability.py) : la forme y pèse moins que le cap et le camp ennemi.
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
@@ -1389,6 +1391,11 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                 if k in moves and t.pts[k].get("spectated") and moves[k][1] >= OBSERVED_FOLLOW_SPEED:
                     heading = moves[k][0]
                     obs[k] = (heading % 180, (1.0 if heading < 180 else -1.0) * SKEW_FULL)
+            if reliability and reliability.get("gaze"):  # zone où les disques se lisent mal : la forme décide moins
+                g = reliability["grid"]
+                for k in list(obs):
+                    if (min(g - 1, int(t.pts[k]["x"] * g)), min(g - 1, int(t.pts[k]["y"] * g))) in reliability["gaze"]:
+                        obs[k] = (obs[k][0], obs[k][1] * GAZE_DOUBT_SKEW)
             chosen = _choose_directions(obs, moves, {k: (t.pts[k]["x"], t.pts[k]["y"]) for k in idx}, enemy_heading.get(t.team))
             smooth = _smooth_angles({k: chosen.get(k) for k in idx}, half)
             for k in idx:

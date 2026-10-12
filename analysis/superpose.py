@@ -74,8 +74,17 @@ def check(video, game, zone, width, height, step_s, row_sets, states=None, every
                 res["lues"] += read
                 if not ok:
                     res["lues_non_confirmees" if read else "autres_non_confirmees"] += 1
-                    res["liste"].append((round(t - game["start_s"], 1), row[2], round(row[4], 2), round(row[5], 2), round(row[8], 2), len(watched) == 1 and watched[0] == row[2]))
+                    res["liste"].append((round(t - game["start_s"], 1), row[2], round(row[4], 2), round(row[5], 2), round(row[8], 2), len(watched) == 1 and watched[0] == row[2], fi))
     return out
+
+
+def store_flags(conn, game, video, width, height, step_s, states):
+    """Contrôle toutes les positions enregistrées d'une game à la vraie minimap et enregistre celles qui ne sont pas confirmées (le site les cercle en rouge).
+    game : ligne de games (id, start_s, end_s, map) ; states : états des bandeaux de la lecture. Renvoie le nombre de positions non confirmées."""
+    stored = [(r["frame"], 0.0, r["slot"], r["team"], r["x"], r["y"], r["angle"], r["alive"], r["confidence"]) for r in conn.execute("SELECT * FROM samples WHERE game_id = ?", (game["id"],))]
+    result = check(video, game, db.zone_for(conn, game["map"], "minimap"), width, height, step_s, {"base": stored}, states, every_s=step_s)["base"]
+    db.replace_flags(conn, game["id"], "unconfirmed", [(r[6], r[1]) for r in result["liste"]])
+    return len(result["liste"])
 
 
 def report(name, res):
@@ -91,6 +100,7 @@ def main(argv=None):
     parser.add_argument("--db", default="data/eva.db")
     parser.add_argument("--game", type=int, required=True)
     parser.add_argument("--rows", default=None, help="fichier pickle de lignes du suivi à comparer à celles de la base")
+    parser.add_argument("--store", action="store_true", help="contrôle toutes les images et enregistre dans la base les positions non confirmées (affichées par le site)")
     args = parser.parse_args(argv)
     conn = db.connect(args.db)
     g = dict(conn.execute("SELECT g.*, v.path, v.width, v.height, v.fps FROM games g JOIN videos v ON v.id = g.video_id WHERE g.id = ?", (args.game,)).fetchone())
@@ -100,9 +110,14 @@ def main(argv=None):
     if args.rows:
         sets["autres"] = pickle.load(open(args.rows, "rb"))
     states = evaluate._load(conn, g, step)["states"]
-    results = check(g["path"], g, db.zone_for(conn, g["map"], "minimap"), g["width"], g["height"], step, sets, states)
+    every = step if args.store else 1.0  # --store : toutes les images (le site marque chaque position)
+    results = check(g["path"], g, db.zone_for(conn, g["map"], "minimap"), g["width"], g["height"], step, sets, states, every_s=every)
     for name, res in results.items():
         report(name, res)
+    if args.store:
+        bad = results["base"]["liste"]
+        db.replace_flags(conn, args.game, "unconfirmed", [(r[6], r[1]) for r in bad])
+        print(f"{len(bad)} positions non confirmées enregistrées pour la game {args.game}")
     return 0
 
 

@@ -58,6 +58,23 @@ CREATE TABLE IF NOT EXISTS samples (
   PRIMARY KEY (game_id, frame, slot)
 );
 
+-- Positions calculées que la vraie minimap ne confirme pas (superpose.py) : le joueur est placé là où aucune pastille de son équipe n'existe.
+CREATE TABLE IF NOT EXISTS sample_flags (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  frame INTEGER NOT NULL,
+  slot INTEGER NOT NULL,
+  flag TEXT NOT NULL,
+  PRIMARY KEY (game_id, frame, slot, flag)
+);
+
+-- Joueur observé (cadre blanc du bandeau) au cours de la game : un intervalle par période, temps de la vidéo.
+CREATE TABLE IF NOT EXISTS observed_segments (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL,
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL
+);
+
 -- Pseudos des 8 joueurs d'une game (slot 1 à 4 : équipe de gauche, 5 à 8 : équipe de droite), lus sur les bandeaux.
 CREATE TABLE IF NOT EXISTS players (
   game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,

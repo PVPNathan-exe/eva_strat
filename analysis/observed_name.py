@@ -122,3 +122,34 @@ def fuse_observed(states, name_slots):
             v["spectated"] = s == name
         stats["ajoutes"] += 1
     return states, stats
+
+
+MIN_SEGMENT_S = 1.0  # une période d'observation plus courte que cela, entre deux autres, est un clignotement du cadre blanc
+
+
+def observed_segments(states, times, min_s=MIN_SEGMENT_S):
+    """Joueur observé au cours de la game : [(slot, t0, t1)] en temps de vidéo. states : {image: {slot: {"spectated"}}}, times : {image: temps}.
+    Les images sans joueur observé unique et les clignotements de moins de min_s sont absorbés par la période voisine quand ses deux bords sont d'accord."""
+    keys = sorted(states)
+    who = []
+    for k in keys:
+        flagged = [s for s, v in states[k].items() if v.get("spectated")]
+        who.append(flagged[0] if len(flagged) == 1 else None)
+    runs = []  # [slot, première, dernière]
+    for i, w in enumerate(who):
+        if runs and runs[-1][0] == w:
+            runs[-1][2] = i
+        else:
+            runs.append([w, i, i])
+    step = (times[keys[-1]] - times[keys[0]]) / max(len(keys) - 1, 1) if len(keys) > 1 else 0.1
+    short = max(1, round(min_s / step))
+    for n in range(1, len(runs) - 1):  # un passage court encadré par le même joueur disparaît dans lui
+        if runs[n][2] - runs[n][1] + 1 < short and runs[n - 1][0] == runs[n + 1][0]:
+            runs[n][0] = runs[n - 1][0]
+    merged = []
+    for r in runs:
+        if merged and merged[-1][0] == r[0]:
+            merged[-1][2] = r[2]
+        else:
+            merged.append(list(r))
+    return [(w, times[keys[a]], times[keys[b]]) for w, a, b in merged if w is not None and times[keys[b]] - times[keys[a]] >= 0.0]

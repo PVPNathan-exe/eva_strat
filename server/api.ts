@@ -20,6 +20,8 @@ export interface ApiContext {
   mapZones?: Record<string, Partial<Zones>>;
   /** Noms donnés aux icônes d'armes (names.json) ; absent dans les tests qui n'en ont pas besoin. */
   weaponNames?: () => Record<string, string>;
+  /** Carte de fiabilité d'une carte du jeu (analysis/map_reliability/<Carte>.json), ou null. */
+  reliability?: (map: string) => unknown;
 }
 
 export interface ApiResult {
@@ -125,6 +127,8 @@ function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
   // Des bornes déplacées rendent les positions déjà lues caduques : elles seront relues à la prochaine analyse.
   if ('start_s' in body || 'end_s' in body) {
     ctx.db.prepare('DELETE FROM samples WHERE game_id = ?').run(id);
+    ctx.db.prepare('DELETE FROM sample_flags WHERE game_id = ?').run(id);
+    ctx.db.prepare('DELETE FROM observed_segments WHERE game_id = ?').run(id);
     ctx.db.prepare('DELETE FROM kills WHERE game_id = ?').run(id);
     ctx.db.prepare('DELETE FROM kills_meta WHERE game_id = ?').run(id);
     ctx.db.prepare("DELETE FROM capture_state WHERE game_id = ? AND point IN ('score_A', 'score_B')").run(id);
@@ -209,6 +213,21 @@ function listSamples(ctx: ApiContext, query: URLSearchParams): ApiResult {
     .prepare('SELECT frame, t, slot, team, x, y, angle, alive, confidence FROM samples WHERE game_id = ? ORDER BY frame, slot')
     .all(gameId);
   return reply(200, rows);
+}
+
+/** Positions que la vraie minimap ne confirme pas ([image, joueur]) et joueur observé au cours de la game. */
+function getFlags(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = Number(query.get('game'));
+  if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
+  const flags = ctx.db.prepare("SELECT frame, slot FROM sample_flags WHERE game_id = ? AND flag = 'unconfirmed' ORDER BY frame, slot").all(gameId) as { frame: number; slot: number }[];
+  const observed = ctx.db.prepare('SELECT slot, t0, t1 FROM observed_segments WHERE game_id = ? ORDER BY t0').all(gameId);
+  return reply(200, { unconfirmed: flags.map((f) => [f.frame, f.slot]), observed });
+}
+
+function getReliability(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const map = query.get('map');
+  if (!map || !/^[\w .-]+$/.test(map)) return fail('Paramètre map manquant');
+  return reply(200, ctx.reliability?.(map) ?? null);
 }
 
 function getCapture(ctx: ApiContext, query: URLSearchParams): ApiResult {
@@ -348,6 +367,8 @@ export function handleApi(
   }
   if (method === 'GET' && pathname === '/api/samples') return listSamples(ctx, query);
   if (method === 'GET' && pathname === '/api/capture') return getCapture(ctx, query);
+  if (method === 'GET' && pathname === '/api/flags') return getFlags(ctx, query);
+  if (method === 'GET' && pathname === '/api/reliability') return getReliability(ctx, query);
   if (pathname === '/api/comments') {
     if (method === 'GET') return listComments(ctx, query);
     if (method === 'POST') return createComment(ctx, payload);

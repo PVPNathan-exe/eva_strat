@@ -9,6 +9,8 @@ import type { VisionLayers } from '../../lib/vision';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game, Sample, Zone, Zones } from '../../types/analysis';
 import { ZONE_LABELS } from '../../types/analysis';
+import { flagKey, observedAt, unconfirmedSet, zoneCells } from '../../lib/replayFlags';
+import { useGameFlags } from './useGameFlags';
 
 const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
 const KILLFEED = { x: 0.78, y: 0.19, w: 0.22, h: 0.3 }; // même zone que analysis/killfeed.py
@@ -71,6 +73,10 @@ export function VisionOverlay({ width, height, layers }: { width: number; height
     };
   }, [gameId, hasSamples]);
 
+  const { flags, reliability } = useGameFlags(gameId ?? -1, game?.map ?? null, game?.samples ?? 0);
+  const unconfirmed = useMemo(() => unconfirmedSet(flags), [flags]);
+  const cells = useMemo(() => zoneCells(reliability), [reliability]);
+
   const byTime = useMemo(() => {
     const m = new Map<number, Sample[]>();
     for (const s of gameId !== null && hasSamples ? samples : []) m.set(s.t, [...(m.get(s.t) ?? []), s]);
@@ -86,6 +92,7 @@ export function VisionOverlay({ width, height, layers }: { width: number; height
   const t = nearest(times, time);
   const marks = t !== null && Math.abs(t - time) < 0.6 ? (byTime.get(t) ?? []) : [];
   const mini = rect(zones.minimap);
+  const observed = layers.controle ? observedAt(flags, time) : null;
 
   const recent = (game?.kills ?? []).filter((k) => k.t <= time + 0.3 && k.t >= time - 6);
 
@@ -132,18 +139,28 @@ export function VisionOverlay({ width, height, layers }: { width: number; height
           });
         })}
 
+      {layers.zonesFiables &&
+        cells.map((c) => (
+          <g key={`${c.x}-${c.y}`}>
+            {c.pos && <rect x={mini.x + c.x * mini.w} y={mini.y + c.y * mini.h} width={c.w * mini.w} height={c.h * mini.h} className="vision__zone-pos" />}
+            {c.gaze && <rect x={mini.x + c.x * mini.w + 2} y={mini.y + c.y * mini.h + 2} width={c.w * mini.w - 4} height={c.h * mini.h - 4} className="vision__zone-gaze" />}
+          </g>
+        ))}
+
       {layers.minimap &&
         marks.map((s) => {
           const cx = mini.x + s.x * mini.w;
           const cy = mini.y + s.y * mini.h;
           const color = TEAM_COLOR[s.team];
           const doubtful = (s.confidence ?? 1) < 0.6;
+          const unconfirmedMark = layers.controle && s.alive && unconfirmed.has(flagKey(s.frame, s.slot));
           const a = ((s.angle ?? 0) * Math.PI) / 180;
           return (
             <g key={s.slot}>
               {s.alive ? (
                 <>
-                  <circle cx={cx} cy={cy} r={11} fill="none" stroke={doubtful ? '#ffd166' : '#35e07a'} strokeWidth={2} strokeDasharray={doubtful ? '3 3' : undefined} />
+                  <circle cx={cx} cy={cy} r={11} fill="none" stroke={doubtful ? '#ffd166' : '#35e07a'} strokeWidth={2} strokeDasharray={doubtful ? '3 3' : undefined} className={unconfirmedMark ? 'vision__unconfirmed' : undefined} />
+                  {s.slot === observed && <circle cx={cx} cy={cy} r={16} fill="none" className="vision__observed" />}
                   {s.angle !== null && <line x1={cx} y1={cy} x2={cx + Math.cos(a) * 24} y2={cy + Math.sin(a) * 24} stroke="#fff" strokeWidth={2.5} />}
                 </>
               ) : (

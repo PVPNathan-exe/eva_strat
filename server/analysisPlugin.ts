@@ -172,6 +172,10 @@ export function analysisPlugin(): Plugin {
         defaultZones: JSON.parse(readFileSync(join(root, 'analysis', 'default_zones.json'), 'utf-8')) as Zones,
         mapZones: JSON.parse(readFileSync(join(root, 'analysis', 'map_zones.json'), 'utf-8')) as Record<string, Partial<Zones>>,
         weaponNames: () => effectiveNames(ctx.db, weaponsDir),
+        reliability: (map) => {
+          const file = join(root, 'analysis', 'map_reliability', `${map}.json`);
+          return existsSync(file) ? JSON.parse(readFileSync(file, 'utf-8')) : null;
+        },
       };
       const jobs = new JobManager();
 

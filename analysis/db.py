@@ -220,6 +220,16 @@ def spawns_for(map_name):
     return {team: tuple(rect) for team, rect in zones.items()}
 
 
+def reliability_for(map_name):
+    """Cases douteuses d'une carte (reliability.py) : {"grid": n, "gaze": {(i, j)}, "pos": {(i, j)}} ou None si la carte n'a pas de carte de fiabilité."""
+    import reliability
+
+    report = reliability.load(map_name) if map_name else None
+    if not report:
+        return None
+    return {"grid": report["grid"], "gaze": reliability.flagged_cells(report, "gaze"), "pos": reliability.flagged_cells(report, "pos")}
+
+
 def wall_lines_for(map_name):
     """Traits de murs d'une carte (tableau uint8) ou None : effacés de la minimap avant la recherche du disque du joueur observé (voir map_mask.py)."""
     import map_mask
@@ -290,6 +300,7 @@ def games_without_samples(conn, video_id, step_s=None, params_version=None, use_
 def replace_samples(conn, game_id, rows, params_version=0, with_kills=False):
     """Enregistre d'un seul bloc les positions d'une game (lignes : frame, t, slot, team, x, y, angle, alive, confiance)."""
     conn.execute("DELETE FROM samples WHERE game_id = ?", (game_id,))
+    conn.execute("DELETE FROM sample_flags WHERE game_id = ?", (game_id,))  # les positions changent : les contrôles à la minimap sont périmés
     conn.executemany(
         "INSERT OR REPLACE INTO samples (game_id, frame, t, slot, team, x, y, angle, alive, confidence) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -300,6 +311,24 @@ def replace_samples(conn, game_id, rows, params_version=0, with_kills=False):
         "INSERT OR REPLACE INTO samples_meta (game_id, params_version, with_kills, zone_key) VALUES (?, ?, ?, ?)",
         (game_id, params_version, int(with_kills), minimap_zone_key(conn, game["map"] if game else None)),
     )
+    conn.commit()
+
+
+def replace_flags(conn, game_id, flag, pairs):
+    """Enregistre les (image, joueur) marqués `flag` pour une game (remplace les précédents de ce type)."""
+    conn.execute("DELETE FROM sample_flags WHERE game_id = ? AND flag = ?", (game_id, flag))
+    conn.executemany("INSERT OR REPLACE INTO sample_flags (game_id, frame, slot, flag) VALUES (?, ?, ?, ?)", [(game_id, f, s, flag) for f, s in pairs])
+    conn.commit()
+
+
+def flags_of(conn, game_id, flag):
+    return [(r["frame"], r["slot"]) for r in conn.execute("SELECT frame, slot FROM sample_flags WHERE game_id = ? AND flag = ? ORDER BY frame, slot", (game_id, flag))]
+
+
+def replace_observed(conn, game_id, segments):
+    """Joueur observé au cours d'une game : segments [(slot, t0, t1)] en temps de vidéo."""
+    conn.execute("DELETE FROM observed_segments WHERE game_id = ?", (game_id,))
+    conn.executemany("INSERT INTO observed_segments (game_id, slot, t0, t1) VALUES (?, ?, ?, ?)", [(game_id, s, round(a, 2), round(b, 2)) for s, a, b in segments])
     conn.commit()
 
 

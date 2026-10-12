@@ -21,9 +21,11 @@ import killfeed
 import loadout
 import mapname
 import names
+import observed_name
 import ocr
 import positions
 import segments
+import superpose
 import timer
 import tracking
 import weapons
@@ -314,9 +316,13 @@ def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=pos
         scanned = conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (g["id"],)).fetchone() is not None
         deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, g["id"])]
         bars = (db.zone_for(conn, g["map"], "team_a_bar"), db.zone_for(conn, g["map"], "team_b_bar"))
-        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s, deaths=deaths, bars=bars, teleports=db.teleports_for(g["map"]), walk_points=db.map_points(conn, g["map"], g["id"]), walk_mask=db.walk_mask_for(g["map"]), spawns=db.spawns_for(g["map"]), walls=db.wall_lines_for(g["map"]), players=db.players_of(conn, g["id"]))
+        states = {}
+        rows = positions.read_game(path, g, zone, meta["width"], meta["height"], emit=progress, wait=lambda: wait_if_paused(control), step_s=step_s, deaths=deaths, bars=bars, teleports=db.teleports_for(g["map"]), walk_points=db.map_points(conn, g["map"], g["id"]), walk_mask=db.walk_mask_for(g["map"]), spawns=db.spawns_for(g["map"]), walls=db.wall_lines_for(g["map"]), players=db.players_of(conn, g["id"]), reliability=db.reliability_for(g["map"]), states_out=states)
         db.replace_samples(conn, g["id"], rows, tracking.PARAMS_VERSION, with_kills=scanned)
         db.apply_corrections(conn, g["id"])
+        if states:  # joueur observé au cours de la game, puis contrôle de chaque position à la vraie minimap (affichés par le site)
+            db.replace_observed(conn, g["id"], observed_name.observed_segments(states, {r[0]: r[1] for r in rows}))
+            superpose.store_flags(conn, g, path, meta["width"], meta["height"], step_s, states)
     return len(todo)
 
 

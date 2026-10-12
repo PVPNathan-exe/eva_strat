@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { CaptureSeries, CommentTag, IconWork, Correction, Game, JobEvent, Sample, Video, VideoComment, Weapon, Zones } from '../types/analysis';
+import type { CaptureSeries, CommentTag, IconWork, Correction, Game, GameFlags, JobEvent, Reliability, Sample, Video, VideoComment, Weapon, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -50,6 +50,8 @@ export const analysisApi = {
   patchComment: (id: number, patch: Partial<{ text: string; tag: CommentTag; resolved: boolean; slots: number[] }>) =>
     fetch(`/api/comments/${id}`, jsonInit('PATCH', patch)).then(parse<{ ok: true }>),
   deleteComment: (id: number) => fetch(`/api/comments/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
+  flags: (gameId: number) => fetch(`/api/flags?game=${gameId}`, { cache: 'no-store' }).then(parse<GameFlags>),
+  reliability: (map: string) => fetch(`/api/reliability?map=${encodeURIComponent(map)}`).then(parse<Reliability | null>),
   samples: (gameId: number) => fetch(`/api/samples?game=${gameId}`).then(parse<Sample[]>),
   createGame: (videoId: number, start: number, end: number, map?: string) =>
     fetch('/api/games', jsonInit('POST', { video_id: videoId, start_s: start, end_s: end, map })).then(parse<{ id: number }>),

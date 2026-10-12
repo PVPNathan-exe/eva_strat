@@ -130,6 +130,21 @@ export interface Sample {
   confidence: number | null;
 }
 
+/** Contrôle des positions à la vraie minimap et joueur observé (GET /api/flags). */
+export interface GameFlags {
+  unconfirmed: [number, number][]; // [image, joueur]
+  observed: { slot: number; t0: number; t1: number }[];
+}
+
+/** Carte de fiabilité d'une carte du jeu (analysis/reliability.py) : cases douteuses pour les positions et pour les regards. */
+export interface Reliability {
+  map: string;
+  grid: number;
+  rate_pos: number;
+  rate_gaze: number;
+  cells: { i: number; j: number; n: number; pos_rate: number; pos_flag: boolean; gaze_n: number; gaze_rate: number; gaze_flag: boolean }[];
+}
+
 export const ZONE_NAMES = ['minimap', 'capture_points', 'capture_pct_a', 'capture_pct_b', 'team_a_bar', 'team_b_bar', 'timer'] as const;
 export type ZoneName = (typeof ZONE_NAMES)[number];
 

@@ -38,7 +38,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 - `AnalysisPlan.tsx` : panneau « Analyse détaillée » : confirmation des bornes, games à analyser et leur ordre, lancement (étape 2).
 - `GameList.tsx` : games d'une vidéo, bornes, carte, confirmation, suppression. `GameTeams.tsx` : noms des équipes orange et bleue d'une game (saisis, avec proposition tirée des pseudos).
 - `SegmentTimeline.tsx` : frise des games. `VideoPlayer.tsx` : lecteur sur `/api/videos/:id/stream`. `PlayerControls.tsx` : barre de lecture.
-- `VisionOverlay.tsx` : calques « ce que voit le programme ». `CalibrationEditor.tsx` : zones du HUD par carte.
+- `VisionOverlay.tsx` : calques « ce que voit le programme » (dont le contrôle à la vraie minimap et les zones peu fiables). `useGameFlags.ts` : positions non confirmées, joueur observé et carte de fiabilité d'une game. `ReliabilityLayer.tsx` : cases douteuses sur le plan du replay. `CalibrationEditor.tsx` : zones du HUD par carte.
 - `ReplayPanel.tsx` (549 lignes) : rejeu des positions sur le plan de la carte.
 - `CommentsPanel.tsx` : commentaires liés à un instant, export texte.
 - `WeaponsTab.tsx` : onglet Armes (recalcul des floues et signalées, verrouillage des modèles).
@@ -47,7 +47,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 ### src/lib, src/store, src/types
 
 - `lib/analysisApi.ts` : client HTTP de l'onglet Analyse et `subscribeJob` (SSE). `lib/timeline.ts` : fonctions pures de temps. `lib/comments.ts` : catégories et export. `lib/teams.ts` : diminutif d'équipe proposé par les pseudos.
-- `lib/builtinMaps.ts`, `lib/storage.ts` (export JSON d'une carte), `lib/videoRef.ts` (référence au `<video>`), `lib/vision.ts` (calques).
+- `lib/replayFlags.ts` : fonctions pures du contrôle à la minimap, du joueur observé et des cases douteuses. `lib/builtinMaps.ts`, `lib/storage.ts` (export JSON d'une carte), `lib/videoRef.ts` (référence au `<video>`), `lib/vision.ts` (calques).
 - `lib/stuffs.ts` (371 lignes) : données des armes de l'onglet Stratégie. `lib/weaponCatalog.ts` : suggestions de noms. `lib/weaponNames.ts` : `canonicalName`.
 - `store/mapStore.ts` (284 lignes) : état Stratégie, persisté. `store/analysisStore.ts` : état Analyse (vidéos, games, analyse en cours, armes, commentaires), non persisté.
 - `types/analysis.ts`, `types/map.ts`, `types/stuff.ts` : types.
@@ -55,7 +55,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 ### src/styles
 
 Point d'entrée `index.css` (l'ordre des imports est l'ordre de la cascade). **Les couleurs sont dans `tokens.css`** : les changer là pour tout le site.
-`layout`, `tabs`, `toolbar`, `canvas`, `draw-toolbar`, `floor-selector`, `weapon-panel`, `icons`, `comments`, `replay`, `weapons-tab` (372 lignes), puis `analysis-shell`, `analysis-ingest`, `analysis-games`, `analysis-plan`, `analysis-player`, `analysis-timeline`, `analysis-vision`, `analysis-calibration`.
+`layout`, `tabs`, `toolbar`, `canvas`, `draw-toolbar`, `floor-selector`, `weapon-panel`, `icons`, `comments`, `replay`, `replay-flags` (contrôle, observé, zones peu fiables), `weapons-tab` (372 lignes), puis `analysis-shell`, `analysis-ingest`, `analysis-games`, `analysis-plan`, `analysis-player`, `analysis-timeline`, `analysis-vision`, `analysis-calibration`.
 
 ## server/
 
@@ -79,7 +79,8 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 - `reread_loadouts.py` : relit l'équipement d'une vidéo avec l'algorithme actuel et retire les icônes B et G devenues inutiles (sans nom, ni verrou, ni signalement).
 - `frame_noise.py` : contamination de couleur de la minimap (stries de lumière qui ressemblent à des joueurs), mesurée à partir d'une carte grossière des couleurs d'équipe gardée à chaque lecture (`minimap.coarse_colour_map`) ; le suivi n'y crée ni trajectoire ni croix sans numéro.
 - `observed_name.py` : pseudo du joueur observé lu en bas à droite de l'écran (images regroupées par ressemblance du texte, un représentant par groupe lu par la reconnaissance de texte de Windows) ; complète le cadre blanc des bandeaux, ne le contredit jamais.
-- `superpose.py` : vérifie le suivi en le superposant à la vraie minimap (une pastille de la couleur de l'équipe, ou un disque blanc pour l'observé, doit se trouver autour de chaque position) ; `python analysis/superpose.py --game 26 [--rows fichier.pkl]`, aucune écriture dans la base.
+- `reliability.py` : carte des cases de la carte où positions et regards sont peu fiables (`analysis/map_reliability/<Carte>.json`) ; `python analysis/reliability.py --map Polaris`, lue par `tracking.py` et affichée par le site.
+- `superpose.py` : vérifie le suivi en le superposant à la vraie minimap (une pastille de la couleur de l'équipe, ou un disque blanc pour l'observé, doit se trouver autour de chaque position) ; `python analysis/superpose.py --game 26 [--rows fichier.pkl]`, sans `--store`, aucune écriture dans la base ; avec `--store`, les positions non confirmées de toutes les images sont enregistrées (table `sample_flags`, affichées par le site). Le joueur observé est enregistré par périodes (table `observed_segments`) par `resolve.py` et par l'analyse.
 - `resolve.py` : refait le suivi des positions d'une vidéo déjà analysée sans relire la vidéo (lectures en cache de `evaluate.py`).
 - Données : `default_zones.json`, `map_teleports.json` (paires de stations de tyrolienne par carte : un joueur qui entre dans l'une ressort à l'autre), `map_spawns.json` (zones de départ par carte : un disque blanc « qui attend » hors de la zone de départ de son équipe, comme la boîte de capture de Polaris, est un joueur en jeu), `map_masks/<Carte>_lignes.png` (traits de murs blancs fixes de la minimap, retirés de la silhouette du disque du joueur observé avant de mesurer sa direction), `map_masks/` (masque des zones praticables par carte, image noir et blanc tirée de la médiane de la minimap, construit par `map_mask.py`, seulement pour les cartes dont le plan reste identique : Polaris), `map_zones.json` (minimap propre à chaque carte, entre la calibration de l'utilisateur et la zone par défaut), `tracking_params.json` (versionné), `*.npz` (modèles de chiffres et de croix), `weapon_icons/` (`names.json`, `reviews.json`, images), `map_names/`.
 - `analysis/tests/` : un `test_<module>.py` par module (`test_kills.py` fait 339 lignes).
@@ -132,6 +133,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 | GET, POST | `/api/games` | lister (`?video=`) ou créer |
 | PATCH, DELETE | `/api/games/:id` | modifier ou supprimer |
 | GET | `/api/samples?game=`, `/api/capture?game=` | positions, pourcentages de capture |
+| GET | `/api/flags?game=`, `/api/reliability?map=` | positions non confirmées et joueur observé, carte de fiabilité |
 | GET, POST | `/api/comments` | lister (`?video=`) ou créer |
 | PATCH, DELETE | `/api/comments/:id` | modifier ou supprimer |
 | GET, POST, DELETE | `/api/corrections`, `/api/corrections/:id` | corrections de joueurs |

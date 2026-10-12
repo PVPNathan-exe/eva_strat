@@ -106,3 +106,28 @@
   align-items: center;
   gap: 0.3rem;
 }
+
+/* Contrôle à la vraie minimap : une position sans pastille de son équipe autour est cerclée de rouge ; le joueur observé a un anneau blanc. */
+.vision__unconfirmed {
+  stroke: var(--c-danger);
+  stroke-width: 3.5;
+  stroke-dasharray: none;
+}
+
+.vision__observed {
+  stroke: var(--c-text);
+  stroke-width: 1.5;
+}
+
+.vision__zone-pos {
+  fill: color-mix(in srgb, var(--c-danger) 28%, transparent);
+  stroke: var(--c-danger-soft);
+  stroke-width: 0.5;
+}
+
+.vision__zone-gaze {
+  fill: none;
+  stroke: var(--c-amber);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 3;
+}

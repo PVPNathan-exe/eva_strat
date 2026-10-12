@@ -12,7 +12,7 @@ import { VisionOverlay } from './VisionOverlay';
 
 const LAYERS_KEY = 'eva_strat:vision';
 const ON_KEY = 'eva_strat:vision-on';
-const ALL_LAYERS: VisionLayers = { zones: true, minimap: true, bandeaux: true, killfeed: true };
+const ALL_LAYERS: VisionLayers = { zones: true, minimap: true, bandeaux: true, killfeed: true, controle: true, zonesFiables: false };
 
 function loadLayers(): VisionLayers {
   try {

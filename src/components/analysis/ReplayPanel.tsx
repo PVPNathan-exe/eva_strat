@@ -6,10 +6,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, Crosshair, Pause, Play, X } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { builtinMaps } from '../../lib/builtinMaps';
+import { flagKey, observedAt, unconfirmedSet } from '../../lib/replayFlags';
 import { formatTime } from '../../lib/timeline';
 import { getVideoElement } from '../../lib/videoRef';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { CaptureSeries, Correction, Game, Sample } from '../../types/analysis';
+import { ReliabilityLayer } from './ReliabilityLayer';
+import { useGameFlags } from './useGameFlags';
 
 const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
 const RATES = [0.5, 1, 2, 4, 8];
@@ -62,6 +65,7 @@ function frameIndexAt(frames: Frame[], t: number): number {
 }
 
 interface Shown {
+  frame: number;
   slot: number;
   team: 'A' | 'B';
   x: number;
@@ -93,7 +97,7 @@ function shownAt(frames: Frame[], t: number): Shown[] {
       y = s.y + (n.y - s.y) * k;
       if (s.angle !== null && n.angle !== null) angle = lerpAngle(s.angle, n.angle, k);
     }
-    out.push({ slot, team: s.team, x, y, angle, alive: !!s.alive, confidence: s.confidence });
+    out.push({ frame: s.frame, slot, team: s.team, x, y, angle, alive: !!s.alive, confidence: s.confidence });
   }
   return out;
 }
@@ -122,6 +126,9 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const [labels, setLabels] = useState(large); // pseudos affichés d'emblée dans la vue agrandie
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [inset, setInset] = useState<Inset>(() => loadInset(game.map ?? ''));
+  const [zonesPos, setZonesPos] = useState(false); // calque : positions peu fiables
+  const [zonesGaze, setZonesGaze] = useState(false); // calque : regards peu fiables
+  const [marks, setMarks] = useState(true); // anneau rouge sur les positions non confirmées par la vraie minimap
   const raf = useRef(0);
   // Position de la vidéo lue à chaque image affichée (et non toutes les ~250 ms comme l'événement timeupdate) : mouvement continu.
   const [live, setLive] = useState<number | null>(null);
@@ -130,6 +137,8 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const nameOf = useMemo(() => new Map(game.players.map((p) => [p.slot, p.name])), [game.players]);
   const plan = useMemo(() => builtinMaps.find((m) => m.name === game.map), [game.map]);
   const frames = useMemo(() => (samples ? groupFrames(samples) : []), [samples]);
+  const { flags, reliability } = useGameFlags(game.id, game.map, game.samples);
+  const unconfirmed = useMemo(() => unconfirmedSet(flags), [flags]);
 
   useEffect(() => {
     analysisApi
@@ -204,6 +213,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
 
   const time = follow ? Math.min(Math.max(live ?? currentTime, game.start_s), game.end_s) : t;
   const shown = useMemo(() => shownAt(frames, time).filter((p) => !hidden.has(p.slot)), [frames, time, hidden]);
+  const observed = observedAt(flags, time);
 
   const trailPaths = useMemo(() => {
     if (!trails || frames.length === 0) return [];
@@ -288,15 +298,16 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
             ))}
           </svg>
         )}
+        {(zonesPos || zonesGaze) && <ReliabilityLayer reliability={reliability} project={(x, y) => pos(inset, x, y)} showPos={zonesPos} showGaze={zonesGaze} />}
         {shown.map((p) => {
           const { x, y } = pos(inset, p.x, p.y);
           return (
             <div
               key={p.slot}
-              className={`replay__dot${p.alive ? '' : ' is-dead'}${(p.confidence ?? 1) < 0.5 ? ' is-unsure' : ''}${fixing ? ' is-pickable' : ''}${p.slot === pickA || p.slot === pickB ? ' is-picked' : ''}`}
+              className={`replay__dot${p.alive ? '' : ' is-dead'}${(p.confidence ?? 1) < 0.5 ? ' is-unsure' : ''}${marks && p.alive && unconfirmed.has(flagKey(p.frame, p.slot)) ? ' is-unconfirmed' : ''}${p.slot === observed ? ' is-observed' : ''}${fixing ? ' is-pickable' : ''}${p.slot === pickA || p.slot === pickB ? ' is-picked' : ''}`}
               onClick={fixing ? () => pick(p.slot) : undefined}
               style={{ left: `${x}%`, top: `${y}%`, ['--c' as string]: TEAM_COLOR[p.team] }}
-              title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.confidence !== null && p.confidence < 1 ? ` · fiabilité ${Math.round(p.confidence * 100)} %` : ''}`}
+              title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.slot === observed ? ' · observé dans la vidéo' : ''}${marks && p.alive && unconfirmed.has(flagKey(p.frame, p.slot)) ? ' · non confirmé par la vraie minimap' : ''}${p.confidence !== null && p.confidence < 1 ? ` · fiabilité ${Math.round(p.confidence * 100)} %` : ''}`}
             >
               {p.alive && p.angle !== null && <i className="replay__dir" style={{ transform: `rotate(${p.angle}deg)` }} />}
               <b>{p.alive ? numberOfSlot(p.slot) : <X className="ic" strokeWidth={3} />}</b>
@@ -346,7 +357,36 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           <input type="checkbox" checked={trails} onChange={(e) => setTrails(e.target.checked)} />
           Traînées
         </label>
+        <label title="Anneau rouge : la vraie minimap n'a aucune pastille de cette équipe autour de la position calculée">
+          <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} />
+          Non confirmés
+        </label>
+        {reliability && (
+          <>
+            <label title="Cases de la carte où les positions se calculent mal">
+              <input type="checkbox" checked={zonesPos} onChange={(e) => setZonesPos(e.target.checked)} />
+              Zones : positions
+            </label>
+            <label title="Cases de la carte où les regards se lisent mal">
+              <input type="checkbox" checked={zonesGaze} onChange={(e) => setZonesGaze(e.target.checked)} />
+              Zones : regards
+            </label>
+          </>
+        )}
+        {observed !== null && (
+          <span className="replay__observed">
+            Observé : n° {numberOfSlot(observed)}
+            {nameOf.get(observed) ? ` · ${nameOf.get(observed)}` : ''}
+          </span>
+        )}
       </div>
+      {(marks || zonesPos || zonesGaze) && (
+        <div className="replay__key">
+          {marks && <span><i className="key-unconfirmed" />position non confirmée par la vraie minimap</span>}
+          {zonesPos && <span><i className="key-zone-pos" />zone où les positions se calculent mal</span>}
+          {zonesGaze && <span><i className="key-zone-gaze" />zone où les regards se lisent mal</span>}
+        </div>
+      )}
 
       <div className="replay__legend">
         {slotsPresent.map((slot) => (
