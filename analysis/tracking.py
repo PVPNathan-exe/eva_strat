@@ -765,7 +765,30 @@ def _elimination_ok(t, same_slot, step_s):
 MIN_UNVOTED_POINTS = 4  # une trajectoire de moins de lectures n'est attribuée qu'à partir de numéros lus (vote), jamais par continuité ou élimination
 
 
-def _assign(alive_tracks, step_s, dead=None):
+WAITING_STILL = 0.03  # une trajectoire dont les points tiennent dans ce rayon (relatif à la minimap) est immobile
+
+
+def _waiting_like(t, spawns):
+    """Trajectoire sans numéro, immobile, entièrement dans la zone de départ de son équipe : le disque d'un coéquipier mort qui attend sa réapparition."""
+    if not spawns or t.votes or "A" not in spawns or t.team not in spawns:
+        return False
+    pts = list(t.pts.values())
+    xs, ys = [d["x"] for d in pts], [d["y"] for d in pts]
+    r = spawns[t.team]
+    return max(xs) - min(xs) <= WAITING_STILL and max(ys) - min(ys) <= WAITING_STILL and all(r[0] <= x <= r[2] and r[1] <= y <= r[3] for x, y in zip(xs, ys))
+
+
+def _ended_in_spawn(tracks, t, spawns):
+    """Vrai si la dernière trajectoire d'un joueur avant `t` finit dans la zone de départ de son équipe (il y était : le disque d'attente peut être lui)."""
+    before = [o for o in tracks if o.last <= t.first]
+    if not before:
+        return True  # aucune trajectoire avant : début de game, il est au départ
+    o = max(before, key=lambda o: o.last)
+    r = spawns[t.team]
+    return r[0] <= o.pos[0] <= r[2] and r[1] <= o.pos[1] <= r[3]
+
+
+def _assign(alive_tracks, step_s, dead=None, spawns=None):
     """Étape 2 : un joueur par trajectoire. dead : {slot: images où son bandeau est grisé} (facultatif)."""
     dead = dead or {}
     for team in ("A", "B"):
@@ -792,6 +815,8 @@ def _assign(alive_tracks, step_s, dead=None):
             progress = False
             for t in sorted(pending, key=lambda t: t.first):
                 cands = [s for s in slots if free(t, s)]
+                if _waiting_like(t, spawns):  # disque d'attente d'un mort : seul le joueur qui était au départ peut l'être, pas celui qui jouait ailleurs (le 9 collé au point de réapparition du 6)
+                    cands = [s for s in cands if _ended_in_spawn(assigned[s], t, spawns)]
                 if not cands or len(t.pts) < MIN_UNVOTED_POINTS:  # trop court pour être attribué sans numéro : reflet ou clignotement, le trou sera comblé
                     continue
                 scored = []
@@ -936,7 +961,7 @@ def _persistent(dets, fi, d):
     return False
 
 
-def recover_from_unused(rows, runs, frames, states, step_s, put, contaminated=None):
+def recover_from_unused(rows, runs, frames, states, step_s, put, contaminated=None, spawns=None):
     """« Mieux regarder » : à chaque image, un joueur vivant (bandeau) sans position est cherché parmi les pastilles que personne n'a prises,
     près de l'endroit où il devrait être. Une pastille blanche (joueur observé ou station de tyrolienne) n'est acceptée que pour le joueur
     que le bandeau dit observé. Plusieurs trous dans la même équipe : on prend les paires les plus proches d'abord."""
@@ -964,6 +989,8 @@ def recover_from_unused(rows, runs, frames, states, step_s, put, contaminated=No
                     continue
                 if not on_walkable((d["x"], d["y"])):
                     continue  # hors de tout passage connu : reflet de lumière, pas un joueur
+                if not d.get("number") and spawns and _in_spawn(d, spawns) and not _in_spawn({"team": team, "x": ex, "y": ey}, spawns):
+                    continue  # une pastille sans numéro dans la zone de départ de l'équipe est un coéquipier qui y réapparaît (le 9 était collé sur le point de réapparition du 6), pas un joueur qui en vient
                 if not d.get("number") and ((contaminated and fi in contaminated) or not _persistent(dets, fi, d)):
                     continue  # une pastille sans numéro qui n'apparaît pas dans les images voisines : strie de lumière, pas un joueur
                 if d.get("number") and d["number"] != _number_of(slot) and d["number"] in {_number_of(s) for s in SLOTS[team]}:
@@ -1113,7 +1140,8 @@ def bridge_gaps(rows, runs, step_s, put):
 SKEW_FULL = 0.25  # asymétrie à partir de laquelle le sens est considéré comme sûr
 MOVE_WEIGHT = 1.5  # poids du critère « le regard suit le déplacement » dans le choix du sens
 GAZE_DOUBT_SKEW = 0.4  # poids de la forme d'un disque dans une case où les regards se lisent mal (carte de fiabilité)
-OBSERVED_STILL_SKEW = 0.2  # poids de la forme du disque blanc d'un joueur observé à l'arrêt
+HEADING_COHERENCE = 0.6  # indice de cohérence des caps voisins à partir duquel le joueur observé est jugé en marche
+GAZE_HOLD_UNKNOWN_S = 8.0  # un regard inconnu (joueur observé arrêté) est déduit des lectures sûres voisines jusqu'à cet écart
 STILL_OBSERVED_COHERENCE = 0.3  # plafond de l'indice de cohérence d'un regard de joueur observé qui n'est pas son cap : estimé, pas lu
 OBSERVED_FOLLOW_SPEED = 0.03  # vitesse (relative à la minimap, par seconde) à partir de laquelle le regard du joueur observé suit son cap
 MOVE_BREAK_DIST = 0.12  # un pas plus grand entre deux lectures successives coupe la trajectoire pour mesurer le cap
@@ -1366,7 +1394,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1380,6 +1408,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     spawns : {"A": (x0, y0, x1, y1), "B": ...} zones de départ de la carte (facultatif) : un disque blanc « qui attend » hors de la zone de départ de son équipe
     (la boîte de capture de Polaris) est un joueur en jeu, pas un mort.
     reliability : {"grid": n, "gaze": {(i, j)}} cases de la carte où la forme des disques a donné de mauvais regards (reliability.py) : la forme y pèse moins que le cap et le camp ennemi.
+    marks : [(t, joueur, x, y, regard ou None)] posés à la main : vérités qui ancrent le suivi (apply_marks).
     coherence_out : dict facultatif rempli de {(image, joueur): indice de cohérence du regard, 0 à 1} (voir gaze_coherence).
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
@@ -1411,7 +1440,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     alive_tracks = [t for t in alive_tracks if t.pts]
     trim_same_slot_overlaps(alive_tracks)
     alive_tracks = [t for t in alive_tracks if t.pts]
-    _assign(alive_tracks, step_s, dead)
+    _assign(alive_tracks, step_s, dead, spawns)
     placed = [t for t in alive_tracks if t.slot is not None]
     crosses = _attach_crosses([t for t in dead_tracks if len(t.pts) >= 2], placed, step_s, deaths, times)
 
@@ -1481,13 +1510,17 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     mean = math.degrees(math.atan2(sum(math.sin(math.radians(a)) for a in window), sum(math.cos(math.radians(a)) for a in window))) % 360
                     obs[k] = (mean % 180, (1.0 if mean < 180 else -1.0) * SKEW_FULL)
             followed = set()
+            # Le cap n'est un témoin que s'il est constant : l'oscillation du centre d'un disque blanc immobile (0,007 d'une image à l'autre) donne une vitesse non nulle et
+            # un cap qui tourne dans tous les sens. On ne suit que les caps qui s'accordent sur la fenêtre.
+            heads = {j: (moves[j][0] if j in moves and t.pts[j].get("spectated") and moves[j][1] >= OBSERVED_FOLLOW_SPEED else None) for j in obs}
+            head_coh = gaze_coherence(heads)
             for k in list(obs):  # disque blanc en mouvement : sa forme ne dit presque rien du regard (mesuré : au hasard, axe faux une fois sur deux), le cap le dit
-                if k in moves and t.pts[k].get("spectated") and moves[k][1] >= OBSERVED_FOLLOW_SPEED:
-                    heading = moves[k][0]
+                if heads.get(k) is not None and head_coh.get(k, 0.0) >= HEADING_COHERENCE:
+                    heading = heads[k]
                     obs[k] = (heading % 180, (1.0 if heading < 180 else -1.0) * SKEW_FULL)
                     followed.add(k)
-                elif t.pts[k].get("spectated"):  # disque blanc à l'arrêt : sa forme est quasi ronde, la lecture vaut le hasard (mesuré) : les repères (camp ennemi, murs) décident
-                    obs[k] = (obs[k][0], obs[k][1] * OBSERVED_STILL_SKEW)
+                elif t.pts[k].get("spectated"):  # disque blanc à l'arrêt : sa forme est quasi ronde, la lecture vaut le hasard (mesuré) : on ne la garde pas
+                    del obs[k]  # son regard se déduit de ses deux caps, avant et après l'arrêt (steady_gaze), au lieu d'un sens tiré des repères qui faisait faire un demi-tour à l'arrêt
             if reliability and reliability.get("gaze"):  # zone où les disques se lisent mal : la forme décide moins
                 g = reliability["grid"]
                 for k in list(obs):
@@ -1535,9 +1568,10 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     # Un joueur dont le bandeau est grisé n'a pas de pastille vivante (les croix restent : elles montrent où il est mort).
     for key in [k for k, r in rows.items() if r[7] and k[0] in dead.get(k[1], ())]:
         del rows[key]
+    apply_marks(rows, marks, times, step_s, put)
     if states and dead:
         runs = alive_runs(states, dead)
-        recover_from_unused(rows, runs, frames, states, step_s, put, contaminated)
+        recover_from_unused(rows, runs, frames, states, step_s, put, contaminated, spawns)
         share_stacks(rows, runs, placed, put)
         drop_isolated_reads(rows, step_s)
         drop_impossible_moves(rows, step_s)
@@ -1552,6 +1586,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     steady_gaze(rows, step_s)
     steady_still_gaze(rows)
     separate_players(rows)
+    apply_marks(rows, marks, times, step_s, put, final=True, coherence_out=coherence_out)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
 
 
@@ -1599,6 +1634,47 @@ def drop_impossible_moves(rows, step_s):
         if not changed:
             break
     return dropped
+
+
+MARK_CLEAR_S = 1.0  # autour d'une position posée à la main, les lignes du même joueur plus loin que MARK_CLEAR_DIST sont retirées (le trou est comblé à partir de la vérité)
+MARK_CLEAR_DIST = 0.08
+
+
+def apply_marks(rows, marks, times, step_s, put, final=False, coherence_out=None):
+    """Positions et regards posés à la main (onglet Lecture) : à l'image la plus proche de chaque instant, le joueur est à la position donnée (confiance 1), avec le regard
+    donné s'il y en a un. Avant le comblement des trous (final=False), les lignes du même joueur qui s'en écartent de plus de MARK_CLEAR_DIST dans la seconde voisine sont
+    retirées : le suivi se refait à partir de cette vérité. À la fin (final=True) elle est reposée telle quelle : aucune passe de lissage ne la déplace."""
+    if not marks or not times:
+        return 0
+    ordered = sorted(times)
+    span = max(1, round(MARK_CLEAR_S / step_s))
+    applied = 0
+    for t, slot, x, y, angle in marks:
+        k = min(ordered, key=lambda j: abs(times[j] - t))
+        if abs(times[k] - t) > 1.0:
+            continue
+        if not final:
+            for j in range(k - span, k + span + 1):
+                r = rows.get((j, slot))
+                if r is not None and r[7] and j != k and math.hypot(r[4] - x, r[5] - y) > MARK_CLEAR_DIST:
+                    del rows[(j, slot)]
+        current = rows.get((k, slot))
+        keep = current[6] if (current is not None and angle is None) else angle
+        put(k, slot, "A" if slot <= 4 else "B", x, y, keep, True, 1.0)
+        if final and coherence_out is not None and angle is not None:
+            coherence_out[(k, slot)] = 1.0  # regard posé à la main : vérité
+        applied += 1
+    if final:  # un regard posé à la main se tient : les lignes du joueur dans la seconde voisine prennent le regard de la correction la plus proche dans le temps
+        gazed = [(t, slot, a) for t, slot, _, _, a in marks if a is not None]
+        for (k, slot), r in list(rows.items()):
+            if not r[7] or k not in times:
+                continue
+            near = [(abs(times[k] - t), a) for t, s2, a in gazed if s2 == slot and abs(times[k] - t) <= MARK_CLEAR_S]
+            if near:
+                rows[(k, slot)] = r[:6] + (min(near)[1],) + r[7:]
+                if coherence_out is not None:
+                    coherence_out[(k, slot)] = max(coherence_out.get((k, slot)) or 0.0, 0.8)
+    return applied
 
 
 ISOLATED_MAX_ROWS = 4  # un groupe de lectures de cette taille ou moins, loin des autres, est suspect
@@ -1686,6 +1762,7 @@ def steady_gaze(rows, step_s):
     d'une ligne à l'autre (le 8 observé tournait sur lui-même à 0:51). Il est interpolé, par le plus court arc, entre les deux lectures sûres voisines qui en ont un
     (celle d'un seul côté si l'autre manque, jusqu'à GAZE_HOLD_S). Les lectures sûres ne sont jamais modifiées."""
     hold = round(GAZE_HOLD_S / step_s)
+    hold_unknown = round(GAZE_HOLD_UNKNOWN_S / step_s)
     by_slot = {}
     for (k, slot), r in rows.items():
         if r[7]:
@@ -1700,11 +1777,12 @@ def steady_gaze(rows, step_s):
 
         for k in frames:
             r = rows[(k, slot)]
-            if r[8] >= READ_MIN_CONF:
+            if r[8] >= READ_MIN_CONF and r[6] is not None:
                 continue
+            reach = hold_unknown if r[6] is None else hold
             i = bisect.bisect_left(sure, k)
-            before = sure[i - 1] if i > 0 and k - sure[i - 1] <= hold else None
-            after = sure[i] if i < len(sure) and sure[i] - k <= hold else None
+            before = sure[i - 1] if i > 0 and k - sure[i - 1] <= reach else None
+            after = sure[i] if i < len(sure) and sure[i] - k <= reach else None
             if before is None and after is None:
                 continue
             if before is None or after is None:
@@ -1968,7 +2046,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 38  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 39  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

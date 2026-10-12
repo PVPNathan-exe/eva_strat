@@ -132,6 +132,17 @@ export interface Sample {
   gaze_coh?: number | null;
 }
 
+/** Position et regard posés à la main dans l'onglet Lecture (vérité qui ancre le suivi). */
+export interface UserMark {
+  id: number;
+  game_id: number;
+  slot: number;
+  t: number;
+  x: number;
+  y: number;
+  angle: number | null;
+}
+
 /** Contrôle des positions à la vraie minimap et joueur observé (GET /api/flags). */
 export interface GameFlags {
   unconfirmed: [number, number][]; // [image, joueur]

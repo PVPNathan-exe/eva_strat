@@ -310,3 +310,24 @@ test('GET /api/reliability renvoie la carte de fiabilité fournie, ou null', () 
   assert.deepEqual(handleApi(ctx, 'GET', '/api/reliability', q('map=Polaris'), undefined).json, { map: 'Polaris', grid: 16, cells: [] });
   assert.equal(handleApi(ctx, 'GET', '/api/reliability', q('map=../x'), undefined).status, 400);
 });
+
+
+test('les corrections à la main (position et regard) se créent, se listent et se suppriment', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  handleApi(ctx, 'POST', '/api/games', q(), { video_id: videoId, start_s: 100, end_s: 700 });
+  const id = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { id: number }[])[0].id;
+  const created = handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 8, t: 226.4, x: 0.5, y: 0.55, angle: -30 });
+  assert.equal(created.status, 201);
+  const only = handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 3, t: 300, x: 0.2, y: 0.4 });
+  assert.equal(only.status, 201);
+  const list = JSON.parse(JSON.stringify(handleApi(ctx, 'GET', '/api/marks', q(`game=${id}`), undefined).json)) as { slot: number; angle: number | null }[];
+  assert.deepEqual(list.map((m) => [m.slot, m.angle]), [[8, 330], [3, null]]); // l'angle est ramené entre 0 et 360, le regard est facultatif
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 9, t: 226, x: 0.5, y: 0.5 }).status, 400);
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 1, t: 226, x: 1.5, y: 0.5 }).status, 400);
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 1, t: 5, x: 0.5, y: 0.5 }).status, 400);
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: 999, slot: 1, t: 226, x: 0.5, y: 0.5 }).status, 404);
+  const markId = (created.json as { id: number }).id;
+  assert.equal(handleApi(ctx, 'DELETE', `/api/marks/${markId}`, q(), undefined).status, 200);
+  assert.equal((handleApi(ctx, 'GET', '/api/marks', q(`game=${id}`), undefined).json as unknown[]).length, 1);
+});

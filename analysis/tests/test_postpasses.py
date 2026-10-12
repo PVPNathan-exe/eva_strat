@@ -240,3 +240,46 @@ def test_a_cross_needs_the_grey_banner_or_the_killfeed():
     assert tracking._death_backed(25, 3, dead, [(2.3, 3)], times)  # kill du killfeed à 0,2 s
     assert not tracking._death_backed(25, 3, dead, [(2.3, 4)], times)  # le kill d'un autre joueur ne compte pas
     assert tracking._death_backed(25, 7, dead, [], times)  # pas de bandeau exploitable pour ce joueur : croix gardée
+
+
+def test_a_hand_placed_mark_anchors_the_player_and_clears_contradicting_rows():
+    times = {k: k * 0.1 for k in range(60)}
+    rows = table(*[row(k, 5, 0.3 if k < 25 else 0.7, 0.5, conf=0.5) for k in range(60)])  # le suivi est parti de l'autre côté de la carte
+    put = lambda fi, slot, team, x, y, angle, alive, conf: rows.__setitem__((fi, slot), (fi, round(fi * 0.1, 2), slot, team, x, y, angle, int(alive), conf))
+    assert tracking.apply_marks(rows, [(3.0, 5, 0.3, 0.5, 40.0)], times, 0.1, put) == 1
+    assert rows[(30, 5)][4:7] == (0.3, 0.5, 40.0) and rows[(30, 5)][8] == 1.0
+    assert (35, 5) not in rows and (27, 5) not in rows  # les lignes à 0,7 dans la seconde voisine sont retirées, à refaire à partir de la vérité
+    assert (20, 5) in rows  # le reste du suivi n'est pas touché
+    coherence = {}
+    tracking.apply_marks(rows, [(3.0, 5, 0.31, 0.5, 40.0)], times, 0.1, put, final=True, coherence_out=coherence)
+    assert rows[(30, 5)][4] == 0.31 and coherence[(30, 5)] == 1.0
+
+
+def test_position_only_mark_keeps_the_computed_gaze():
+    times = {k: k * 0.1 for k in range(10)}
+    rows = table(row(5, 2, 0.4, 0.4, conf=0.5, angle=123.0))
+    put = lambda fi, slot, team, x, y, angle, alive, conf: rows.__setitem__((fi, slot), (fi, 0.0, slot, team, x, y, angle, int(alive), conf))
+    tracking.apply_marks(rows, [(0.5, 2, 0.45, 0.4, None)], times, 0.1, put)
+    assert rows[(5, 2)][6] == 123.0 and rows[(5, 2)][4] == 0.45
+
+
+def test_marks_error_measures_position_in_metres_and_gaze_in_degrees():
+    import marks_eval
+
+    rows = [(10, 1.0, 3, "A", 0.5, 0.5, 100.0, 1, 1.0)]
+    errs = marks_eval.errors(rows, [(1.0, 3, 0.5 + 1 / 31, 0.5, 130.0), (1.0, 4, 0.1, 0.1, None)], {10: 1.0})
+    assert abs(errs[0][2] - 1.0) < 1e-9 and errs[0][3] == 30.0
+    assert errs[1][2] is None  # joueur absent du suivi
+    assert marks_eval.summary(errs)["position_sup_1m"] == 0
+
+
+def test_a_hand_placed_gaze_holds_for_a_second_around_its_instant():
+    times = {k: k * 0.1 for k in range(60)}
+    rows = table(*[row(k, 2, 0.4, 0.4, conf=1.0, angle=90.0) for k in range(60)])
+    put = lambda fi, slot, team, x, y, angle, alive, conf: rows.__setitem__((fi, slot), (fi, round(fi * 0.1, 2), slot, team, x, y, angle, int(alive), conf))
+    coherence = {}
+    tracking.apply_marks(rows, [(3.0, 2, 0.4, 0.4, 200.0), (4.4, 2, 0.4, 0.4, 20.0)], times, 0.1, put, final=True, coherence_out=coherence)
+    assert rows[(26, 2)][6] == 200.0 and rows[(31, 2)][6] == 200.0  # dans la seconde de la première correction
+    assert rows[(38, 2)][6] == 20.0  # plus près de la seconde correction
+    assert rows[(56, 2)][6] == 90.0  # plus loin que la seconde voisine : inchangé
+    assert coherence[(30, 2)] == 1.0 and coherence[(26, 2)] >= 0.8

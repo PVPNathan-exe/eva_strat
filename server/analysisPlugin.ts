@@ -102,12 +102,14 @@ export function analysisPlugin(): Plugin {
     name: 'eva-analysis',
     configureServer(server) {
       const root = server.config.root;
-      const dbPath = join(root, 'data', 'eva.db');
+      const dbPath = process.env.EVA_DB ?? join(root, 'data', 'eva.db'); // EVA_DB : base de test (copie), sans toucher à la vraie
       const cacheDir = join(root, 'data', 'cache');
       const script = join(root, 'analysis', 'analyze.py');
       const python = findPython();
       const weaponsDir = join(root, 'analysis', 'weapon_icons');
       const iconFixScript = join(root, 'analysis', 'icon_fix.py');
+      const resolveScript = join(root, 'analysis', 'resolve.py');
+      let resolving = false;
       let iconFixQueue: Promise<unknown> = Promise.resolve();
 
       /** Lance icon_fix.py (images candidates, recalcul d'une icône) : une seule à la fois (les suivantes attendent), résultat JSON sur la dernière ligne. */
@@ -231,6 +233,25 @@ export function analysisPlugin(): Plugin {
               return sendJson(res, 200, { ok: true });
             } catch (err) {
               return sendJson(res, 500, { error: (err as Error).message });
+            }
+          }
+          // Recalcule le suivi d'une game depuis les lectures en cache et les corrections de l'utilisateur (quelques secondes) ; un seul recalcul à la fois sur la base.
+          const resolveMatch = /^\/api\/games\/(\d+)\/resolve$/.exec(url.pathname);
+          if (resolveMatch && method === 'POST') {
+            if (resolving) return sendJson(res, 409, { error: 'Un recalcul est déjà en cours' });
+            resolving = true;
+            try {
+              await new Promise<void>((resolve, reject) => {
+                execFile(python, [resolveScript, '--game', resolveMatch[1], '--db', dbPath], { timeout: 900000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, cwd: root }, (err, _stdout, stderr) => {
+                  if (err) return reject(new Error(`Le recalcul a échoué : ${(stderr || err.message).trim().split(/\r?\n/).slice(-2).join(' ')}`));
+                  return resolve();
+                });
+              });
+              return sendJson(res, 200, { ok: true });
+            } catch (err) {
+              return sendJson(res, 500, { error: (err as Error).message });
+            } finally {
+              resolving = false;
             }
           }
           const weapon = /^\/api\/weapons\/([A-Z]\d+)(\/icon)?$/.exec(url.pathname);

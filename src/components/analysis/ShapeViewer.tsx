@@ -9,7 +9,10 @@ import { flagKey, unconfirmedSet } from '../../lib/replayFlags';
 import { formatTime } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game, GameFlags, Sample, Zone } from '../../types/analysis';
+import { drawMarks, dragAngle, type Drag } from './markDraw';
+import { MarkPanel } from './MarkPanel';
 import { useGameFlags } from './useGameFlags';
+import { useMarks } from './useMarks';
 
 const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
 const WIDTH = 920; // largeur du canevas en pixels (la minimap agrandie)
@@ -60,6 +63,10 @@ export function ShapeViewer({ game }: { game: Game }) {
   const [showCoh, setShowCoh] = useState(true); // indice de cohérence du regard à côté du numéro
   const [mask, setMask] = useState<HTMLCanvasElement | null>(null);
   const { flags } = useGameFlags(game.id, game.map, game.samples);
+  const { marks, error: markError, add: addMark, remove: removeMark } = useMarks(game.id);
+  const [correcting, setCorrecting] = useState(false);
+  const [pick, setPick] = useState<number | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
   const setCurrentTime = useAnalysisStore((s) => s.setCurrentTime);
   const startTime = useAnalysisStore((s) => s.currentTime);
 
@@ -86,6 +93,7 @@ export function ShapeViewer({ game }: { game: Game }) {
     }
     ctx.drawImage(v, zone.x * v.videoWidth, zone.y * v.videoHeight, zone.w * v.videoWidth, zone.h * v.videoHeight, 0, 0, WIDTH, height);
     if (corridors && mask) ctx.drawImage(mask, 0, 0, WIDTH, height);
+    drawMarks(ctx, marks, v.currentTime, WIDTH, height, drag);
     if (!shapes) return;
     const f = nearestFrame(frames, v.currentTime);
     if (!f || Math.abs(f.t - v.currentTime) > 0.6) return;
@@ -120,7 +128,7 @@ export function ShapeViewer({ game }: { game: Game }) {
       const coh = s.gaze_coh !== null && s.gaze_coh !== undefined ? ` ${Math.round(s.gaze_coh * 100)}` : '';
       ctx.fillText(`${number(s.slot)}${showCoh ? coh : ''}`, cx + radius + 3, cy - radius);
     }
-  }, [zone, frames, shapes, corridors, mask, unconfirmed, showCoh]);
+  }, [zone, frames, shapes, corridors, mask, unconfirmed, showCoh, marks, drag]);
 
   useEffect(() => {
     draw();
@@ -159,6 +167,33 @@ export function ShapeViewer({ game }: { game: Game }) {
     seek(startTime >= game.start_s && startTime <= game.end_s ? startTime : game.start_s);
   };
 
+  // Corrections à la main : un clic pose la position du joueur choisi, un glisser y ajoute le regard (la direction de la pointe).
+  const fraction = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+  };
+  const onDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!correcting || pick === null) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const p = fraction(e);
+    setDrag({ slot: pick, x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+  };
+  const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drag) return;
+    const p = fraction(e);
+    setDrag({ ...drag, x1: p.x, y1: p.y });
+  };
+  const onUp = () => {
+    if (!drag || !canvas.current) return;
+    const angle = dragAngle(drag, canvas.current.width, canvas.current.height);
+    const t = video.current?.currentTime ?? time;
+    setDrag(null);
+    void addMark({ game_id: game.id, slot: drag.slot, t, x: drag.x0, y: drag.y0, angle });
+  };
+  const reloadSamples = () => {
+    analysisApi.samples(game.id).then(setSamples).catch(() => setSamples([]));
+  };
+
   const toggle = () => {
     const v = video.current;
     if (!v) return;
@@ -170,7 +205,7 @@ export function ShapeViewer({ game }: { game: Game }) {
   return (
     <div className="shapes">
       <video ref={video} className="shapes__video" src={streamUrl(videoId)} muted preload="auto" onLoadedMetadata={onLoaded} onSeeked={draw} />
-      <canvas ref={canvas} className="shapes__canvas" />
+      <canvas ref={canvas} className={`shapes__canvas${correcting && pick !== null ? ' is-marking' : ''}`} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} />
       <div className="shapes__bar">
         <button onClick={toggle}>{playing ? 'Pause' : 'Lecture'}</button>
         <button onClick={() => seek(time - 1)}>-1 s</button>
@@ -185,8 +220,9 @@ export function ShapeViewer({ game }: { game: Game }) {
         <label><input type="checkbox" checked={showCoh} onChange={(e) => setShowCoh(e.target.checked)} /> Indice de cohérence du regard (0 à 100)</label>
         <label><input type="checkbox" checked={corridors} onChange={(e) => setCorridors(e.target.checked)} /> Couloirs lus</label>
       </div>
+      <MarkPanel game={game} marks={marks} error={markError} correcting={correcting} onCorrecting={setCorrecting} pick={pick} onPick={setPick} onRemove={(id) => void removeMark(id)} onRecomputed={reloadSamples} />
       <p className="shapes__note">
-        Contour vert : disque et pointe tels que le programme les a lus (pointillé : lecture peu sûre). Contour rouge : position que la vraie minimap ne confirme pas. Contour orange pointillé : regard incertain (les directions lues se contredisent, indice sous 40). Le nombre à côté du numéro est l'indice de cohérence du regard : mesuré, le regard lu est dans le cap pour 47 % des lignes sous 20, 66 % de 40 à 60 et 96 % au-dessus de 80.
+        Contour vert : disque et pointe tels que le programme les a lus (pointillé : lecture peu sûre). Contour magenta : position et regard posés à la main. Contour rouge : position que la vraie minimap ne confirme pas. Contour orange pointillé : regard incertain (les directions lues se contredisent, indice sous 40). Le nombre à côté du numéro est l'indice de cohérence du regard : mesuré, le regard lu est dans le cap pour 47 % des lignes sous 20, 66 % de 40 à 60 et 96 % au-dessus de 80.
         Croix rouge : joueur mort. Le contour doit recouvrir la pastille réelle et sa pointe doit viser dans le même sens que le triangle de la pastille.
       </p>
     </div>

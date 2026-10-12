@@ -33,6 +33,8 @@ python analysis/recap.py --video 2 # bilan de qualité d'une vidéo analysée
 python analysis/evaluate.py --video 1   # accord du suivi avec les bandeaux, positions manquantes, sauts, part de positions réellement lues
 python analysis/evaluate.py --video 1 --gap-test   # erreur du comblement de trous sur des positions sûres cachées (vérité simulée)
 python analysis/reread_loadouts.py --video 3   # relit l'équipement d'une vidéo (après un changement de loadout.py) et retire les icônes B et G inutiles
+python analysis/marks_eval.py --game 26   # erreur du suivi sur les corrections posées à la main (onglet Lecture) : à faire baisser, sans dégrader l'accord avec les bandeaux
+EVA_DB=chemin\copie.db npx vite --port 5199   # serveur de test sur une copie de la base (jamais la vraie pour tester l'outil de correction)
 python analysis/resolve.py --video 1   # refait le suivi sans relire la vidéo (lectures en cache), après un changement de tracking.py
 python analysis/benchmark.py --video Ceres.mp4   # vitesse des étapes sur cette machine
 ```

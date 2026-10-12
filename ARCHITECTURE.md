@@ -33,7 +33,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 
 ### src/components/analysis (onglets Analyse et Armes)
 
-- `AnalysisTab.tsx` : conteneur de l'onglet Analyse. `ReadingTab.tsx` : onglet Lecture (ce que le programme sait de la carte et la forme des joueurs lue) ; `CorridorMap.tsx` : couloirs, murs, tyroliennes et zones sur le plan ; `ShapeViewer.tsx` : disque et pointe de chaque joueur dessinés sur la vraie minimap de la vidéo.
+- `AnalysisTab.tsx` : conteneur de l'onglet Analyse. `ReadingTab.tsx` : onglet Lecture (ce que le programme sait de la carte et la forme des joueurs lue) ; `CorridorMap.tsx` : couloirs, murs, tyroliennes et zones sur le plan ; `ShapeViewer.tsx` : disque et pointe de chaque joueur dessinés sur la vraie minimap de la vidéo ; `MarkPanel.tsx`, `useMarks.ts`, `markDraw.ts` : outil de correction à la main (position et regard posés sur la minimap, recalcul du suivi).
 - `IngestBar.tsx` : source (chemin ou URL), « Détecter les games » (étape 1), options, progression (game en cours), pause et arrêt.
 - `AnalysisPlan.tsx` : panneau « Analyse détaillée » : confirmation des bornes, games à analyser et leur ordre, lancement (étape 2).
 - `GameList.tsx` : games d'une vidéo, bornes, carte, confirmation, suppression. `GameTeams.tsx` : noms des équipes orange et bleue d'une game (saisis, avec proposition tirée des pseudos).
@@ -80,6 +80,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 - `reread_loadouts.py` : relit l'équipement d'une vidéo avec l'algorithme actuel et retire les icônes B et G devenues inutiles (sans nom, ni verrou, ni signalement).
 - `frame_noise.py` : contamination de couleur de la minimap (stries de lumière qui ressemblent à des joueurs), mesurée à partir d'une carte grossière des couleurs d'équipe gardée à chaque lecture (`minimap.coarse_colour_map`) ; le suivi n'y crée ni trajectoire ni croix sans numéro.
 - `observed_name.py` : pseudo du joueur observé lu en bas à droite de l'écran (images regroupées par ressemblance du texte, un représentant par groupe lu par la reconnaissance de texte de Windows) ; complète le cadre blanc des bandeaux, ne le contredit jamais.
+- `marks_eval.py` : erreur du suivi (sans corrections) mesurée sur les positions et regards posés à la main ; `python analysis/marks_eval.py --game 26 [--all]`.
 - `plan_align.py` : aligne la minimap sur le plan stratégique (traits de murs recalés sur les contours du plan) ; `python analysis/plan_align.py --map Polaris`, écrit `analysis/map_plan_insets.json`.
 - `reliability.py` : carte des cases de la carte où positions et regards sont peu fiables (`analysis/map_reliability/<Carte>.json`) ; `python analysis/reliability.py --map Polaris`, lue par `tracking.py` et affichée par le site.
 - `superpose.py` : vérifie le suivi en le superposant à la vraie minimap (une pastille de la couleur de l'équipe, ou un disque blanc pour l'observé, doit se trouver autour de chaque position) ; `python analysis/superpose.py --game 26 [--rows fichier.pkl]`, sans `--store`, aucune écriture dans la base ; avec `--store`, les positions non confirmées de toutes les images sont enregistrées (table `sample_flags`, affichées par le site). Le joueur observé est enregistré par périodes (table `observed_segments`) par `resolve.py` et par l'analyse.
@@ -136,6 +137,8 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 | PATCH, DELETE | `/api/games/:id` | modifier ou supprimer |
 | GET | `/api/samples?game=`, `/api/capture?game=` | positions, pourcentages de capture |
 | GET | `/api/flags?game=`, `/api/reliability?map=` | positions non confirmées et joueur observé, carte de fiabilité |
+| GET, POST, DELETE | `/api/marks?game=`, `/api/marks`, `/api/marks/:id` | corrections à la main (position, regard) |
+| POST | `/api/games/:id/resolve` | recalcule le suivi d'une game (lectures en cache et corrections), `server/analysisPlugin.ts` |
 | GET, POST | `/api/comments` | lister (`?video=`) ou créer |
 | PATCH, DELETE | `/api/comments/:id` | modifier ou supprimer |
 | GET, POST, DELETE | `/api/corrections`, `/api/corrections/:id` | corrections de joueurs |

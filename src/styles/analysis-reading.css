@@ -131,3 +131,66 @@
   font-variant-numeric: tabular-nums;
   color: var(--c-text-soft);
 }
+
+/* Outil de correction à la main */
+.shapes__canvas.is-marking {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.marks {
+  margin-top: 0.6rem;
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+}
+
+.marks__players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.4rem 0;
+}
+
+.marks__players button {
+  min-width: 2rem;
+}
+
+.marks__players button.is-active {
+  background: var(--c-warn);
+  color: var(--c-bg);
+}
+
+.marks__help {
+  margin: 0.3rem 0;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.marks__list {
+  margin: 0.4rem 0;
+  padding: 0;
+  list-style: none;
+  max-height: 10rem;
+  overflow-y: auto;
+}
+
+.marks__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.marks__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.marks__message {
+  color: var(--c-ok);
+}

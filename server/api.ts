@@ -224,6 +224,31 @@ function getFlags(ctx: ApiContext, query: URLSearchParams): ApiResult {
   return reply(200, { unconfirmed: flags.map((f) => [f.frame, f.slot]), observed });
 }
 
+/** Positions et regards posés à la main dans l'onglet Lecture. */
+function listMarks(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = Number(query.get('game'));
+  if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
+  return reply(200, ctx.db.prepare('SELECT id, game_id, slot, t, x, y, angle FROM user_marks WHERE game_id = ? ORDER BY t, id').all(gameId));
+}
+
+function createMark(ctx: ApiContext, payload: Row): ApiResult {
+  const gameId = num(payload.game_id);
+  const slot = num(payload.slot);
+  const t = num(payload.t);
+  const x = num(payload.x);
+  const y = num(payload.y);
+  const angle = payload.angle === null || payload.angle === undefined ? null : num(payload.angle);
+  if (gameId === null || slot === null || t === null || x === null || y === null) return fail('Correction incomplète (game_id, slot, t, x, y)');
+  if (!Number.isInteger(slot) || slot < 1 || slot > 8) return fail('Joueur invalide (1 à 8)');
+  if (x < 0 || x > 1 || y < 0 || y > 1) return fail('Position hors de la minimap');
+  if (payload.angle !== null && payload.angle !== undefined && angle === null) return fail('Regard invalide');
+  const game = ctx.db.prepare('SELECT start_s, end_s FROM games WHERE id = ?').get(gameId) as { start_s: number; end_s: number } | undefined;
+  if (!game) return fail('Game inconnue', 404);
+  if (t < game.start_s || t > game.end_s) return fail("Instant hors de la game");
+  const res = ctx.db.prepare('INSERT INTO user_marks (game_id, slot, t, x, y, angle) VALUES (?, ?, ?, ?, ?, ?)').run(gameId, slot, t, x, y, angle === null ? null : ((angle % 360) + 360) % 360);
+  return reply(201, { id: Number(res.lastInsertRowid) });
+}
+
 function getReliability(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const map = query.get('map');
   if (!map || !/^[\w .-]+$/.test(map)) return fail('Paramètre map manquant');
@@ -368,6 +393,15 @@ export function handleApi(
   if (method === 'GET' && pathname === '/api/samples') return listSamples(ctx, query);
   if (method === 'GET' && pathname === '/api/capture') return getCapture(ctx, query);
   if (method === 'GET' && pathname === '/api/flags') return getFlags(ctx, query);
+  if (pathname === '/api/marks') {
+    if (method === 'GET') return listMarks(ctx, query);
+    if (method === 'POST') return createMark(ctx, payload);
+  }
+  const markMatch = /^\/api\/marks\/(\d+)$/.exec(pathname);
+  if (markMatch && method === 'DELETE') {
+    ctx.db.prepare('DELETE FROM user_marks WHERE id = ?').run(Number(markMatch[1]));
+    return reply(200, { ok: true });
+  }
   if (method === 'GET' && pathname === '/api/reliability') return getReliability(ctx, query);
   if (pathname === '/api/comments') {
     if (method === 'GET') return listComments(ctx, query);

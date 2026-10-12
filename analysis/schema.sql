@@ -68,6 +68,18 @@ CREATE TABLE IF NOT EXISTS sample_flags (
   PRIMARY KEY (game_id, frame, slot, flag)
 );
 
+-- Positions et regards posés à la main par l'utilisateur (onglet Lecture) : des vérités qui servent d'ancres au suivi et de mesure de son erreur (marks_eval.py).
+CREATE TABLE IF NOT EXISTS user_marks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  t REAL NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  angle REAL,
+  created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Joueur observé (cadre blanc du bandeau) au cours de la game : un intervalle par période, temps de la vidéo.
 CREATE TABLE IF NOT EXISTS observed_segments (
   game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,

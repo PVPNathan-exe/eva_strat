@@ -316,6 +316,11 @@ def replace_samples(conn, game_id, rows, params_version=0, with_kills=False, coh
     conn.commit()
 
 
+def marks_of(conn, game_id):
+    """Positions et regards posés à la main : [(t, slot, x, y, angle ou None)] triés par temps."""
+    return [(r["t"], r["slot"], r["x"], r["y"], r["angle"]) for r in conn.execute("SELECT t, slot, x, y, angle FROM user_marks WHERE game_id = ? ORDER BY t, id", (game_id,))]
+
+
 def replace_flags(conn, game_id, flag, pairs):
     """Enregistre les (image, joueur) marqués `flag` pour une game (remplace les précédents de ce type)."""
     conn.execute("DELETE FROM sample_flags WHERE game_id = ? AND flag = ?", (game_id, flag))
