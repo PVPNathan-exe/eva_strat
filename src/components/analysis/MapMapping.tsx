@@ -211,9 +211,9 @@ export function MapMapping({ map }: { map: string }) {
   let hint = '';
   if (tool === 'capture') hint = draft.poly.length > 0 ? `Forme libre : ${draft.poly.length} point(s). Clique les autres coins ; un clic sur le premier point (ou « Fermer la forme ») la ferme.` : 'Glisse pour un rectangle, ou clique les coins d\'une forme libre (le point n\'est pas toujours un carré fermé).';
   if (tool === 'tps') {
-    if (draft.awaitingDirection) hint = "Clique par où l'on entre et l'on sort de la tyrolienne (un clic dans le cercle : aucune direction).";
+    if (draft.awaitingDirection) hint = "Clique la direction dans laquelle on sort de la tyrolienne par cette station (on y entre en regardant à l'opposé ; un clic dans le cercle : aucune direction).";
     else if (draft.first) hint = "Station posée. Glisse du centre au bord de l'autre station pour tracer son cercle (sa direction se déduit de la première : 180 degrés).";
-    else hint = "Glisse du centre au bord d'une station de tyrolienne pour tracer son cercle, puis clique sa direction. Deux stations font une tyrolienne, valable dans les deux sens ; la direction de la seconde est toujours l'opposée de la première (180 degrés).";
+    else hint = "Glisse du centre au bord d'une station de tyrolienne pour tracer son cercle, puis clique la direction de sortie (le regard du joueur qui en sort : il y entre en regardant à l'opposé). Deux stations font une tyrolienne, valable dans les deux sens ; la direction de la seconde est toujours l'opposée de la première (180 degrés). Le programme s'en sert pour corriger le regard 0,3 s avant l'entrée et 0,3 s après la sortie.";
   } else if (tool === 'openings') {
     if (draft.segment) hint = "Clique le côté d'où l'on voit à travers (sens unique).";
     else if (draft.pending) hint = "Clique l'autre bout du trait.";
@@ -272,7 +272,7 @@ export function MapMapping({ map }: { map: string }) {
               <ul className="mapping__list">
                 {annotation.tps.map((t, i) => (
                   <li key={i}>
-                    Tyrolienne {i + 1} : ({point([t.a.x, t.a.y])}), {direction(t.a.angle)} et ({point([t.b.x, t.b.y])}), {direction(t.b.angle)}
+                    Tyrolienne {i + 1} : ({point([t.a.x, t.a.y])}), {direction(t.a.angle)} de sortie et ({point([t.b.x, t.b.y])}), {direction(t.b.angle)} de sortie
                     <button onClick={() => without('tps', i)}>Retirer</button>
                   </li>
                 ))}

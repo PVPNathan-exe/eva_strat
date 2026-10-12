@@ -383,3 +383,56 @@ def test_marks_are_attached_to_the_nearest_analysis_frame(tmp_path):
     conn.commit()
     assert db.index_marks(conn, 1) == 1
     assert tuple(conn.execute("SELECT frame, round(frame_t, 2) FROM user_marks").fetchone()) == (7, 0.7)
+
+
+def _tp_world(monkeypatch=None):
+    """Un joueur marche vers la station A (0.20, 0.50), prend la tyrolienne et ressort à la station B (0.80, 0.50). Station A : sortie vers 90 degrés (le bas), B : vers 270 (le haut)."""
+    tracking._TELEPORTS[:] = [((0.20, 0.50), (0.80, 0.50))]
+    tracking._STATIONS[:] = [(0.20, 0.50, 90.0), (0.80, 0.50, 270.0)]
+    rows = table(
+        *[row(k, 1, 0.20, 0.50, angle=0.0) for k in range(0, 10)],  # avant l'entrée : regard vers la droite
+        *[row(k, 1, 0.80, 0.50, angle=0.0) for k in range(10, 20)],  # après la sortie : regard vers la droite
+    )
+    return rows
+
+
+def test_the_gaze_at_a_tp_entry_and_exit_follows_the_station_directions():
+    rows = _tp_world()
+    coherence = {}
+    try:
+        assert tracking.tp_gaze(rows, 0.1, coherence) > 0
+        # entrée : opposé de la direction de sortie de la station A (90 degrés), soit 270, pendant les 3 dernières images
+        assert [rows[(k, 1)][6] for k in (7, 8, 9)] == [270.0] * 3
+        assert rows[(5, 1)][6] == 0.0  # plus tôt, rien ne change
+        # sortie : direction de la station B (270), pendant les 3 premières images
+        assert [rows[(k, 1)][6] for k in (10, 11, 12)] == [270.0] * 3
+        assert rows[(14, 1)][6] == 0.0
+        assert coherence[(10, 1)] >= tracking.DUEL_COHERENCE
+    finally:
+        tracking._TELEPORTS[:] = []
+        tracking._STATIONS[:] = []
+
+
+def test_a_gaze_already_close_to_the_station_direction_is_kept_and_a_station_without_direction_changes_nothing():
+    rows = _tp_world()
+    try:
+        rows = table(*[row(k, 1, 0.20, 0.50, angle=250.0) for k in range(0, 10)], *[row(k, 1, 0.80, 0.50, angle=300.0) for k in range(10, 20)])
+        tracking.tp_gaze(rows, 0.1)
+        assert rows[(9, 1)][6] == 250.0 and rows[(10, 1)][6] == 300.0  # à moins de 40 degrés de la règle : gardé
+        rows = _tp_world()
+        tracking._STATIONS[:] = []  # aucune direction donnée
+        assert tracking.tp_gaze(rows, 0.1) == 0
+    finally:
+        tracking._TELEPORTS[:] = []
+        tracking._STATIONS[:] = []
+
+
+def test_a_player_walking_past_a_station_without_riding_is_not_touched():
+    tracking._TELEPORTS[:] = [((0.20, 0.50), (0.80, 0.50))]
+    tracking._STATIONS[:] = [(0.20, 0.50, 90.0), (0.80, 0.50, 270.0)]
+    try:
+        rows = table(*[row(k, 1, 0.20 + 0.001 * k, 0.50, angle=0.0) for k in range(20)])
+        assert tracking.tp_gaze(rows, 0.1) == 0
+    finally:
+        tracking._TELEPORTS[:] = []
+        tracking._STATIONS[:] = []

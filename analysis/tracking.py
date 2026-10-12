@@ -1414,7 +1414,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1435,6 +1435,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     if not frames:
         return []
     _TELEPORTS[:] = teleports or []
+    _STATIONS[:] = [(s["x"], s["y"], s["angle"]) for pair in stations or [] for s in (pair["a"], pair["b"]) if s.get("angle") is not None]
     _WALK.clear()
     _NEAR.clear()
     _ROUTES.clear()
@@ -1606,6 +1607,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     snap_to_walkable(rows)
     steady_gaze(rows, step_s)
     steady_still_gaze(rows)
+    tp_gaze(rows, step_s, coherence_out)
     duel_gaze(rows, states, step_s, coherence_out)
     kill_gaze(rows, kills, times, step_s, coherence_out)
     separate_players(rows)
@@ -1708,6 +1710,58 @@ def duel_bearings(rows, fire):
                 b = best[1]
                 out[(k, a[2])] = math.degrees(math.atan2(b[5] - a[5], (b[4] - a[4]) * MINIMAP_ASPECT)) % 360
     return out
+
+
+TP_GAZE_S = 0.3  # durée avant l'entrée et après la sortie d'une tyrolienne où la direction de la station s'impose au regard
+_STATIONS = []  # (x, y, direction de sortie en degrés) des stations de la carte en cours dont l'utilisateur a donné la direction (posées par solve)
+
+
+def _station_at(p):
+    """Station (distance, x, y, direction de sortie) la plus proche de p à moins de TP_NEAR, ou None."""
+    near = [(math.hypot(p[0] - x, p[1] - y), x, y, angle) for x, y, angle in _STATIONS if math.hypot(p[0] - x, p[1] - y) <= TP_NEAR]
+    return min(near) if near else None
+
+
+def tp_gaze(rows, step_s, coherence_out=None):
+    """Règle des tyroliennes : la direction donnée à la main pour chaque station (celle par laquelle on sort, les deux d'une paire étant à 180 degrés) fixe le regard à la sortie
+    (première 0,3 s après la réapparition, regard dans la direction de la station) et à l'entrée (dernière 0,3 s avant la disparition, regard à l'opposé : on entre en tournant le
+    dos à la direction de sortie). Mesuré sur 40 tyroliennes prises (Polaris, 3 games) : avant l'entrée le regard lu est dans les 45 degrés de cet opposé dans 74 % des cas, après la
+    sortie dans les 45 degrés de la direction de la station dans 53 % des cas. Les lignes dont le regard s'écarte de plus de DUEL_TOLERANCE degrés de la règle sont corrigées ; les
+    regards posés à la main passent après. Sans direction donnée pour une station, rien ne change."""
+    if not _STATIONS or not _TELEPORTS:
+        return 0
+    span = max(1, round(TP_GAZE_S / step_s))
+    by_slot = {}
+    for (j, slot), r in rows.items():
+        if r[7]:
+            by_slot.setdefault(slot, []).append(j)
+    changed = 0
+    for slot, frames in by_slot.items():
+        frames.sort()
+        for j1, j2 in zip(frames, frames[1:]):
+            if j2 - j1 > span:
+                continue
+            p, q = rows[(j1, slot)], rows[(j2, slot)]
+            if not _tp_linked((p[4], p[5]), (q[4], q[5])):
+                continue
+            entry, exit_ = _station_at((p[4], p[5])), _station_at((q[4], q[5]))
+            for station, window, bearing in (
+                (entry, range(j1 - span + 1, j1 + 1), None if entry is None else (entry[3] + 180) % 360),
+                (exit_, range(j2, j2 + span), None if exit_ is None else exit_[3]),
+            ):
+                if station is None:
+                    continue
+                for j in window:
+                    r = rows.get((j, slot))
+                    if r is None or not r[7] or math.hypot(r[4] - station[1], r[5] - station[2]) > TP_NEAR:
+                        continue
+                    if r[6] is not None and abs((r[6] - bearing + 180) % 360 - 180) <= DUEL_TOLERANCE:
+                        continue
+                    rows[(j, slot)] = r[:6] + (round(bearing, 1),) + r[7:]
+                    if coherence_out is not None:
+                        coherence_out[(j, slot)] = max(coherence_out.get((j, slot)) or 0.0, DUEL_COHERENCE)
+                    changed += 1
+    return changed
 
 
 def duel_gaze(rows, states, step_s, coherence_out=None):
@@ -2177,7 +2231,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 42  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 43  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
