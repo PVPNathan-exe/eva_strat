@@ -199,6 +199,7 @@ def route(a, b, gap_s=None, rides=True):
     return path
 
 
+READ_MIN_CONF = 0.7  # une position de cette confiance ou plus est une lecture sûre
 RIDE_MIN_CONF = 0.7  # une tyrolienne n'est supposée dans un trou que si l'arrivée est une vraie lecture (numérotée ou sûre), pas une pastille récupérée sans numéro
 
 
@@ -480,6 +481,31 @@ STATION_NEIGHBOUR_FRAMES = 15  # image sans joueur observé unique : on prend ce
 STATION_NEAR = 0.04  # un disque blanc à moins de cela d'une extrémité de tyrolienne, sans ancre, est le décor de la station
 
 
+def _is_foreign_white(d, observed):
+    """Vrai si la pastille blanche n'est pas le joueur observé : d'une autre équipe, ou portant le numéro d'un autre joueur."""
+    team = "A" if observed <= 4 else "B"
+    return not (d["team"] == team and d.get("number") in (None, _number_of(observed)))
+
+
+def _without_foreign_white(dets, observed):
+    """Seul le joueur observé est un disque blanc vivant : les autres disques blancs sont des joueurs morts qui attendent leur réapparition, ou des icônes de
+    stations de tyrolienne. Ils ne sont pas des joueurs en jeu et ne doivent pas être suivis (le 9 était attribué au disque d'attente du 7 mort)."""
+    return [d for d in dets if not (d.get("spectated") and _is_foreign_white(d, observed))]
+
+
+def _observed_between(fi, single, nearest):
+    """Joueur observé d'une image dont le cadre clignote : celui des images voisines si la dernière image à cadre net avant et la première après (dans la limite
+    STATION_NEIGHBOUR_FRAMES) désignent le même joueur, sinon None."""
+    import bisect
+
+    i = bisect.bisect_left(nearest, fi)
+    before = nearest[i - 1] if i > 0 else None
+    after = nearest[i] if i < len(nearest) else None
+    if before is None or after is None or fi - before > STATION_NEIGHBOUR_FRAMES or after - fi > STATION_NEIGHBOUR_FRAMES:
+        return None
+    return single[before] if single[before] == single[after] else None
+
+
 def _on_station(d):
     """Vrai si la détection est sur une extrémité de tyrolienne de la carte."""
     return any(math.hypot(d["x"] - p[0], d["y"] - p[1]) <= STATION_NEAR for pair in _TELEPORTS for p in pair)
@@ -542,18 +568,22 @@ def anchor_spectated(frames, states, spawns=None):
         waits = [d for d in dets if d.get("waiting")]
         dets = [d for d in dets if not d.get("waiting")]
         watched = [s for s, v in (states or {}).get(fi, {}).items() if v["spectated"]]
-        if _TELEPORTS and nearest and len(watched) != 1:
-            # cadre qui clignote : le joueur observé est celui des images voisines ; les disques de stations qui ne sont pas lui sont retirés quand même
-            j = min(nearest, key=lambda k: abs(k - fi))
-            if abs(j - fi) <= STATION_NEIGHBOUR_FRAMES:
-                dets = [d for d in dets if not (d.get("spectated") and _on_station(d) and not (d["team"] == ("A" if single[j] <= 4 else "B") and d.get("number") in (None, _number_of(single[j]))))]
+        if len(watched) != 1 and nearest:
+            # cadre qui clignote : le joueur observé est celui des images voisines quand celles d'avant et d'après sont d'accord ; sinon, seuls les disques de
+            # stations qui ne sont pas lui sont retirés (le plus proche voisin)
+            effective = _observed_between(fi, single, nearest)
+            if effective is not None:
+                dets = _without_foreign_white(dets, effective)
+            elif _TELEPORTS:
+                j = min(nearest, key=lambda k: abs(k - fi))
+                if abs(j - fi) <= STATION_NEIGHBOUR_FRAMES:
+                    dets = [d for d in dets if not (d.get("spectated") and _on_station(d) and _is_foreign_white(d, single[j]))]
         if not states or len(watched) != 1:
             out.append((fi, t, dets))
             continue
         slot = watched[0]
         team = "A" if slot <= 4 else "B"
-        if _TELEPORTS:  # un disque blanc de station qui n'est pas le joueur observé (autre équipe, ou autre numéro) est l'icône de la station, pas un joueur
-            dets = [d for d in dets if not (d.get("spectated") and _on_station(d) and not (d["team"] == team and d.get("number") in (None, _number_of(slot))))]
+        dets = _without_foreign_white(dets, slot)
         cands = [d for d in dets if d.get("spectated") and d["team"] == team and d.get("alive", True)]
         mine_waiting = [d for d in waits if d["team"] == team]
         pick = next((d for d in cands if d.get("number") == _number_of(slot)), None)
@@ -835,6 +865,68 @@ def _spawn_points(rows, runs):
             xs, ys = sorted(p[0] for p in pts), sorted(p[1] for p in pts)
             out[team] = (xs[len(xs) // 2], ys[len(ys) // 2])
     return out
+
+
+STACK_WINDOW = 30  # images de chaque côté examinées pour voir deux numéros alterner sur une même pastille
+STACK_MIN_READS = 3  # lectures minimales de chacun des deux numéros dans la fenêtre
+STACK_MIN_SHARE = 0.15  # et part minimale de chacun des deux dans les lectures de la fenêtre
+STACK_STEADY = 0.03  # déplacement maximal (relatif à la minimap) de la pastille d'une image à l'autre pour qu'elle serve de position à un joueur superposé
+STACK_LOOK = 100  # images cherchées avant et après pour retrouver une lecture sûre du joueur placé sur la pile (10 s)
+STACK_NEAR_DIST = 0.12  # distance (relative à la minimap) de cette lecture à la pile : il l'a rejointe ou quittée
+STACK_NEAR = 10  # images de chaque côté où le joueur ne doit avoir aucune lecture sûre pour être placé sur la pile
+STACK_HOLD = 100  # images pendant lesquelles la pile est gardée après la dernière alternance de numéros (10 s)
+CONF_STACK = 0.6  # confiance d'un joueur placé sur la pastille d'un coéquipier superposé au sien
+
+
+def _read_near_stack(rows, slot, k, x, y):
+    """Vrai si le joueur a été lu avec certitude tout près de (x, y) peu avant ou peu après l'image k : il a pu rejoindre ou quitter cette pile."""
+    for direction in (-1, 1):
+        for j in range(1, STACK_LOOK + 1):
+            r = rows.get((k + direction * j, slot))
+            if r is not None and r[7] and r[8] >= READ_MIN_CONF:
+                if math.hypot(r[4] - x, r[5] - y) <= STACK_NEAR_DIST:
+                    return True
+                break  # sa lecture la plus proche est ailleurs
+    return False
+
+
+def share_stacks(rows, runs, tracks, put):
+    """Deux joueurs de la même équipe superposés ne forment qu'une pastille, dont le numéro lu alterne entre les deux (le 2 et le 4 en 2:52 à 3:05 de la Polaris
+    NCT vs SNV : le 4 n'avait aucune détection et dérivait vers la boîte de capture). Quand, dans une fenêtre, deux numéros d'une même trajectoire sont chacun lus
+    assez souvent, les deux joueurs sont au même endroit : celui qui n'a pas de lecture sûre prend la position de la pastille. La pile est gardée tant que ce
+    joueur n'a pas de lecture à lui (jusqu'à STACK_HOLD images après la dernière alternance) : les numéros finissent souvent par se fixer sur un seul des deux."""
+    placed = 0
+    claimed = {}  # joueur superposé -> {image: trajectoire qui lui a donné sa position} : une seule trajectoire à la fois (sinon la position saute de l'une à l'autre)
+    for t in sorted(tracks, key=lambda t: -len(t.pts)):
+        if t.slot is None:
+            continue
+        reads = {k: d["slot"] for k, d in t.pts.items() if d.get("slot") in SLOTS[t.team] and not d.get("anchored")}
+        last_alternation = {}  # autre joueur -> dernière image où l'alternance a été vue
+        for k in sorted(t.pts):
+            window = [slot for j, slot in reads.items() if abs(j - k) <= STACK_WINDOW]
+            if len(window) >= 2 * STACK_MIN_READS:
+                for other in {slot for slot in window if slot != t.slot}:
+                    n_other, n_own = window.count(other), window.count(t.slot)
+                    if n_other >= STACK_MIN_READS and n_own >= STACK_MIN_READS and n_other >= STACK_MIN_SHARE * len(window) and n_own >= STACK_MIN_SHARE * len(window):
+                        last_alternation[other] = k
+            for other, seen in last_alternation.items():
+                if k - seen > STACK_HOLD:
+                    continue
+                run = next((r for r in runs.get(other, []) if r[0] <= k <= r[1]), None)
+                current = rows.get((k, other))
+                read_near = any((rows.get((k + j, other)) or (0, 0, 0, 0, 0, 0, 0, 0, 0.0))[8] >= READ_MIN_CONF for j in range(-STACK_NEAR, STACK_NEAR + 1))
+                d = t.pts[k]
+                before = t.pts.get(k - 1)
+                if before is not None and math.hypot(d["x"] - before["x"], d["y"] - before["y"]) > STACK_STEADY:
+                    continue  # la pastille saute d'un disque à l'autre : pas une pile stable
+                mine = claimed.setdefault(other, {})
+                if any(mine.get(k + j) not in (None, t) for j in range(-STACK_NEAR, STACK_NEAR + 1)):
+                    continue  # une autre trajectoire place déjà ce joueur par ici
+                if run is not None and not read_near and (current is None or current[8] < READ_MIN_CONF) and _read_near_stack(rows, other, k, d["x"], d["y"]):
+                    mine[k] = t
+                    put(k, other, t.team, d["x"], d["y"], d.get("angle"), True, CONF_STACK)
+                    placed += 1
+    return placed
 
 
 def bridge_gaps(rows, runs, step_s, put):
@@ -1234,6 +1326,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     if states and dead:
         runs = alive_runs(states, dead)
         recover_from_unused(rows, runs, frames, states, step_s, put, contaminated)
+        share_stacks(rows, runs, placed, put)
         bridge_gaps(rows, runs, step_s, put)
     _add_known_deaths(rows, deaths or [], times, step_s, put)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
@@ -1260,7 +1353,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 29  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 31  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

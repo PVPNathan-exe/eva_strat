@@ -249,3 +249,20 @@ def test_the_observed_disc_next_to_a_wall_is_still_found_when_the_wall_lines_are
     found = [d for d in minimap.find_markers(img, {}, None, walls) if d["spectated"]]
     assert len(found) == 1 and found[0]["axis"] is not None  # trouvé, direction mesurée sur la silhouette sans le trait de mur
     assert abs(found[0]["x"] - 200 / 460) < 0.02 and abs(found[0]["y"] - 120 / 254) < 0.03
+
+
+def test_superposition_confirms_a_position_only_where_the_real_minimap_shows_a_disc():
+    import cv2
+    import numpy as np
+
+    import superpose
+
+    img = np.full((254, 460, 3), 20, np.uint8)
+    cv2.circle(img, (200, 120), 9, (30, 140, 255), -1)  # pastille orange (BGR)
+    cv2.circle(img, (300, 80), 9, (255, 255, 255), -1)  # disque blanc du joueur observé
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    row = lambda team, x, y: (0, 0.0, 1, team, x / 460, y / 254, None, 1, 1.0)
+    assert superpose.supported(hsv, row("A", 200, 120), False)
+    assert not superpose.supported(hsv, row("A", 100, 200), False)  # rien à cet endroit
+    assert not superpose.supported(hsv, row("A", 300, 80), False)  # un disque blanc ne confirme pas un joueur ordinaire
+    assert superpose.supported(hsv, row("A", 300, 80), True)  # mais confirme le joueur observé

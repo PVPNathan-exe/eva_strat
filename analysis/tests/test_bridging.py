@@ -429,3 +429,60 @@ def test_the_enemy_heading_comes_from_the_two_spawn_zones_and_breaks_a_tie_in_th
     obs = {k: (90.0, 0.0) for k in range(5)}  # axe vertical, sens indécidable
     out = tracking._choose_directions(obs, enemy=45.0)
     assert all(abs(((a - 45 + 180) % 360) - 180) < 100 for a in out.values())  # le sens retenu est celui qui regarde vers le camp ennemi
+
+
+def test_a_white_disc_of_the_other_team_is_a_waiting_player_not_a_player_in_play():
+    # le joueur observé est le 3 (orange) : le disque blanc bleu sans numéro est celui d'un joueur bleu mort qui attend
+    waiting = {**det("B", 0.78, 0.67, spectated=True)}
+    observed = {**det("A", 0.45, 0.40, number=3, spectated=True)}
+    other_number = {**det("A", 0.30, 0.60, number=4, spectated=True)}  # disque blanc portant le numéro d'un autre joueur orange
+    plain = det("B", 0.60, 0.50, number=8)  # une vraie pastille bleue n'est pas touchée
+    st = {0: {3: {"alive": True, "spectated": True}}}
+    out = tracking.anchor_spectated([(0, 0.0, [waiting, observed, other_number, plain])], st)[0][2]
+    assert {(d["team"], d["x"]) for d in out} == {("A", 0.45), ("B", 0.60)}
+
+
+def test_the_observed_player_of_a_blinking_frame_is_the_one_both_neighbours_agree_on():
+    single = {10: 3, 14: 3, 40: 5}
+    nearest = sorted(single)
+    assert tracking._observed_between(12, single, nearest) == 3
+    assert tracking._observed_between(25, single, nearest) is None  # trop loin d'une image à cadre net
+    single2 = {10: 3, 14: 7}
+    assert tracking._observed_between(12, single2, sorted(single2)) is None  # avant et après se contredisent
+
+
+def _stack_track(slot_cycle, n=40, x=0.36, y=0.62):
+    t = tracking.Track("A", 0, {"x": x, "y": y, "number": None, "slot": slot_cycle[0], "alive": True})
+    for k in range(1, n):
+        t.add(k, {"x": x, "y": y, "number": None, "slot": slot_cycle[k % len(slot_cycle)], "alive": True})
+    return t
+
+
+def test_two_players_on_one_blob_with_alternating_numbers_share_its_position():
+    t = _stack_track([2, 4])  # le numéro lu alterne entre le 2 et le 4
+    t.slot = 2
+    rows = {(k, 2): row(k, 2, 0.36, 0.62) for k in range(40)}
+    rows[(-5, 4)] = row(-5, 4, 0.36, 0.62)  # le 4 a été lu tout près de la pile juste avant
+    rows[(-5, 4)] = (-5, -0.5, 4, "A", 0.36, 0.62, 90.0, 1, 1.0)
+    runs = {2: [(-10, 60)], 4: [(-10, 60)]}
+    tracking.share_stacks(rows, runs, [t], make_put(rows))
+    assert all(rows[(k, 4)][4:6] == (0.36, 0.62) and rows[(k, 4)][8] == tracking.CONF_STACK for k in range(7, 35))
+
+
+def test_a_player_read_elsewhere_nearby_is_never_put_on_a_stack():
+    t = _stack_track([2, 4])
+    t.slot = 2
+    rows = {(k, 2): row(k, 2, 0.36, 0.62) for k in range(40)}
+    rows[(20, 4)] = row(20, 4, 0.80, 0.30)  # le 4 est lu ailleurs : il n'est pas sur cette pastille
+    runs = {2: [(0, 60)], 4: [(0, 60)]}
+    tracking.share_stacks(rows, runs, [t], make_put(rows))
+    assert rows[(20, 4)][4:6] == (0.80, 0.30)
+    assert all((k, 4) not in rows for k in range(5, 12))  # pas de pile autour d'une lecture lointaine
+
+
+def test_a_single_player_with_a_few_misread_numbers_is_not_a_stack():
+    t = _stack_track([2] * 9 + [4])  # 10 % de lectures fausses : du bruit, pas un deuxième joueur
+    t.slot = 2
+    rows = {(k, 2): row(k, 2, 0.36, 0.62) for k in range(40)}
+    runs = {2: [(0, 60)], 4: [(0, 60)]}
+    assert tracking.share_stacks(rows, runs, [t], make_put(rows)) == 0

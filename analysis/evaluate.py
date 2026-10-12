@@ -82,7 +82,7 @@ def _load(conn, game, step_s, refresh=False):
         return {"frames": frames, "states": states, "noise": dict(enumerate(raw["noise"]))}
     zone = db.zone_for(conn, game["map"], "minimap")
     za, zb = db.zone_for(conn, game["map"], "team_a_bar"), db.zone_for(conn, game["map"], "team_b_bar")
-    states = positions.detect_states(game["path"], game, za, zb, game["width"], game["height"], step_s=step_s)
+    states = positions.detect_states(game["path"], game, za, zb, game["width"], game["height"], step_s=step_s, players=db.players_of(conn, game["id"]))
     frames, noise = positions.detect_frames_and_noise(game["path"], game, zone, game["width"], game["height"], step_s=step_s, hints=positions.hints_from_states(states), walls=db.wall_lines_for(game["map"]))
     path.write_text(json.dumps({"frames": frames, "states": states, "zone_key": zone_key, "noise": noise, "walls": db.wall_lines_for(game["map"]) is not None}, default=float), encoding="utf-8")
     return {"frames": frames, "states": states, "noise": dict(enumerate(noise))}

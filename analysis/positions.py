@@ -10,6 +10,7 @@ import numpy as np
 import banners
 import frame_noise
 import minimap
+import observed_name
 import timer
 import tracking
 
@@ -140,8 +141,9 @@ def detect_frames_and_noise(video, game, zone, width, height, emit=None, wait=No
     return frames, frame_noise.frame_noise(np.array(coarse), frames)
 
 
-def detect_states(video, game, zone_a, zone_b, width, height, wait=None, step_s=STEP_S):
-    """État des 8 joueurs lu sur les bandeaux à la même cadence que la minimap : {indice d'image: {slot: {"alive", "spectated"}}}."""
+def detect_states(video, game, zone_a, zone_b, width, height, wait=None, step_s=STEP_S, players=None):
+    """État des 8 joueurs lu sur les bandeaux à la même cadence que la minimap : {indice d'image: {slot: {"alive", "spectated"}}}.
+    players ({slot: pseudo}, facultatif) : le pseudo affiché en bas à droite complète le cadre blanc quand il ne désigne personne (observed_name.py)."""
     states = {}
     start, end = game["start_s"], game["end_s"]
     crops_a = timer.iter_crops(video, zone_a, width, height, step_s=step_s, t0=start, t1=end)
@@ -150,13 +152,15 @@ def detect_states(video, game, zone_a, zone_b, width, height, wait=None, step_s=
         if wait:
             wait()
         states[i] = banners.read_states(ca, cb)
+    if players:
+        states, _ = observed_name.fuse_observed(states, observed_name.read_slots(video, game, players, width, height, step_s, wait))
     return states
 
 
-def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None, teleports=None, walk_points=None, walk_mask=None, spawns=None, walls=None):
+def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None, teleports=None, walk_points=None, walk_mask=None, spawns=None, walls=None, players=None):
     """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance).
     deaths : [(t, slot)] morts connues par le killfeed. bars : (zone du bandeau gauche, zone du bandeau droit) pour guider le suivi."""
-    states = detect_states(video, game, bars[0], bars[1], width, height, wait, step_s) if bars else None
+    states = detect_states(video, game, bars[0], bars[1], width, height, wait, step_s, players) if bars else None
     hints = hints_from_states(states) if states else None
     frames, noise = detect_frames_and_noise(video, game, zone, width, height, emit, wait, step_s, hints=hints, walls=walls)
     return tracking.solve(frames, step_s, deaths, states, teleports, walk_points, walk_mask, dict(enumerate(noise)), spawns)

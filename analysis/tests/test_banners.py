@@ -157,3 +157,33 @@ def test_the_white_frame_is_found_even_tinted_and_below_dark_padding():
 def test_a_player_alive_with_one_or_two_hit_points_keeps_a_thin_strip_and_is_not_dead():
     states = banners.read_team(_bar([0.02, 0.0, 0.5, 0.0]))
     assert [s["alive"] for s in states] == [True, False, True, False]  # filet de 2 lignes : vivant ; entièrement gris : mort
+
+
+def test_the_observed_name_completes_the_white_frame_and_never_contradicts_a_clear_one():
+    import observed_name
+
+    def per(*flags):
+        return {slot: {"alive": True, "spectated": flag} for slot, flag in zip((1, 2, 3), flags)}
+
+    states = {0: per(False, False, False), 1: per(True, False, False), 2: per(True, True, False), 3: per(False, True, False)}
+    fused, stats = observed_name.fuse_observed(states, [3, 3, 2, 2])
+    assert [s for s, v in fused[0].items() if v["spectated"]] == [3]  # aucun cadre : le pseudo désigne le 3
+    assert [s for s, v in fused[1].items() if v["spectated"]] == [1]  # un cadre net (le 1) l'emporte sur le pseudo (3)
+    assert [s for s, v in fused[2].items() if v["spectated"]] == [2]  # deux cadres : le pseudo départage
+    assert stats == {"accord": 1, "desaccord": 1, "ajoutes": 2}
+
+
+def test_images_of_the_same_name_group_together_and_a_new_name_starts_a_group():
+    import cv2
+    import numpy as np
+
+    import observed_name
+
+    def pill(text):
+        img = np.full((36, 192, 3), 40, np.uint8)
+        cv2.putText(img, text, (6, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        return observed_name.signature(img)
+
+    vectors = [pill("SNVXLAIDEEN")] * 4 + [pill("NCTXSPIRIT")] * 3 + [None, pill("SNVXLAIDEEN")]
+    labels, counts = observed_name.cluster(vectors)
+    assert labels == [0, 0, 0, 0, 1, 1, 1, None, 0] and counts == [5, 3]
