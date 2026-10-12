@@ -862,6 +862,21 @@ RECOVER_GROWTH = 0.12  # ...plus cette distance par seconde écoulée depuis la 
 RECOVER_MAX = 0.30
 
 
+DEATH_BACKING_S = 2.0  # une croix doit avoir, à cette durée près, le bandeau grisé du joueur ou son kill dans le killfeed
+
+
+def _death_backed(k, slot, dead, deaths, times):
+    """Une croix de la minimap est une mort si le bandeau du joueur est grisé à cet instant ou si le killfeed annonce sa mort à quelques secondes près. Sans l'un ni
+    l'autre c'est une tache de lumière en forme de croix (le 3 « mort » à 2,5 s dans la zone de départ orange alors que son bandeau est plein). Sans bandeaux
+    exploitables pour ce joueur, la croix est gardée."""
+    if slot not in dead:
+        return True
+    if k in dead[slot]:
+        return True
+    t = times.get(k)
+    return t is not None and any(s == slot and abs(td - t) <= DEATH_BACKING_S for td, s in (deaths or []))
+
+
 def alive_runs(states, dead):
     """{slot: [(première image, dernière image)]} : périodes où le bandeau du joueur dit « vivant », pour les joueurs dont le bandeau est exploitable.
     C'est le témoin de ce qu'on doit pouvoir montrer : tout joueur vivant doit avoir une position."""
@@ -1500,7 +1515,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     put(k, slot, a.team, x, y, ang, True, CONF_FILL)
     for x in crosses:
         for k, d in x.pts.items():
-            if (k, x.slot) not in rows:
+            if (k, x.slot) not in rows and _death_backed(k, x.slot, dead, deaths, times):
                 put(k, x.slot, x.team, d["x"], d["y"], None, False, x.how)
     # Un joueur dont le bandeau est grisé n'a pas de pastille vivante (les croix restent : elles montrent où il est mort).
     for key in [k for k, r in rows.items() if r[7] and k[0] in dead.get(k[1], ())]:
@@ -1936,7 +1951,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 35  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 36  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

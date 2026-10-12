@@ -230,3 +230,13 @@ def test_a_single_frame_observed_disc_far_from_both_neighbours_is_dropped():
     assert [bool(d) for _, _, d in out] == [True, False, True]
     kept = tracking._drop_pick_spikes([frame(0, 0.51, 0.47), frame(1, 0.52, 0.45), frame(2, 0.53, 0.43)])
     assert all(d for _, _, d in kept)  # un vrai déplacement n'est pas un parasite
+
+
+def test_a_cross_needs_the_grey_banner_or_the_killfeed():
+    dead = {3: {50, 51, 52}}
+    times = {k: k * 0.1 for k in range(100)}
+    assert not tracking._death_backed(25, 3, dead, [], times)  # bandeau plein, aucun kill : tache de lumière en forme de croix
+    assert tracking._death_backed(51, 3, dead, [], times)  # bandeau grisé
+    assert tracking._death_backed(25, 3, dead, [(2.3, 3)], times)  # kill du killfeed à 0,2 s
+    assert not tracking._death_backed(25, 3, dead, [(2.3, 4)], times)  # le kill d'un autre joueur ne compte pas
+    assert tracking._death_backed(25, 7, dead, [], times)  # pas de bandeau exploitable pour ce joueur : croix gardée
