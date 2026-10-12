@@ -51,7 +51,7 @@ const OPENING_KINDS = [
 ] as const;
 type OpeningChoice = (typeof OPENING_KINDS)[number]['id'];
 const ZOOMS = [0, 1, 2, 3, 4, 6]; // 0 : ajusté à la largeur
-const NO_DRAFT: Draft = { pending: null, circle: null, awaitingDirection: false, first: null, segment: null, rect: null, poly: [], cursor: null };
+const NO_DRAFT: Draft = { pending: null, circle: null, awaitingDirection: false, first: null, segment: null, rect: null, anchor: null, poly: [], cursor: null };
 const point = (p: Point) => p.map((v) => v.toFixed(3)).join(', ');
 const direction = (angle: number | null) => (angle === null ? 'sans direction' : `direction ${Math.round(angle)} degrés`);
 
@@ -132,7 +132,7 @@ export function MapMapping({ map }: { map: string }) {
       setDraft(NO_DRAFT);
     } else if (tool === 'capture' || tool === 'spawns') {
       // glisser trace un rectangle ; un simple clic (capture) pose un point de la forme libre
-      setDraft({ ...d, rect: [p.frac[0], p.frac[1], p.frac[0], p.frac[1]], cursor: p.frac });
+      setDraft({ ...d, rect: [p.frac[0], p.frac[1], p.frac[0], p.frac[1]], anchor: p.frac, cursor: p.frac });
     } else if (tool === 'align') {
       setDraft({ ...NO_DRAFT, pending: p.frac }); // le second clic se fait sur le plan
     }
@@ -142,8 +142,9 @@ export function MapMapping({ map }: { map: string }) {
     const d = draftRef.current;
     if (tool === 'tps' && d.circle && !d.awaitingDirection) {
       setDraft({ ...d, circle: { c: d.circle.c, r: stationRadius(d.circle.c, p.frac, aspect) } });
-    } else if ((tool === 'capture' || tool === 'spawns') && d.rect) {
-      const r = rectFrom([d.rect[0], d.rect[1]], p.frac, 0);
+    } else if ((tool === 'capture' || tool === 'spawns') && d.rect && d.anchor) {
+      // le coin fixe est le point de départ du glisser (et non le coin haut gauche du rectangle) : on peut glisser vers la gauche et vers le haut
+      const r = rectFrom(d.anchor, p.frac, 0);
       setDraft({ ...d, rect: r ?? d.rect, cursor: p.frac });
     } else if (d.pending || d.circle || d.segment) {
       setDraft({ ...d, cursor: p.frac });
@@ -155,9 +156,9 @@ export function MapMapping({ map }: { map: string }) {
     if (tool === 'tps' && d.circle && !d.awaitingDirection) {
       return setDraft({ ...d, awaitingDirection: true, cursor: p.frac });
     }
-    if ((tool === 'capture' || tool === 'spawns') && d.rect) {
-      const rect = rectFrom([d.rect[0], d.rect[1]], p.frac);
-      const keep = { ...d, rect: null };
+    if ((tool === 'capture' || tool === 'spawns') && d.rect && d.anchor) {
+      const rect = rectFrom(d.anchor, p.frac);
+      const keep = { ...d, rect: null, anchor: null };
       if (tool === 'capture') {
         if (annotation.capture.length >= MAX_CAPTURE_ZONES) {
           setDraft(NO_DRAFT);

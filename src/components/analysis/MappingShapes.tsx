@@ -10,7 +10,8 @@ export interface Draft {
   awaitingDirection: boolean;
   first: Station | null; // première station d'une tyrolienne déjà posée
   segment: { from: Point; to: Point } | null; // trait de sens unique qui attend le côté qui voit
-  rect: Rect | null;
+  rect: Rect | null; // rectangle en cours (coins dans l'ordre)
+  anchor: Point | null; // point où le glisser a commencé : le coin fixe du rectangle, quel que soit le sens du glisser
   poly: Point[]; // forme libre en cours (points posés)
   cursor: Point | null;
 }
