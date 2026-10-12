@@ -1394,7 +1394,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1408,6 +1408,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     spawns : {"A": (x0, y0, x1, y1), "B": ...} zones de départ de la carte (facultatif) : un disque blanc « qui attend » hors de la zone de départ de son équipe
     (la boîte de capture de Polaris) est un joueur en jeu, pas un mort.
     reliability : {"grid": n, "gaze": {(i, j)}} cases de la carte où la forme des disques a donné de mauvais regards (reliability.py) : la forme y pèse moins que le cap et le camp ennemi.
+    kills : [(t, tueur, victime, arme)] du killfeed (arme : nom ou None) : le tueur regarde sa victime (kill_gaze).
     marks : [(t, joueur, x, y, regard ou None)] posés à la main : vérités qui ancrent le suivi (apply_marks).
     coherence_out : dict facultatif rempli de {(image, joueur): indice de cohérence du regard, 0 à 1} (voir gaze_coherence).
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
@@ -1586,6 +1587,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     steady_gaze(rows, step_s)
     steady_still_gaze(rows)
     duel_gaze(rows, states, step_s, coherence_out)
+    kill_gaze(rows, kills, times, step_s, coherence_out)
     separate_players(rows)
     apply_marks(rows, marks, times, step_s, put, final=True, coherence_out=coherence_out)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
@@ -1704,6 +1706,44 @@ def duel_gaze(rows, states, step_s, coherence_out=None):
     return changed
 
 
+KILL_GAZE_BEFORE_S = 0.8  # le tueur regarde sa victime depuis cet instant avant la ligne du killfeed...
+KILL_GAZE_AFTER_S = 0.6  # ...et jusqu'à cet instant après (il regarde le mort)
+KILL_GAZE_SKIP_WEAPONS = {"DX3", "STICKY", "SONAR", "CLONE"}  # un kill de gadget ne dit rien du regard : la grenade est lancée puis oubliée
+
+
+def kill_gaze(rows, kills, times, step_s, coherence_out=None):
+    """Règle du kill : le tueur regarde le joueur qu'il vient de tuer (souvent sans que l'autre l'ait vu, donc sans duel). Dans la fenêtre autour de la ligne du killfeed, le regard
+    du tueur est remplacé par la direction de sa victime (sa dernière position, croix comprise) quand il s'en écarte de plus de DUEL_TOLERANCE degrés. Pas pour un kill de gadget
+    ni pour les armes de KILL_GAZE_EXCEPT (une arme qui tire en dehors d'un mur en gardant le corps à couvert : le regard ne vise pas la victime). Les regards posés à la main passent après."""
+    if not kills or not times:
+        return 0
+    ordered = sorted(times)
+    before, after = round(KILL_GAZE_BEFORE_S / step_s), round(KILL_GAZE_AFTER_S / step_s)
+    changed = 0
+    for t, killer, victim, weapon in kills:
+        if killer is None or victim is None or weapon in KILL_GAZE_SKIP_WEAPONS or weapon in KILL_GAZE_EXCEPT:
+            continue
+        k = min(ordered, key=lambda j: abs(times[j] - t))
+        if abs(times[k] - t) > 1.0:
+            continue
+        for j in range(k - before, k + after + 1):
+            a = rows.get((j, killer))
+            if a is None or not a[7]:
+                continue
+            b = rows.get((j, victim)) or next((rows[(i, victim)] for i in range(j, j - 6, -1) if (i, victim) in rows), None)
+            if b is None:
+                continue
+            bearing = math.degrees(math.atan2(b[5] - a[5], (b[4] - a[4]) * MINIMAP_ASPECT)) % 360
+            if math.hypot((b[4] - a[4]) * ARENA_M[0], (b[5] - a[5]) * ARENA_M[1]) < 0.5 or (a[6] is not None and abs((a[6] - bearing + 180) % 360 - 180) <= DUEL_TOLERANCE):
+                continue
+            rows[(j, killer)] = a[:6] + (round(bearing, 1),) + a[7:]
+            if coherence_out is not None:
+                coherence_out[(j, killer)] = max(coherence_out.get((j, killer)) or 0.0, DUEL_COHERENCE)
+            changed += 1
+    return changed
+
+
+KILL_GAZE_EXCEPT = ()  # armes (noms) dont le tueur ne regarde pas sa victime : à renseigner
 DUEL_TOLERANCE = 40  # un regard déjà à moins de cela de la direction de l'adversaire est gardé
 DUEL_COHERENCE = 0.7  # indice d'un regard tiré de la règle du duel
 MARK_CLEAR_S = 1.0  # autour d'une position posée à la main, les lignes du même joueur plus loin que MARK_CLEAR_DIST sont retirées (le trou est comblé à partir de la vérité)
@@ -2116,7 +2156,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 40  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 41  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

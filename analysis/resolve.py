@@ -14,6 +14,7 @@ import db
 import evaluate
 import observed_name
 import tracking
+import weapons
 
 
 def resolve_game(conn, game_id):
@@ -24,7 +25,9 @@ def resolve_game(conn, game_id):
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
     coherence = {}
     marks = db.marks_of(conn, game_id)
-    rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]), data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), coherence, marks)
+    names = weapons.display_names()
+    kills = [(k["t"], k["killer_slot"], k["victim_slot"], names.get(k["weapon"], k["weapon"])) for k in db.kills_of(conn, game_id)]
+    rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]), data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), coherence, marks, kills)
     scanned = conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (game_id,)).fetchone() is not None
     db.replace_samples(conn, game_id, rows, tracking.PARAMS_VERSION, with_kills=scanned, coherence=coherence)
     db.apply_corrections(conn, game_id)

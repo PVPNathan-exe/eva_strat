@@ -320,3 +320,27 @@ def test_a_gaze_already_turned_towards_the_opponent_is_kept():
 def test_enemies_too_far_apart_are_not_in_a_duel():
     rows = table(*[row(k, 1, 0.10, 0.50, angle=30.0) for k in range(40)], *[row(k, 8, 0.90, 0.50, angle=154.0) for k in range(40)])
     assert tracking.duel_gaze(rows, _duel_states(), 0.1) == 0
+
+
+def test_the_killer_looks_at_the_victim_around_the_kill_but_not_for_a_gadget():
+    times = {k: k * 0.1 for k in range(60)}
+    def world():
+        return table(*[row(k, 1, 0.30, 0.50, angle=100.0) for k in range(60)], *[row(k, 8, 0.45, 0.50, angle=100.0) for k in range(60)])
+    rows = world()
+    coherence = {}
+    assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE")], times, 0.1, coherence) > 0
+    assert abs(rows[(30, 1)][6] - 0.0) < 1.0  # le 1 regarde vers la droite, où est sa victime
+    assert abs(rows[(24, 1)][6] - 0.0) < 1.0 and abs(rows[(35, 1)][6] - 0.0) < 1.0
+    assert rows[(10, 1)][6] == 100.0 and rows[(40, 1)][6] == 100.0  # hors de la fenêtre
+    assert rows[(30, 8)][6] == 100.0  # la victime n'est pas concernée
+    assert coherence[(30, 1)] >= tracking.DUEL_COHERENCE
+    rows = world()
+    assert tracking.kill_gaze(rows, [(3.0, 1, 8, "DX3")], times, 0.1) == 0  # grenade : le regard ne dit rien
+    rows = world()
+    assert tracking.kill_gaze(rows, [(3.0, None, 8, "SPECTRE")], times, 0.1) == 0  # tueur inconnu
+
+
+def test_the_killer_keeps_a_gaze_already_turned_towards_the_victim():
+    times = {k: k * 0.1 for k in range(60)}
+    rows = table(*[row(k, 1, 0.30, 0.50, angle=20.0) for k in range(60)], *[row(k, 8, 0.45, 0.50, angle=100.0) for k in range(60)])
+    assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE")], times, 0.1) == 0
