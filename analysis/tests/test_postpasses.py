@@ -283,3 +283,40 @@ def test_a_hand_placed_gaze_holds_for_a_second_around_its_instant():
     assert rows[(38, 2)][6] == 20.0  # plus près de la seconde correction
     assert rows[(56, 2)][6] == 90.0  # plus loin que la seconde voisine : inchangé
     assert coherence[(30, 2)] == 1.0 and coherence[(26, 2)] >= 0.8
+
+
+def _duel_states(n=40):
+    """Le joueur 1 (orange) et le joueur 8 (bleu) perdent des points de vie entre les images 10 et 14 ; le 2 non."""
+    out = {}
+    for k in range(n):
+        hp = 0.8 if k < 10 else max(0.2, 0.8 - 0.15 * (k - 9)) if k < 14 else 0.2
+        out[k] = {1: {"fill": hp}, 8: {"fill": hp}, 2: {"fill": 0.8}}
+    return out
+
+
+def test_a_player_losing_hp_is_under_fire_only_around_the_loss():
+    fire = tracking.under_fire(_duel_states(), 0.1)
+    assert 12 in fire[1] and 12 in fire[8]
+    assert 30 not in fire[1] and not fire[2]
+
+
+def test_two_enemies_losing_hp_together_look_at_each_other():
+    rows = table(*[row(k, 1, 0.50, 0.50, angle=100.0) for k in range(40)], *[row(k, 8, 0.55, 0.50, angle=300.0) for k in range(40)], *[row(k, 2, 0.51, 0.50, angle=100.0) for k in range(40)])
+    coherence = {}
+    assert tracking.duel_gaze(rows, _duel_states(), 0.1, coherence) > 0
+    assert abs(rows[(12, 1)][6] - 0.0) < 1.0  # le 1 regarde vers la droite, où est le 8
+    assert abs(rows[(12, 8)][6] - 180.0) < 1.0  # le 8 regarde vers la gauche
+    assert rows[(30, 1)][6] == 100.0  # hors du duel, rien ne change
+    assert rows[(12, 2)][6] == 100.0  # un coéquipier qui ne perd rien n'est pas en duel
+    assert coherence[(12, 1)] >= tracking.DUEL_COHERENCE
+
+
+def test_a_gaze_already_turned_towards_the_opponent_is_kept():
+    rows = table(*[row(k, 1, 0.50, 0.50, angle=15.0) for k in range(40)], *[row(k, 8, 0.55, 0.50, angle=180.0) for k in range(40)])
+    tracking.duel_gaze(rows, _duel_states(), 0.1)
+    assert rows[(12, 1)][6] == 15.0 and rows[(12, 8)][6] == 180.0
+
+
+def test_enemies_too_far_apart_are_not_in_a_duel():
+    rows = table(*[row(k, 1, 0.10, 0.50, angle=30.0) for k in range(40)], *[row(k, 8, 0.90, 0.50, angle=154.0) for k in range(40)])
+    assert tracking.duel_gaze(rows, _duel_states(), 0.1) == 0

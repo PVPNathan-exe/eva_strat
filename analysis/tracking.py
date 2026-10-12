@@ -1585,6 +1585,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     snap_to_walkable(rows)
     steady_gaze(rows, step_s)
     steady_still_gaze(rows)
+    duel_gaze(rows, states, step_s, coherence_out)
     separate_players(rows)
     apply_marks(rows, marks, times, step_s, put, final=True, coherence_out=coherence_out)
     return sorted(rows.values(), key=lambda r: (r[0], r[2]))
@@ -1636,6 +1637,75 @@ def drop_impossible_moves(rows, step_s):
     return dropped
 
 
+HP_DROP = 0.06  # un joueur « sous le feu » a perdu au moins cette part de ses points de vie dans la fenêtre
+HP_WINDOW_S = 0.5  # fenêtre (de chaque côté de l'image) où la perte de points de vie est cherchée
+DUEL_MAX_M = 14.0  # deux ennemis plus éloignés que cela (m) ne sont pas en duel
+MINIMAP_ASPECT = 1.81  # largeur sur hauteur de la minimap en pixels : un regard est un angle dans l'image, pas dans les fractions normalisées
+
+
+def under_fire(states, step_s):
+    """{joueur: ensemble d'images} où le joueur perd des points de vie (bandeau : remplissage qui baisse d'au moins HP_DROP dans la demi-seconde voisine). Une mort compte."""
+    if not states:
+        return {}
+    keys = sorted(states)
+    w = max(1, round(HP_WINDOW_S / step_s))
+    out = {}
+    for slot in range(1, 9):
+        fill = {k: states[k][slot].get("fill") for k in keys if slot in states[k] and states[k][slot].get("fill") is not None}
+        hit = set()
+        for k in keys:
+            if k not in fill:
+                continue
+            before = [fill[j] for j in range(k - w, k + 1) if j in fill]
+            after = [fill[j] for j in range(k, k + w + 1) if j in fill]
+            if (before and max(before) - fill[k] >= HP_DROP) or (after and fill[k] - min(after) >= HP_DROP):
+                hit.add(k)
+        out[slot] = hit
+    return out
+
+
+def duel_bearings(rows, fire):
+    """{(image, joueur): direction (degrés, dans l'image de la minimap) vers l'ennemi le plus proche lui aussi sous le feu}. Un duel : les deux joueurs perdent des points de vie
+    en même temps, à moins de DUEL_MAX_M l'un de l'autre, et se regardent (le tireur vise celui qu'il touche)."""
+    by_frame = {}
+    for (k, slot), r in rows.items():
+        if r[7]:
+            by_frame.setdefault(k, []).append(r)
+    out = {}
+    for k, rs in by_frame.items():
+        hot = [r for r in rs if k in fire.get(r[2], ())]
+        for a in hot:
+            best = None
+            for b in hot:
+                if (a[2] <= 4) == (b[2] <= 4):
+                    continue
+                d = math.hypot((b[4] - a[4]) * ARENA_M[0], (b[5] - a[5]) * ARENA_M[1])
+                if d <= DUEL_MAX_M and (best is None or d < best[0]):
+                    best = (d, b)
+            if best:
+                b = best[1]
+                out[(k, a[2])] = math.degrees(math.atan2(b[5] - a[5], (b[4] - a[4]) * MINIMAP_ASPECT)) % 360
+    return out
+
+
+def duel_gaze(rows, states, step_s, coherence_out=None):
+    """Règle du duel : un joueur qui perd des points de vie en même temps qu'un ennemi proche regarde cet ennemi. Le regard calculé est remplacé par la direction de l'ennemi
+    quand il s'en écarte de plus de DUEL_TOLERANCE degrés (un regard déjà tourné vers lui est gardé). Les regards posés à la main ne sont jamais modifiés (appelé avant apply_marks)."""
+    fire = under_fire(states, step_s)
+    changed = 0
+    for key, bearing in duel_bearings(rows, fire).items():
+        r = rows[key]
+        if r[6] is not None and abs((r[6] - bearing + 180) % 360 - 180) <= DUEL_TOLERANCE:
+            continue
+        rows[key] = r[:6] + (round(bearing, 1),) + r[7:]
+        if coherence_out is not None:
+            coherence_out[key] = max(coherence_out.get(key) or 0.0, DUEL_COHERENCE)
+        changed += 1
+    return changed
+
+
+DUEL_TOLERANCE = 40  # un regard déjà à moins de cela de la direction de l'adversaire est gardé
+DUEL_COHERENCE = 0.7  # indice d'un regard tiré de la règle du duel
 MARK_CLEAR_S = 1.0  # autour d'une position posée à la main, les lignes du même joueur plus loin que MARK_CLEAR_DIST sont retirées (le trou est comblé à partir de la vérité)
 MARK_CLEAR_DIST = 0.08
 
@@ -2046,7 +2116,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 39  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 40  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
