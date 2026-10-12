@@ -12,13 +12,15 @@ L'utilisateur choisit des couleurs à la pipette (au pixel près) sur la médian
   porte       porte hachurée : on la traverse (praticable) ;
   porte_vitre porte avec une vitre : on la traverse et on voit à travers.
 Les portes peuvent aussi être tracées en traits (extrémité à extrémité, avec ou sans vitre) : le trait est rendu praticable.
-Chaque pixel prend la classe de la couleur choisie la plus proche, à moins de la tolérance de cette couleur. Les tyroliennes sont des flèches (entrée vers sortie), les zones de
+Chaque pixel prend la classe de la couleur choisie la plus proche, à moins de la tolérance de cette couleur. Les tyroliennes sont des flèches entre deux stations, valables dans les deux sens ; le trait qui les relie sur la minimap a souvent la couleur des murs : sous la flèche, les pixels
+non praticables entourés de sol sont rendus praticables (le trait ne coupe pas le sol), sans toucher aux vrais murs épais. Les tyroliennes sont des flèches, les zones de
 départ des rectangles (deux au plus par équipe), l'alignement sur le plan stratégique des paires de points (minimap, plan).
 Sorties : <Carte>.png (praticable : sol, plus les pixels « tp » entourés de sol), <Carte>_lignes.png (murs), <Carte>_classes.png (toutes les classes), map_teleports.json,
 map_spawns.json et map_plan_insets.json. Une annotation l'emporte sur ce que les détections automatiques avaient trouvé."""
 
 import argparse
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -34,6 +36,8 @@ DOORS = HERE / "map_doors.json"
 SIZE = 400  # côté du masque enregistré (comme map_mask.py)
 CLASSES = ("sol", "mur", "tir", "vue", "tp", "porte", "porte_vitre")
 PASSABLE = ("sol", "porte", "porte_vitre")  # classes où l'on marche
+MAX_REFUSED = 0.01  # un masque qui refuserait plus de cette part des lectures sûres de la carte n'est pas écrit (un masque juste en refuse 0,05 % ou moins)
+TP_BAND_PX = 5  # largeur de la bande sous une flèche de tyrolienne où un trait fin est rendu au sol
 DOOR_WIDTH_PX = 3  # épaisseur d'un trait de porte sur la médiane
 CODES = {name: i + 1 for i, name in enumerate(CLASSES)}  # 0 : aucune classe
 MAX_SPAWNS = 2  # zones de départ par équipe
@@ -63,6 +67,21 @@ def walkable_from_classes(labels):
     tp = (labels == CODES["tp"]).astype(np.uint8)
     share = cv2.boxFilter(floor.astype(np.float32), -1, (TP_NEIGHBOURHOOD, TP_NEIGHBOURHOOD))
     return (floor > 0) | ((tp > 0) & (share >= TP_FLOOR_SHARE))
+
+
+def open_tp_paths(walk, tps):
+    """Sous chaque flèche de tyrolienne, les pixels non praticables dont le voisinage est au moins à moitié du sol (un trait fin, de la couleur des murs, posé sur le sol) deviennent
+    praticables ; un vrai mur épais sous la flèche reste un mur."""
+    if not tps:
+        return
+    h, w = walk.shape
+    share = cv2.boxFilter(walk.astype(np.float32), -1, (TP_NEIGHBOURHOOD, TP_NEIGHBOURHOOD))
+    band = np.zeros((h, w), np.uint8)
+    for t in tps:
+        a = (round(t["from"][0] * (w - 1)), round(t["from"][1] * (h - 1)))
+        b = (round(t["to"][0] * (w - 1)), round(t["to"][1] * (h - 1)))
+        cv2.line(band, a, b, 255, TP_BAND_PX)
+    walk |= (band > 0) & (share >= TP_FLOOR_SHARE)
 
 
 def draw_doors(walk, doors):
@@ -126,6 +145,17 @@ def _merge_json(path, map_name, value):
     path.write_text(json.dumps(known, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def refused_share(conn, map_name, mask):
+    """Part des lectures sûres des games de la carte que ce masque ferait refuser au suivi (même mesure que map_mask.py) ; None sans lecture."""
+    import map_mask
+
+    try:
+        points = map_mask.read_points(conn, map_name)
+    except sqlite3.OperationalError:
+        return None
+    return map_mask.share_outside(mask, points) if points else None
+
+
 def apply(conn, map_name):
     """Écrit les fichiers du programme d'après l'annotation de la carte. Renvoie un résumé (dict), ou None s'il n'y a pas d'annotation ou de médiane."""
     raw = annotation_of(conn, map_name)
@@ -137,15 +167,22 @@ def apply(conn, map_name):
     if data["colors"]:
         labels = classify(median, data["colors"])
         walk = walkable_from_classes(labels)
+        open_tp_paths(walk, data["tps"])
         draw_doors(walk, data["doors"])
-        if walk.any():
-            cv2.imwrite(str(MASK_DIR / f"{map_name}.png"), cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST))
-            summary["praticable"] = round(float(walk.mean()), 3)
-        walls = (labels == CODES["mur"]).astype(np.uint8)
-        if walls.any():
-            cv2.imwrite(str(MASK_DIR / f"{map_name}_lignes.png"), cv2.dilate(walls, np.ones((3, 3), np.uint8)) * 255)
-        cv2.imwrite(str(MASK_DIR / f"{map_name}_classes.png"), labels)
-        summary["classes"] = {name: int((labels == code).sum()) for name, code in CODES.items()}
+        mask = cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST)
+        summary["praticable"] = round(float(walk.mean()), 3)
+        refused = refused_share(conn, map_name, mask)
+        if refused is not None:
+            summary["lectures_sures_refusees"] = round(refused, 4)
+        if not walk.any() or (refused is not None and refused > MAX_REFUSED):
+            summary["masque_non_ecrit"] = f"{refused:.1%} des lectures sûres de la carte seraient refusées (maximum {MAX_REFUSED:.0%}) : ajoute les couleurs de sol manquantes ou augmente leur tolérance" if walk.any() else "aucun pixel de sol"
+        else:
+            cv2.imwrite(str(MASK_DIR / f"{map_name}.png"), mask)
+            walls = (labels == CODES["mur"]).astype(np.uint8)
+            if walls.any():
+                cv2.imwrite(str(MASK_DIR / f"{map_name}_lignes.png"), cv2.dilate(walls, np.ones((3, 3), np.uint8)) * 255)
+            cv2.imwrite(str(MASK_DIR / f"{map_name}_classes.png"), labels)
+            summary["classes"] = {name: int((labels == code).sum()) for name, code in CODES.items()}
     if data["doors"]:
         _merge_json(DOORS, map_name, [{"from": d["from"], "to": d["to"], "glass": d["glass"]} for d in data["doors"]])
         summary["portes"] = len(data["doors"])

@@ -122,7 +122,7 @@ export function MappingCanvas({ url, annotation, zoom, preview, pendingPoint, dr
             </marker>
           </defs>
           {annotation.tps.map((t, i) => (
-            <line key={`tp${i}`} x1={pct(t.from[0])} y1={pct(t.from[1])} x2={pct(t.to[0])} y2={pct(t.to[1])} className="mapping__tp" markerEnd="url(#mapping-arrow)" vectorEffect="non-scaling-stroke" />
+            <line key={`tp${i}`} x1={pct(t.from[0])} y1={pct(t.from[1])} x2={pct(t.to[0])} y2={pct(t.to[1])} className="mapping__tp" markerStart="url(#mapping-arrow)" markerEnd="url(#mapping-arrow)" vectorEffect="non-scaling-stroke" />
           ))}
           {annotation.doors.map((d, i) => (
             <line key={`door${i}`} x1={pct(d.from[0])} y1={pct(d.from[1])} x2={pct(d.to[0])} y2={pct(d.to[1])} className={d.glass ? 'mapping__door mapping__door--glass' : 'mapping__door'} vectorEffect="non-scaling-stroke" />

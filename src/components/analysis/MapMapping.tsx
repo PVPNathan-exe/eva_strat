@@ -160,13 +160,13 @@ export function MapMapping({ map }: { map: string }) {
           {tool === 'tps' && (
             <div>
               <p className="mapping__hint">
-                Clique l'entrée de la tyrolienne, puis sa sortie : une flèche est tracée. Le trait qui relie les deux stations sur la minimap se range avec sa couleur dans « Couleurs »
-                (classe chemin de tyrolienne) pour ne pas être pris pour un mur.
+                Clique une station, puis l'autre : une flèche à deux pointes est tracée (la tyrolienne marche dans les deux sens). Trace la flèche le long du trait qui relie les deux
+                stations : sous elle, ce trait (de la couleur des murs) ne compte plus comme un mur, tant qu'il est fin et posé sur du sol. Garde la couleur des murs dans la classe Mur.
               </p>
               <ul className="mapping__list">
                 {annotation.tps.map((t, i) => (
                   <li key={i}>
-                    Flèche {i + 1} : ({point(t.from)}) vers ({point(t.to)})
+                    Tyrolienne {i + 1} : ({point(t.from)}) et ({point(t.to)})
                     <button onClick={() => removeSegment('tps', i)}>Retirer</button>
                   </li>
                 ))}

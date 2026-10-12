@@ -112,6 +112,22 @@ def test_a_tp_path_inside_the_floor_is_walkable_but_a_tp_path_over_a_wall_is_not
     assert not walk[2, 2]
 
 
+def test_a_thin_wall_coloured_line_under_a_tp_arrow_becomes_floor_but_a_thick_wall_does_not():
+    labels = np.full((60, 60), map_annotations.CODES["mur"], np.uint8)
+    labels[10:50, 5:55] = map_annotations.CODES["sol"]
+    labels[29:31, 5:55] = map_annotations.CODES["mur"]  # trait fin de la couleur des murs posé sur le sol
+    walk = map_annotations.walkable_from_classes(labels)
+    assert not walk[30, 30]
+    map_annotations.open_tp_paths(walk, [{"from": [0.1, 0.5], "to": [0.9, 0.5]}])
+    assert walk[30, 30] and not walk[2, 30]
+    thick = np.full((60, 60), map_annotations.CODES["mur"], np.uint8)
+    thick[:, :20] = map_annotations.CODES["sol"]
+    thick[:, 40:] = map_annotations.CODES["sol"]  # 20 pixels de vrai mur entre deux sols
+    w2 = map_annotations.walkable_from_classes(thick)
+    map_annotations.open_tp_paths(w2, [{"from": [0.0, 0.5], "to": [1.0, 0.5]}])
+    assert not w2[30, 30]
+
+
 def test_doors_are_walkable_and_the_door_line_is_drawn_walkable():
     labels = np.full((40, 40), map_annotations.CODES["mur"], np.uint8)
     labels[10:12, 10:30] = map_annotations.CODES["porte"]
@@ -165,4 +181,12 @@ def test_apply_writes_mask_walls_teleports_spawns_and_doors(tmp_path, monkeypatc
     map_annotations.apply(conn, "Test")
     kept = json.loads((tmp_path / "SPAWNS.json").read_text())["Test"]
     assert kept["A"] == [0.1, 0.1, 0.2, 0.2] and kept["B"] == [0.9, 0.9, 1.0, 1.0]  # l'équipe sans zone saisie garde la sienne
+    conn.execute("CREATE TABLE games (id INTEGER PRIMARY KEY, map TEXT)")
+    conn.execute("CREATE TABLE samples (game_id INTEGER, alive INTEGER, confidence REAL, x REAL, y REAL)")
+    conn.execute("INSERT INTO games VALUES (1, 'Test')")
+    conn.executemany("INSERT INTO samples VALUES (1, 1, 0.9, ?, ?)", [(0.02, 0.02)] * 30 + [(0.5, 0.5)] * 70)  # 30 % des lectures sûres sur un mur
+    before = (tmp_path / "Test.png").read_bytes()
+    bad = map_annotations.apply(conn, "Test")
+    assert "masque_non_ecrit" in bad and bad["lectures_sures_refusees"] > 0.2
+    assert (tmp_path / "Test.png").read_bytes() == before  # le masque précédent est gardé
     assert map_annotations.apply(conn, "Inconnue") is None

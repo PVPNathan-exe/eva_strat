@@ -57,7 +57,9 @@ export function useMapAnnotation(map: string) {
     setBusy(true);
     try {
       const summary = await analysisApi.applyMapAnnotation(map);
-      setMessage({ text: `Appliqué aux fichiers du programme : ${Object.entries(summary).filter(([k]) => k !== 'map').map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(', ')}. Recharge la page pour voir les couloirs mis à jour.`, error: false });
+      const refused = typeof summary.masque_non_ecrit === 'string' ? summary.masque_non_ecrit : null;
+      const detail = Object.entries(summary).filter(([k]) => k !== 'map' && k !== 'masque_non_ecrit').map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(', ');
+      setMessage(refused ? { text: `Masque non écrit : ${refused}. (${detail})`, error: true } : { text: `Appliqué aux fichiers du programme : ${detail}. Recharge la page pour voir les couloirs mis à jour.`, error: false });
     } catch (e) {
       setMessage({ text: (e as Error).message, error: true });
     } finally {
