@@ -319,6 +319,7 @@ def _is_waiting_circle(blob, spawn_colors):
 
 
 OPEN_DISC_PX = 5  # ouverture (pixels) qui retire les traits blancs fins du plan collés à un disque
+OPEN_DISC_MERGE = 0.07  # un disque observé « ouvert » à cette distance au plus d'un autre disque de même numéro est le même joueur vu deux fois
 OPEN_DISC_SEPARATION = 0.025  # distance minimale (relative à la largeur) à un joueur observé déjà trouvé de la même équipe
 
 
@@ -492,11 +493,18 @@ def find_markers(crop, templates=None, hint=None, walls=None):
                     ox, oy = m["m10"] / m["m00"] / w, m["m01"] / m["m00"] / h
                     if any(d["team"] == team and d["spectated"] and math.hypot(d["x"] - ox, d["y"] - oy) < OPEN_DISC_SEPARATION for d in found):
                         continue
-                add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT, tip_silhouette=tip_sil)  # halo pâle : le numéro doit être lisible
+                before = len(found)
+                add(blob, team, alive=True, spectated=True, silhouette=silhouette, require_digit=pale_ring or WHITE_REQUIRE_DIGIT, tip_silhouette=tip_sil)
+                if dedupe:
+                    for d in found[before:]:
+                        d["opened"] = True  # halo pâle : le numéro doit être lisible
     white_discs(white)
     # Un disque posé contre un trait blanc du plan fusionne avec lui et la tache n'a plus la forme d'un disque : on retire les traits fins (ouverture) pour
     # retrouver le disque seul. Mesuré : le joueur observé n'était trouvé que dans 47 % des images d'une vidéo (92 % sur les autres).
     white_discs(cv2.morphologyEx(white, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (OPEN_DISC_PX, OPEN_DISC_PX))), dedupe=True)
+    # Le même disque vu deux fois : la passe normale y garde un trait de mur collé (le centre glisse de 0,03 à 0,05 vers lui), la passe ouverte le retire. On garde la seconde.
+    for d in [d for d in found if d.get("opened")]:
+        found[:] = [e for e in found if e is d or e.get("opened") or not (e["spectated"] and e["team"] == d["team"] and e["number"] is not None and e["number"] == d["number"] and math.hypot(e["x"] - d["x"], e["y"] - d["y"]) < OPEN_DISC_MERGE)]
     # Le joueur observé fusionné avec une zone claire de la carte (Polaris) : cherché par son chiffre noir sur disque blanc, hors zones de départ.
     for disc, team, unsure in _glyph_discs(hsv, scale, found, hint):
         waiting = _is_waiting_circle(disc, spawn_colors)

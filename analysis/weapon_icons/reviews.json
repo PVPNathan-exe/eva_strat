@@ -4,7 +4,8 @@
     "locked": true
   },
   "B15": {
-    "guess": "SPECTRE"
+    "guess": "SPECTRE",
+    "verdict": "ok"
   },
   "B8": {
     "guess": "AK77",
@@ -124,5 +125,24 @@
   },
   "G14": {
     "locked": true
+  },
+  "G16": {
+    "reported": true
+  },
+  "B27": {
+    "reported": true
+  },
+  "B26": {
+    "reported": true,
+    "guess": "SPECTRE",
+    "verdict": "ok"
+  },
+  "B25": {
+    "reported": true,
+    "guess": "ATLAS",
+    "verdict": "ok"
+  },
+  "B29": {
+    "reported": true
   }
 }

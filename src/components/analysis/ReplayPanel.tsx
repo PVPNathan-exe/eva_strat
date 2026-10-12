@@ -70,6 +70,7 @@ interface Shown {
   angle: number | null;
   alive: boolean;
   confidence: number | null;
+  coherence: number | null;
 }
 
 /** Angle intermédiaire par le plus court chemin (359° -> 1° ne fait pas le tour). */
@@ -94,7 +95,7 @@ function shownAt(frames: Frame[], t: number): Shown[] {
       y = s.y + (n.y - s.y) * k;
       if (s.angle !== null && n.angle !== null) angle = lerpAngle(s.angle, n.angle, k);
     }
-    out.push({ frame: s.frame, slot, team: s.team, x, y, angle, alive: !!s.alive, confidence: s.confidence });
+    out.push({ frame: s.frame, slot, team: s.team, x, y, angle, alive: !!s.alive, confidence: s.confidence, coherence: s.gaze_coh ?? null });
   }
   return out;
 }
@@ -304,9 +305,9 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
               className={`replay__dot${p.alive ? '' : ' is-dead'}${(p.confidence ?? 1) < 0.5 ? ' is-unsure' : ''}${marks && p.alive && unconfirmed.has(flagKey(p.frame, p.slot)) ? ' is-unconfirmed' : ''}${p.slot === observed ? ' is-observed' : ''}${fixing ? ' is-pickable' : ''}${p.slot === pickA || p.slot === pickB ? ' is-picked' : ''}`}
               onClick={fixing ? () => pick(p.slot) : undefined}
               style={{ left: `${x}%`, top: `${y}%`, ['--c' as string]: TEAM_COLOR[p.team] }}
-              title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.slot === observed ? ' · observé dans la vidéo' : ''}${marks && p.alive && unconfirmed.has(flagKey(p.frame, p.slot)) ? ' · non confirmé par la vraie minimap' : ''}${p.confidence !== null && p.confidence < 1 ? ` · fiabilité ${Math.round(p.confidence * 100)} %` : ''}`}
+              title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.slot === observed ? ' · observé dans la vidéo' : ''}${marks && p.alive && unconfirmed.has(flagKey(p.frame, p.slot)) ? ' · non confirmé par la vraie minimap' : ''}${p.confidence !== null && p.confidence < 1 ? ` · fiabilité ${Math.round(p.confidence * 100)} %` : ''}${p.alive && p.coherence !== null ? ` · cohérence du regard ${Math.round(p.coherence * 100)} %` : ''}`}
             >
-              {p.alive && p.angle !== null && <i className="replay__dir" style={{ transform: `rotate(${p.angle}deg)` }} />}
+              {p.alive && p.angle !== null && <i className={`replay__dir${p.coherence !== null && p.coherence < 0.4 ? ' is-doubtful' : ''}`} style={{ transform: `rotate(${p.angle}deg)`, opacity: p.coherence === null ? 1 : 0.35 + 0.65 * p.coherence }} />}
               <b>{p.alive ? numberOfSlot(p.slot) : <X className="ic" strokeWidth={3} />}</b>
               {labels && nameOf.get(p.slot) && <em className="replay__name">{nameOf.get(p.slot)}</em>}
             </div>

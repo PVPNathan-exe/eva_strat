@@ -128,6 +128,8 @@ export interface Sample {
   angle: number | null;
   alive: number;
   confidence: number | null;
+  /** Cohérence des directions lues autour de cette image (0 à 1) : bas, le regard est incertain. null : non calculée. */
+  gaze_coh?: number | null;
 }
 
 /** Contrôle des positions à la vraie minimap et joueur observé (GET /api/flags). */

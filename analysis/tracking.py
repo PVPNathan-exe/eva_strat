@@ -449,6 +449,37 @@ def trim_merged_tails(tracks):
     return cut
 
 
+SAME_SLOT_JOIN_DIST = 0.09  # la seconde trajectoire doit commencer à moins de cela de la première, juste avant le chevauchement
+SAME_SLOT_OVERLAP_FRAMES = 25  # deux trajectoires du même numéro qui se chevauchent d'au plus cette durée en des endroits différents se relaient
+
+
+def trim_same_slot_overlaps(tracks):
+    """Deux trajectoires qui portent le même numéro dominant et se chevauchent brièvement à des endroits différents ne peuvent pas être deux joueurs : l'une est
+    la suite de l'autre, avec une image parasite entre les deux. La première perd la fin qui chevauche, au lieu que la plus courte soit écartée tout entière
+    (la trajectoire de 6 s du joueur observé était ainsi perdue à cause d'une seconde de chevauchement). Renvoie le nombre de trajectoires coupées."""
+    cut = 0
+    for x in tracks:
+        dom = x.dominant()
+        if dom is None:
+            continue
+        for y in tracks:
+            if y is x or y.team != x.team or y.dominant() != dom or not (x.first < y.first <= x.last) or not _conflict(x, y):
+                continue
+            if x.last - y.first > SAME_SLOT_OVERLAP_FRAMES:
+                continue
+            before = [k for k in x.pts if k < y.first]
+            first = y.pts[y.first]
+            if not before or math.hypot(x.pts[max(before)]["x"] - first["x"], x.pts[max(before)]["y"] - first["y"]) > SAME_SLOT_JOIN_DIST:
+                continue  # y ne prolonge pas x : ce n'est pas une relève mais un autre disque (ou un autre joueur) qui a le même numéro
+            for k in [k for k in x.pts if k >= y.first]:
+                del x.pts[k]
+            if x.pts:
+                _recount_votes(x)
+                cut += 1
+            break
+    return cut
+
+
 DEAD_TRACK_SHARE = 0.5  # une trajectoire ne peut pas appartenir à un joueur dont le bandeau est grisé pendant plus de cette part de sa durée
 MIN_ALIVE_SHARE = 0.2  # un bandeau « mort » plus de 80 % de la game est probablement mal lu : on ne s'en sert pas
 
@@ -620,6 +651,7 @@ def anchor_spectated(frames, states, spawns=None):
             single[fi] = w[0]
     nearest = sorted(single)
     out = []
+    last_pick = {}  # joueur observé -> (image, x, y) de son dernier disque retenu : départage deux disques portant son numéro
     for fi, t, dets in frames:
         waits = [d for d in dets if d.get("waiting")]
         dets = [d for d in dets if not d.get("waiting")]
@@ -644,7 +676,12 @@ def anchor_spectated(frames, states, spawns=None):
         mine_waiting = [d for d in waits if d["team"] == team]
         slot_anchors = anchors.get(slot, [])
         has_anchors = any(abs(a[0] - t) <= ANCHOR_WINDOW_S for a in slot_anchors)
-        pick = next((d for d in cands if d.get("number") == _number_of(slot)), None)
+        matching = [d for d in cands if d.get("number") == _number_of(slot)]
+        prev = last_pick.get(slot)
+        if matching and prev is not None and fi - prev[0] <= ANCHOR_CONTINUITY_FRAMES:  # deux disques portent son numéro : le plus proche du précédent
+            pick = min(matching, key=lambda d: math.hypot(d["x"] - prev[1], d["y"] - prev[2]))
+        else:
+            pick = matching[0] if matching else None
         if pick is None:  # le joueur observé attend peut-être dans sa zone de départ : son disque porte son numéro
             pick = next((d for d in mine_waiting if d.get("number") == _number_of(slot) and d.get("verified")), None)
             if pick is not None:
@@ -662,8 +699,33 @@ def anchor_spectated(frames, states, spawns=None):
             pick = next((d for d in mine if d.get("number") == _number_of(slot)), None) or (mine[0] if len(mine) == dead + 1 and dead == 0 else None)
             if pick is not None:
                 dets = dets + [pick]
+        if pick is not None:
+            # le même disque vu deux fois (le centre glisse vers un trait de mur collé) : les autres disques blancs de l'équipe tout près du retenu sont retirés
+            dets = [d for d in dets if d is pick or not (d.get("spectated") and d["team"] == team and math.hypot(d["x"] - pick["x"], d["y"] - pick["y"]) < ANCHOR_DUPLICATE_DIST)]
+            last_pick[slot] = (fi, pick["x"], pick["y"])
         out.append((fi, t, [({**d, "number": _number_of(slot), "slot": slot, "anchored": True} if d is pick else d) for d in dets]))
-    return out
+    return _drop_pick_spikes(out)
+
+
+ANCHOR_CONTINUITY_FRAMES = 5  # écart d'images au plus pour comparer à la position retenue juste avant
+ANCHOR_DUPLICATE_DIST = 0.07  # un autre disque blanc de la même équipe à moins de cela du disque retenu est le même joueur vu deux fois
+SPIKE_PICK = 0.05  # un disque retenu à plus de cela de ses deux voisins (qui sont proches l'un de l'autre) est un parasite d'une image
+
+
+def _drop_pick_spikes(out):
+    """Un disque du joueur observé retenu sur une seule image, loin de celui d'avant et de celui d'après alors que ceux-ci se touchent (le centre d'un disque collé
+    à un trait de mur du plan : « le 8 » sautait en haut de la boîte de capture une image sur deux) est retiré."""
+    picks = [(i, next((d for d in dets if d.get("anchored")), None)) for i, (_, _, dets) in enumerate(out)]
+    drop = set()
+    for (i0, a), (i1, b), (i2, c) in zip(picks, picks[1:], picks[2:]):
+        if a is None or b is None or c is None or b["team"] != a["team"] or i2 - i0 != 2:
+            continue
+        near_ac = math.hypot(a["x"] - c["x"], a["y"] - c["y"]) < SPIKE_PICK
+        if near_ac and math.hypot(b["x"] - a["x"], b["y"] - a["y"]) > SPIKE_PICK and math.hypot(b["x"] - c["x"], b["y"] - c["y"]) > SPIKE_PICK:
+            drop.add(i1)
+    if not drop:
+        return out
+    return [(fi, t, [d for d in dets if not d.get("anchored")] if i in drop else dets) for i, (fi, t, dets) in enumerate(out)]
 
 
 ELIM_MIN_S = 2.0  # une trajectoire sans numéro lu attribuée par élimination doit durer au moins cela, ou être plausible (ci-dessous)
@@ -1287,7 +1349,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1301,6 +1363,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     spawns : {"A": (x0, y0, x1, y1), "B": ...} zones de départ de la carte (facultatif) : un disque blanc « qui attend » hors de la zone de départ de son équipe
     (la boîte de capture de Polaris) est un joueur en jeu, pas un mort.
     reliability : {"grid": n, "gaze": {(i, j)}} cases de la carte où la forme des disques a donné de mauvais regards (reliability.py) : la forme y pèse moins que le cap et le camp ennemi.
+    coherence_out : dict facultatif rempli de {(image, joueur): indice de cohérence du regard, 0 à 1} (voir gaze_coherence).
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
@@ -1328,6 +1391,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     alive_tracks, dead_tracks = _link(frames, step_s, contaminated)
     alive_tracks = [t for t in alive_tracks if len(t.pts) >= 2 or t.votes]  # une pastille vue une fois sans numéro : bruit
     trim_merged_tails(alive_tracks)
+    alive_tracks = [t for t in alive_tracks if t.pts]
+    trim_same_slot_overlaps(alive_tracks)
     alive_tracks = [t for t in alive_tracks if t.pts]
     _assign(alive_tracks, step_s, dead)
     placed = [t for t in alive_tracks if t.slot is not None]
@@ -1387,10 +1452,12 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     speed = math.hypot(dx, dy) / dt
                     if speed >= MOVE_MIN_SPEED:
                         moves[k] = (math.degrees(math.atan2(dy, dx)) % 360, speed)
+            followed = set()
             for k in list(obs):  # disque blanc en mouvement : sa forme ne dit presque rien du regard (mesuré : au hasard, axe faux une fois sur deux), le cap le dit
                 if k in moves and t.pts[k].get("spectated") and moves[k][1] >= OBSERVED_FOLLOW_SPEED:
                     heading = moves[k][0]
                     obs[k] = (heading % 180, (1.0 if heading < 180 else -1.0) * SKEW_FULL)
+                    followed.add(k)
             if reliability and reliability.get("gaze"):  # zone où les disques se lisent mal : la forme décide moins
                 g = reliability["grid"]
                 for k in list(obs):
@@ -1398,6 +1465,11 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                         obs[k] = (obs[k][0], obs[k][1] * GAZE_DOUBT_SKEW)
             chosen = _choose_directions(obs, moves, {k: (t.pts[k]["x"], t.pts[k]["y"]) for k in idx}, enemy_heading.get(t.team))
             smooth = _smooth_angles({k: chosen.get(k) for k in idx}, half)
+            if coherence_out is not None:
+                raw_coh = gaze_coherence({j: t.pts[j].get("angle") for j in idx})
+                head_coh = gaze_coherence({j: (moves[j][0] if j in followed else None) for j in idx}) if followed else {}
+                for k in idx:  # regard qui suit le cap : la cohérence est celle du cap (un cap qui saute n'est pas fiable), sinon celle des directions lues
+                    coherence_out[(k, slot)] = head_coh.get(k, 0.0) if k in followed else raw_coh[k]
             for k in idx:
                 d = t.pts[k]
                 conf = t.how if d.get("slot") != t.slot else CONF_VOTE
@@ -1552,6 +1624,26 @@ def drop_isolated_reads(rows, step_s=0.1):
                     del rows[(k, slot)]
                     dropped += 1
     return dropped
+
+
+COHERENCE_FRAMES = 4  # images de chaque côté dont les directions lues sont comparées
+
+
+def gaze_coherence(angles):
+    """Indice de cohérence du regard, 0 à 1, de chaque image d'une trajectoire : longueur de la moyenne vectorielle des directions lues (brutes, sens compris) dans
+    les COHERENCE_FRAMES images voisines. Des directions qui se contredisent d'une image à l'autre donnent un indice bas. Mesuré sur la game 26 (joueurs non observés
+    en mouvement) : le regard lu est dans le cap pour 47 % des lignes à l'indice 0 à 0,2, 66 % de 0,4 à 0,6 et 96 % de 0,8 à 1. angles : {image: direction ou None}."""
+    out = {}
+    keys = sorted(angles)
+    for k in keys:
+        window = [angles[j] for j in keys if abs(j - k) <= COHERENCE_FRAMES and angles[j] is not None]
+        if len(window) < 3:
+            out[k] = 0.0
+            continue
+        x = sum(math.cos(math.radians(a)) for a in window) / len(window)
+        y = sum(math.sin(math.radians(a)) for a in window) / len(window)
+        out[k] = round(math.hypot(x, y), 2)
+    return out
 
 
 GAZE_HOLD_S = 3.0  # une ligne peu sûre prend le regard des lectures sûres voisines jusqu'à cet écart
@@ -1844,7 +1936,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 34  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 35  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

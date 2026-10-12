@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS samples (
   hp INTEGER,
   weapon TEXT,
   confidence REAL,
+  gaze_coh REAL,
   PRIMARY KEY (game_id, frame, slot)
 );
 

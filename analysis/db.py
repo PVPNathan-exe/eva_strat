@@ -31,6 +31,8 @@ def connect(db_path):
         conn.execute("ALTER TABLE kills ADD COLUMN kind TEXT")
     if "headshot" not in {row["name"] for row in conn.execute("PRAGMA table_info(kills)")}:
         conn.execute("ALTER TABLE kills ADD COLUMN headshot INTEGER NOT NULL DEFAULT 0")
+    if "gaze_coh" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples)")}:
+        conn.execute("ALTER TABLE samples ADD COLUMN gaze_coh REAL")
     if "zone_key" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
         conn.execute("ALTER TABLE samples_meta ADD COLUMN zone_key TEXT")
     if "with_kills" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
@@ -297,14 +299,14 @@ def games_without_samples(conn, video_id, step_s=None, params_version=None, use_
     return out
 
 
-def replace_samples(conn, game_id, rows, params_version=0, with_kills=False):
+def replace_samples(conn, game_id, rows, params_version=0, with_kills=False, coherence=None):
     """Enregistre d'un seul bloc les positions d'une game (lignes : frame, t, slot, team, x, y, angle, alive, confiance)."""
     conn.execute("DELETE FROM samples WHERE game_id = ?", (game_id,))
     conn.execute("DELETE FROM sample_flags WHERE game_id = ?", (game_id,))  # les positions changent : les contrôles à la minimap sont périmés
     conn.executemany(
-        "INSERT OR REPLACE INTO samples (game_id, frame, t, slot, team, x, y, angle, alive, confidence) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [(game_id, *r) for r in rows],
+        "INSERT OR REPLACE INTO samples (game_id, frame, t, slot, team, x, y, angle, alive, confidence, gaze_coh) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [(game_id, *r, (coherence or {}).get((r[0], r[2]))) for r in rows],
     )
     game = conn.execute("SELECT map FROM games WHERE id = ?", (game_id,)).fetchone()
     conn.execute(

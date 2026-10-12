@@ -83,3 +83,8 @@
 .replay__opts label {
   white-space: nowrap;
 }
+
+/* Regard incertain (les directions lues se contredisent) : flèche plus pâle, la pointe en pointillé. */
+.replay__dir.is-doubtful::after {
+  opacity: 0.7;
+}

@@ -14,6 +14,7 @@ import { useGameFlags } from './useGameFlags';
 const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
 const WIDTH = 920; // largeur du canevas en pixels (la minimap agrandie)
 const RED: Rgb = [255, 59, 59];
+const COHERENCE_LOW = 0.4; // en dessous, les directions lues se contredisent : regard incertain
 const number = (slot: number) => (slot <= 4 ? slot : slot + 1);
 
 interface Frame {
@@ -56,6 +57,7 @@ export function ShapeViewer({ game }: { game: Game }) {
   const [playing, setPlaying] = useState(false);
   const [shapes, setShapes] = useState(true);
   const [corridors, setCorridors] = useState(false);
+  const [showCoh, setShowCoh] = useState(true); // indice de cohérence du regard à côté du numéro
   const [mask, setMask] = useState<HTMLCanvasElement | null>(null);
   const { flags } = useGameFlags(game.id, game.map, game.samples);
   const setCurrentTime = useAnalysisStore((s) => s.setCurrentTime);
@@ -108,15 +110,17 @@ export function ShapeViewer({ game }: { game: Game }) {
       outline.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
       ctx.closePath();
       ctx.lineWidth = 2;
-      ctx.strokeStyle = bad ? '#ff3b3b' : '#35e07a';
-      ctx.setLineDash((s.confidence ?? 1) < 0.6 ? [4, 3] : []);
+      const doubtfulGaze = s.gaze_coh !== null && s.gaze_coh !== undefined && s.gaze_coh < COHERENCE_LOW;
+      ctx.strokeStyle = bad ? '#ff3b3b' : doubtfulGaze ? '#ffb454' : '#35e07a';
+      ctx.setLineDash((s.confidence ?? 1) < 0.6 || doubtfulGaze ? [4, 3] : []);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = TEAM_COLOR[s.team];
       ctx.font = '700 15px system-ui, sans-serif';
-      ctx.fillText(String(number(s.slot)), cx + radius + 3, cy - radius);
+      const coh = s.gaze_coh !== null && s.gaze_coh !== undefined ? ` ${Math.round(s.gaze_coh * 100)}` : '';
+      ctx.fillText(`${number(s.slot)}${showCoh ? coh : ''}`, cx + radius + 3, cy - radius);
     }
-  }, [zone, frames, shapes, corridors, mask, unconfirmed]);
+  }, [zone, frames, shapes, corridors, mask, unconfirmed, showCoh]);
 
   useEffect(() => {
     draw();
@@ -178,10 +182,11 @@ export function ShapeViewer({ game }: { game: Game }) {
       </div>
       <div className="shapes__opts">
         <label><input type="checkbox" checked={shapes} onChange={(e) => setShapes(e.target.checked)} /> Formes lues (disque et pointe)</label>
+        <label><input type="checkbox" checked={showCoh} onChange={(e) => setShowCoh(e.target.checked)} /> Indice de cohérence du regard (0 à 100)</label>
         <label><input type="checkbox" checked={corridors} onChange={(e) => setCorridors(e.target.checked)} /> Couloirs lus</label>
       </div>
       <p className="shapes__note">
-        Contour vert : disque et pointe tels que le programme les a lus (pointillé : lecture peu sûre). Contour rouge : position que la vraie minimap ne confirme pas.
+        Contour vert : disque et pointe tels que le programme les a lus (pointillé : lecture peu sûre). Contour rouge : position que la vraie minimap ne confirme pas. Contour orange pointillé : regard incertain (les directions lues se contredisent, indice sous 40). Le nombre à côté du numéro est l'indice de cohérence du regard : mesuré, le regard lu est dans le cap pour 47 % des lignes sous 20, 66 % de 40 à 60 et 96 % au-dessus de 80.
         Croix rouge : joueur mort. Le contour doit recouvrir la pastille réelle et sa pointe doit viser dans le même sens que le triangle de la pastille.
       </p>
     </div>

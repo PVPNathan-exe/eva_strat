@@ -188,3 +188,45 @@ def test_three_players_in_a_start_zone_all_end_up_apart():
     pts = [(r[4], r[5]) for r in rows.values()]
     assert all(math.hypot(a[0] - b[0], a[1] - b[1]) >= tracking.MIN_SEPARATION - 0.002 for i, a in enumerate(pts) for b in pts[i + 1 :])
     assert tracking.separate_players(rows) == 0  # stable : une seconde passe ne déplace plus personne
+
+
+def test_gaze_coherence_is_high_for_steady_readings_and_low_for_contradicting_ones():
+    steady = tracking.gaze_coherence({k: 90.0 + (k % 3) for k in range(20)})
+    assert min(steady.values()) > 0.95
+    flipping = tracking.gaze_coherence({k: (90.0 if k % 2 else 270.0) for k in range(20)})
+    assert max(flipping.values()) < 0.3
+    sparse = tracking.gaze_coherence({0: 10.0, 1: None, 2: None, 20: 10.0})
+    assert sparse[0] == 0.0  # trop peu de lectures dans la fenêtre : indice inconnu
+
+
+def _track(first, points, slot, team="B"):
+    t = tracking.Track(team, first, {"x": points[0][0], "y": points[0][1], "slot": slot})
+    for k, (x, y) in enumerate(points[1:], start=first + 1):
+        t.add(k, {"x": x, "y": y, "slot": slot})
+    return t
+
+
+def test_two_tracks_of_the_same_number_hand_over_instead_of_one_being_discarded():
+    real = _track(0, [(0.5 + 0.005 * k, 0.6 - 0.01 * k) for k in range(30)], 7)  # le disque du joueur observé
+    nxt = _track(28, [(0.65 + 0.001 * k, 0.31) for k in range(40)], 7)  # la suite : même numéro, chevauche deux images
+    nxt.pts[28] = {"x": 0.60, "y": 0.35, "slot": 7}
+    nxt.pts[29] = {"x": 0.60, "y": 0.34, "slot": 7}
+    assert tracking.trim_same_slot_overlaps([real, nxt]) == 1
+    assert real.last == 27
+
+
+def test_a_track_with_the_same_number_but_far_away_is_not_a_hand_over():
+    real = _track(0, [(0.7, 0.6)] * 30, 8)
+    other = _track(28, [(0.8, 0.9)] * 40, 8)  # un autre joueur dont le numéro a été mal lu : on ne coupe pas la vraie trajectoire
+    assert tracking.trim_same_slot_overlaps([real, other]) == 0
+    assert real.last == 29
+
+
+def test_a_single_frame_observed_disc_far_from_both_neighbours_is_dropped():
+    def frame(i, x, y):
+        return (i, i * 0.1, [{"team": "B", "x": x, "y": y, "anchored": True, "spectated": True}])
+
+    out = tracking._drop_pick_spikes([frame(0, 0.51, 0.47), frame(1, 0.48, 0.41), frame(2, 0.513, 0.47)])
+    assert [bool(d) for _, _, d in out] == [True, False, True]
+    kept = tracking._drop_pick_spikes([frame(0, 0.51, 0.47), frame(1, 0.52, 0.45), frame(2, 0.53, 0.43)])
+    assert all(d for _, _, d in kept)  # un vrai déplacement n'est pas un parasite

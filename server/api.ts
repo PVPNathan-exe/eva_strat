@@ -210,7 +210,7 @@ function listSamples(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const gameId = Number(query.get('game'));
   if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
   const rows = ctx.db
-    .prepare('SELECT frame, t, slot, team, x, y, angle, alive, confidence FROM samples WHERE game_id = ? ORDER BY frame, slot')
+    .prepare('SELECT frame, t, slot, team, x, y, angle, alive, confidence, gaze_coh FROM samples WHERE game_id = ? ORDER BY frame, slot')
     .all(gameId);
   return reply(200, rows);
 }
