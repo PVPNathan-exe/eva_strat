@@ -1437,13 +1437,14 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
         runs = alive_runs(states, dead)
         recover_from_unused(rows, runs, frames, states, step_s, put, contaminated)
         share_stacks(rows, runs, placed, put)
-        drop_isolated_reads(rows)
+        drop_isolated_reads(rows, step_s)
         drop_impossible_moves(rows, step_s)
         bridge_gaps(rows, runs, step_s, put)
     _add_known_deaths(rows, deaths or [], times, step_s, put)
     _add_banner_deaths(rows, dead, times, step_s, put)
     remove_excursions(rows, step_s)
     smooth_unsure(rows)
+    despike(rows)
     steady_positions(rows)
     snap_to_walkable(rows)
     steady_gaze(rows, step_s)
@@ -1502,14 +1503,16 @@ ISOLATED_MAX_ROWS = 4  # un groupe de lectures de cette taille ou moins, loin de
 ISOLATED_MIN_GAP = 3  # images de vide de chaque côté pour qu'un groupe soit isolé
 ISOLATED_DETOUR = 2.5  # passer par ce groupe allonge le trajet de plus de ce facteur (plus ISOLATED_SLACK) : lecture d'un autre joueur, ou chiffre mal lu
 ISOLATED_SLACK = 0.12
+ISOLATED_WINDOW_S = 6.0  # les lectures sûres voisines qui servent de repère sont à cette durée au plus de la lecture isolée
 
 
-def drop_isolated_reads(rows):
-    """Une lecture isolée (1 à 3 images) loin des lectures voisines du même joueur, qui forcerait un aller-retour (« le 4 saute à l'autre bout de la carte
-    une demi-seconde, puis revient ») est un chiffre mal lu : on la retire, le trou est comblé ensuite comme un autre. Les trajets par tyrolienne sont laissés."""
+def drop_isolated_reads(rows, step_s=0.1):
+    """Une lecture sûre isolée (1 à 4 images) loin des autres lectures sûres du même joueur, qui forcerait un aller-retour (« le 4 saute à l'autre bout de la carte
+    une demi-seconde, puis revient », le 9 qui file vers une station à 3:46 parce qu'une icône de station était lue « 9 ») est un chiffre mal lu : on la retire, avec
+    les lignes reconstituées qui la relient à ses voisines, et le trou est comblé ensuite comme un autre. Les trajets par tyrolienne sont laissés."""
     by_slot = {}
     for (k, slot), r in rows.items():
-        if r[7]:
+        if r[7] and r[8] >= READ_MIN_CONF:
             by_slot.setdefault(slot, []).append(k)
     dropped = 0
     for slot, frames in by_slot.items():
@@ -1526,15 +1529,26 @@ def drop_isolated_reads(rows):
                 continue
             before = [b for b in big if b[-1] < g[0]]
             after = [b for b in big if b[0] > g[-1]]
-            if not before or not after or g[0] - before[-1][-1] < ISOLATED_MIN_GAP or after[0][0] - g[-1] < ISOLATED_MIN_GAP:
-                continue
+            window = round(ISOLATED_WINDOW_S / step_s)
+            if not before or not after or not ISOLATED_MIN_GAP <= g[0] - before[-1][-1] <= window or not ISOLATED_MIN_GAP <= after[0][0] - g[-1] <= window:
+                continue  # les voisines doivent être proches dans le temps (pas de l'autre côté d'une mort et d'une réapparition)
             a, b = rows[(before[-1][-1], slot)], rows[(after[0][0], slot)]
+            bad = []
             for k in g:
                 p = rows[(k, slot)]
                 if _tp_linked((a[4], a[5]), (p[4], p[5])) or _tp_linked((p[4], p[5]), (b[4], b[5])):
                     continue
                 via = math.hypot(p[4] - a[4], p[5] - a[5]) + math.hypot(b[4] - p[4], b[5] - p[5])
                 if via > ISOLATED_DETOUR * math.hypot(b[4] - a[4], b[5] - a[5]) + ISOLATED_SLACK:
+                    bad.append(k)
+            if not bad:
+                continue
+            # lignes reconstituées qui mènent à la lecture retirée et en reviennent : jusqu'aux lectures sûres voisines (les autres groupes, bons ou mauvais)
+            left = max((k for k in frames if k < g[0]), default=before[-1][-1])
+            right = min((k for k in frames if k > g[-1]), default=after[0][0])
+            for k in range(left + 1, right):
+                r = rows.get((k, slot))
+                if r is not None and r[7] and (k in bad or (r[8] < READ_MIN_CONF)):
                     del rows[(k, slot)]
                     dropped += 1
     return dropped
@@ -1706,6 +1720,29 @@ def remove_excursions(rows, step_s):
     return fixed
 
 
+SPIKE_MIN = 0.02  # un écart à la droite entre les deux images voisines au moins égal à cela (relatif à la minimap)...
+SPIKE_SHARE = 0.5  # ...et supérieur à cette part de la distance entre ces voisines est une pointe
+
+
+def despike(rows):
+    """Une position peu sûre isolée qui s'écarte de la droite entre ses deux images voisines (une pastille récupérée à côté de la bonne : le 9 qui revient de 0,03 en
+    arrière à 5:09) est une pointe : elle prend le milieu de ses voisines. Les lectures sûres ne sont jamais modifiées."""
+    fixed = 0
+    snap = {key: (r[4], r[5]) for key, r in rows.items() if r[7]}
+    for (k, slot), r in list(rows.items()):
+        if not r[7] or r[8] >= READ_MIN_CONF:
+            continue
+        a, b = snap.get((k - 1, slot)), snap.get((k + 1, slot))
+        if a is None or b is None:
+            continue
+        mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+        dev = math.hypot(r[4] - mid[0], r[5] - mid[1])
+        if dev > SPIKE_MIN and dev > SPIKE_SHARE * math.hypot(a[0] - b[0], a[1] - b[1]) and not _tp_linked(a, (r[4], r[5])):
+            rows[(k, slot)] = r[:4] + (round(mid[0], 4), round(mid[1], 4)) + r[6:]
+            fixed += 1
+    return fixed
+
+
 SMOOTH_FRAMES = 3  # images de chaque côté dont la médiane remplace une position non sûre
 SMOOTH_MAX_MOVE = 0.08  # on ne déplace pas une position de plus que cela (un vrai déplacement n'est pas lissé)
 
@@ -1757,13 +1794,24 @@ def separate_players(rows):
                     prev = rows.get((k - 1, mover[2]))
                     ref = (prev[4], prev[5]) if prev is not None and prev[7] else (mover[4], mover[5])
                     best = None
-                    for n in range(16):
-                        ang = n * math.pi / 8
-                        cx, cy = other[4] + MIN_SEPARATION * math.cos(ang), other[5] + MIN_SEPARATION * math.sin(ang)
-                        if 0 <= cx <= 1 and 0 <= cy <= 1 and on_walkable((cx, cy)):
-                            dist = math.hypot(cx - ref[0], cy - ref[1])
-                            if best is None or dist < best[0]:
-                                best = (dist, cx, cy)
+                    others = [(rows[(k, o)][4], rows[(k, o)][5]) for o in slots if o != mover[2]]
+                    # point à MIN_SEPARATION (puis plus loin) de l'autre joueur ET d'aucun troisième : une zone de départ à 4 joueurs ne se débrouille pas avec un seul voisin
+                    for factor in (1.0, 1.5, 2.0):
+                        for strict in (True, False):  # d'abord un point praticable ; sinon (zone de départ hors du masque) n'importe quel point de la minimap
+                            for n in range(16):
+                                ang = n * math.pi / 8
+                                cx, cy = other[4] + factor * MIN_SEPARATION * math.cos(ang), other[5] + factor * MIN_SEPARATION * math.sin(ang)
+                                if not (0 <= cx <= 1 and 0 <= cy <= 1) or (strict and not on_walkable((cx, cy))):
+                                    continue
+                                if any(math.hypot(cx - ox, cy - oy) < MIN_SEPARATION - 0.001 for ox, oy in others):
+                                    continue
+                                dist = math.hypot(cx - ref[0], cy - ref[1])
+                                if best is None or dist < best[0]:
+                                    best = (dist, cx, cy)
+                            if best is not None:
+                                break
+                        if best is not None:
+                            break
                     if best is None:
                         continue
                     nx, ny = best[1], best[2]
@@ -1796,7 +1844,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 33  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 34  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

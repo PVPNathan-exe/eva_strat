@@ -152,3 +152,39 @@ def test_merged_tail_is_cut_so_the_real_continuation_gets_the_number():
     six_after = track(10, 25, [(0.64, 0.6 - 0.03 * k) for k in range(16)], 5)  # la vraie suite du 6 repart vers le haut
     assert tracking.trim_merged_tails([six_before, eight, six_after]) == 1
     assert six_before.last == 9
+
+
+def test_isolated_station_read_and_its_fill_rows_are_removed_together():
+    # le 9 lu avec certitude sur une icône de station (une image), reliée à ses voisines par des lignes reconstituées
+    sure = [row(k, 8, 0.50, 0.54) for k in range(0, 8)]
+    fill = [row(k, 8, 0.50 + 0.01 * (k - 8), 0.55 + 0.012 * (k - 8), conf=0.5) for k in range(8, 12)]
+    icon = [row(12, 8, 0.605, 0.696)]
+    fill2 = [row(k, 8, 0.58, 0.65, conf=0.5) for k in range(13, 20)]
+    after = [row(k, 8, 0.49, 0.595) for k in range(20, 32)]
+    rows = table(*sure, *fill, *icon, *fill2, *after)
+    assert tracking.drop_isolated_reads(rows) > 0
+    assert (12, 8) not in rows and (15, 8) not in rows and (9, 8) not in rows
+    assert (7, 8) in rows and (20, 8) in rows
+
+
+def test_isolated_read_across_a_death_and_respawn_is_not_judged():
+    # la lecture isolée et ses voisines sûres sont séparées de plus de 6 s : le joueur est mort puis réapparu, aucun aller-retour à craindre
+    rows = table(*[row(k, 8, 0.7, 0.6) for k in range(0, 10)], *[row(k, 8, 0.58, 0.61) for k in range(100, 103)], *[row(k, 8, 0.2, 0.4) for k in range(300, 320)])
+    assert tracking.drop_isolated_reads(rows, 0.1) == 0
+
+
+def test_a_single_unsure_row_off_the_line_between_its_neighbours_is_a_spike():
+    rows = table(*[row(k, 8, 0.50 + 0.01 * k, 0.60, conf=0.4 if k == 5 else 1.0) for k in range(11)])
+    old = rows[(5, 8)]
+    rows[(5, 8)] = old[:4] + (0.55, 0.64) + old[6:]
+    assert tracking.despike(rows) == 1
+    assert abs(rows[(5, 8)][5] - 0.60) < 1e-3
+    assert rows[(4, 8)][5] == 0.60  # une lecture sûre n'est jamais touchée
+
+
+def test_three_players_in_a_start_zone_all_end_up_apart():
+    rows = table(row(0, 1, 0.18, 0.60, conf=1.0), row(0, 2, 0.18, 0.60, conf=0.3), row(0, 3, 0.181, 0.601, conf=0.3), row(0, 4, 0.179, 0.599, conf=0.3))
+    tracking.separate_players(rows)
+    pts = [(r[4], r[5]) for r in rows.values()]
+    assert all(math.hypot(a[0] - b[0], a[1] - b[1]) >= tracking.MIN_SEPARATION - 0.002 for i, a in enumerate(pts) for b in pts[i + 1 :])
+    assert tracking.separate_players(rows) == 0  # stable : une seconde passe ne déplace plus personne

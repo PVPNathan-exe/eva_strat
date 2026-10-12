@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight, ArrowRight, Crosshair, Pause, Play, X } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { builtinMaps } from '../../lib/builtinMaps';
+import { defaultInset, insetStorageKey, project, type Inset } from '../../lib/planInsets';
 import { flagKey, observedAt, unconfirmedSet } from '../../lib/replayFlags';
 import { formatTime } from '../../lib/timeline';
 import { getVideoElement } from '../../lib/videoRef';
@@ -20,20 +21,16 @@ const TRAIL_S = 12;
 const MAX_JUMP = 0.3; // au-delà, pas d'interpolation ni de trait (réapparition)
 const MAX_GAP_S = 2.5; // trou entre deux lectures au-delà duquel on ne relie plus les points
 
-// Cadre de la minimap dans l'image du plan (fractions des bords). Réglable, mémorisé par carte.
-type Inset = { l: number; t: number; r: number; b: number };
-const DEFAULT_INSET: Inset = { l: 0.01, t: 0.022, r: 0.01, b: 0.045 };
-
-const insetKey = (map: string) => `eva_strat:replay-inset:${map}`;
-
+// Cadre de la minimap dans l'image du plan (fractions des bords) : aligné automatiquement quand la carte a des traits de murs (planInsets.ts), sinon approximatif.
+// Réglable à la main, mémorisé par carte.
 function loadInset(map: string): Inset {
   try {
-    const raw = localStorage.getItem(insetKey(map));
-    if (raw) return { ...DEFAULT_INSET, ...(JSON.parse(raw) as Partial<Inset>) };
+    const raw = localStorage.getItem(insetStorageKey(map));
+    if (raw) return { ...defaultInset(map), ...(JSON.parse(raw) as Partial<Inset>) };
   } catch {
     // stockage indisponible : valeur par défaut
   }
-  return DEFAULT_INSET;
+  return defaultInset(map);
 }
 
 const numberOfSlot = (slot: number) => (slot <= 4 ? slot : slot + 1);
@@ -260,7 +257,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     const next = { ...inset, ...patch };
     setInset(next);
     try {
-      if (game.map) localStorage.setItem(insetKey(game.map), JSON.stringify(next));
+      if (game.map) localStorage.setItem(insetStorageKey(game.map), JSON.stringify(next));
     } catch {
       // stockage indisponible : le réglage vaut pour cette session seulement
     }
@@ -468,15 +465,13 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
             <input type="range" min={-0.05} max={0.2} step={0.002} value={inset[k]} onChange={(e) => changeInset({ [k]: Number(e.target.value) })} />
           </label>
         ))}
-        <button onClick={() => changeInset(DEFAULT_INSET)}>Réinitialiser</button>
+        <button onClick={() => changeInset(defaultInset(game.map ?? ''))}>Réinitialiser</button>
       </details>
     </div>
   );
 }
 
-function pos(inset: Inset, x: number, y: number) {
-  return { x: (inset.l + x * (1 - inset.l - inset.r)) * 100, y: (inset.t + y * (1 - inset.t - inset.b)) * 100 };
-}
+const pos = project
 
 /** Courbe du score de capture de chaque équipe (0 à 100 %), avec la position courante. Un clic déplace le replay. */
 function ScoreChart({ capture, start, end, time, onSeek }: { capture: CaptureSeries; start: number; end: number; time: number; onSeek: (t: number) => void }) {

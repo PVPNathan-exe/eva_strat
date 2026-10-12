@@ -33,7 +33,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 
 ### src/components/analysis (onglets Analyse et Armes)
 
-- `AnalysisTab.tsx` : conteneur de l'onglet Analyse.
+- `AnalysisTab.tsx` : conteneur de l'onglet Analyse. `ReadingTab.tsx` : onglet Lecture (ce que le programme sait de la carte et la forme des joueurs lue) ; `CorridorMap.tsx` : couloirs, murs, tyroliennes et zones sur le plan ; `ShapeViewer.tsx` : disque et pointe de chaque joueur dessinés sur la vraie minimap de la vidéo.
 - `IngestBar.tsx` : source (chemin ou URL), « Détecter les games » (étape 1), options, progression (game en cours), pause et arrêt.
 - `AnalysisPlan.tsx` : panneau « Analyse détaillée » : confirmation des bornes, games à analyser et leur ordre, lancement (étape 2).
 - `GameList.tsx` : games d'une vidéo, bornes, carte, confirmation, suppression. `GameTeams.tsx` : noms des équipes orange et bleue d'une game (saisis, avec proposition tirée des pseudos).
@@ -47,6 +47,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 ### src/lib, src/store, src/types
 
 - `lib/analysisApi.ts` : client HTTP de l'onglet Analyse et `subscribeJob` (SSE). `lib/timeline.ts` : fonctions pures de temps. `lib/comments.ts` : catégories et export. `lib/teams.ts` : diminutif d'équipe proposé par les pseudos.
+- `lib/planInsets.ts` : cadre de la minimap sur le plan (aligné par `plan_align.py`, sinon approximatif) et projection. `lib/mapReading.ts` : masque, murs, tyroliennes et zones de départ d'une carte. `lib/pinShape.ts` : contour disque plus pointe d'un joueur.
 - `lib/replayFlags.ts` : fonctions pures du contrôle à la minimap, du joueur observé et des cases douteuses. `lib/builtinMaps.ts`, `lib/storage.ts` (export JSON d'une carte), `lib/videoRef.ts` (référence au `<video>`), `lib/vision.ts` (calques).
 - `lib/stuffs.ts` (371 lignes) : données des armes de l'onglet Stratégie. `lib/weaponCatalog.ts` : suggestions de noms. `lib/weaponNames.ts` : `canonicalName`.
 - `store/mapStore.ts` (284 lignes) : état Stratégie, persisté. `store/analysisStore.ts` : état Analyse (vidéos, games, analyse en cours, armes, commentaires), non persisté.
@@ -55,7 +56,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 ### src/styles
 
 Point d'entrée `index.css` (l'ordre des imports est l'ordre de la cascade). **Les couleurs sont dans `tokens.css`** : les changer là pour tout le site.
-`layout`, `tabs`, `toolbar`, `canvas`, `draw-toolbar`, `floor-selector`, `weapon-panel`, `icons`, `comments`, `replay`, `replay-flags` (contrôle, observé, zones peu fiables), `weapons-tab` (372 lignes), puis `analysis-shell`, `analysis-ingest`, `analysis-games`, `analysis-plan`, `analysis-player`, `analysis-timeline`, `analysis-vision`, `analysis-calibration`.
+`layout`, `tabs`, `toolbar`, `canvas`, `draw-toolbar`, `floor-selector`, `weapon-panel`, `icons`, `comments`, `replay`, `replay-flags` (contrôle, observé, zones peu fiables), `analysis-reading` (onglet Lecture), `weapons-tab` (372 lignes), puis `analysis-shell`, `analysis-ingest`, `analysis-games`, `analysis-plan`, `analysis-player`, `analysis-timeline`, `analysis-vision`, `analysis-calibration`.
 
 ## server/
 
@@ -79,6 +80,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 - `reread_loadouts.py` : relit l'équipement d'une vidéo avec l'algorithme actuel et retire les icônes B et G devenues inutiles (sans nom, ni verrou, ni signalement).
 - `frame_noise.py` : contamination de couleur de la minimap (stries de lumière qui ressemblent à des joueurs), mesurée à partir d'une carte grossière des couleurs d'équipe gardée à chaque lecture (`minimap.coarse_colour_map`) ; le suivi n'y crée ni trajectoire ni croix sans numéro.
 - `observed_name.py` : pseudo du joueur observé lu en bas à droite de l'écran (images regroupées par ressemblance du texte, un représentant par groupe lu par la reconnaissance de texte de Windows) ; complète le cadre blanc des bandeaux, ne le contredit jamais.
+- `plan_align.py` : aligne la minimap sur le plan stratégique (traits de murs recalés sur les contours du plan) ; `python analysis/plan_align.py --map Polaris`, écrit `analysis/map_plan_insets.json`.
 - `reliability.py` : carte des cases de la carte où positions et regards sont peu fiables (`analysis/map_reliability/<Carte>.json`) ; `python analysis/reliability.py --map Polaris`, lue par `tracking.py` et affichée par le site.
 - `superpose.py` : vérifie le suivi en le superposant à la vraie minimap (une pastille de la couleur de l'équipe, ou un disque blanc pour l'observé, doit se trouver autour de chaque position) ; `python analysis/superpose.py --game 26 [--rows fichier.pkl]`, sans `--store`, aucune écriture dans la base ; avec `--store`, les positions non confirmées de toutes les images sont enregistrées (table `sample_flags`, affichées par le site). Le joueur observé est enregistré par périodes (table `observed_segments`) par `resolve.py` et par l'analyse.
 - `resolve.py` : refait le suivi des positions d'une vidéo déjà analysée sans relire la vidéo (lectures en cache de `evaluate.py`).
