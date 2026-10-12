@@ -246,12 +246,12 @@ def test_a_hand_placed_mark_anchors_the_player_and_clears_contradicting_rows():
     times = {k: k * 0.1 for k in range(60)}
     rows = table(*[row(k, 5, 0.3 if k < 25 else 0.7, 0.5, conf=0.5) for k in range(60)])  # le suivi est parti de l'autre côté de la carte
     put = lambda fi, slot, team, x, y, angle, alive, conf: rows.__setitem__((fi, slot), (fi, round(fi * 0.1, 2), slot, team, x, y, angle, int(alive), conf))
-    assert tracking.apply_marks(rows, [(3.0, 5, 0.3, 0.5, 40.0)], times, 0.1, put) == 1
+    assert tracking.apply_marks(rows, [(3.0 + tracking.FRAME_LAG_S, 5, 0.3, 0.5, 40.0)], times, 0.1, put) == 1
     assert rows[(30, 5)][4:7] == (0.3, 0.5, 40.0) and rows[(30, 5)][8] == 1.0
     assert (35, 5) not in rows and (27, 5) not in rows  # les lignes à 0,7 dans la seconde voisine sont retirées, à refaire à partir de la vérité
     assert (20, 5) in rows  # le reste du suivi n'est pas touché
     coherence = {}
-    tracking.apply_marks(rows, [(3.0, 5, 0.31, 0.5, 40.0)], times, 0.1, put, final=True, coherence_out=coherence)
+    tracking.apply_marks(rows, [(3.0 + tracking.FRAME_LAG_S, 5, 0.31, 0.5, 40.0)], times, 0.1, put, final=True, coherence_out=coherence)
     assert rows[(30, 5)][4] == 0.31 and coherence[(30, 5)] == 1.0
 
 
@@ -259,7 +259,7 @@ def test_position_only_mark_keeps_the_computed_gaze():
     times = {k: k * 0.1 for k in range(10)}
     rows = table(row(5, 2, 0.4, 0.4, conf=0.5, angle=123.0))
     put = lambda fi, slot, team, x, y, angle, alive, conf: rows.__setitem__((fi, slot), (fi, 0.0, slot, team, x, y, angle, int(alive), conf))
-    tracking.apply_marks(rows, [(0.5, 2, 0.45, 0.4, None)], times, 0.1, put)
+    tracking.apply_marks(rows, [(0.5 + tracking.FRAME_LAG_S, 2, 0.45, 0.4, None)], times, 0.1, put)
     assert rows[(5, 2)][6] == 123.0 and rows[(5, 2)][4] == 0.45
 
 
@@ -278,7 +278,7 @@ def test_a_hand_placed_gaze_holds_for_a_second_around_its_instant():
     rows = table(*[row(k, 2, 0.4, 0.4, conf=1.0, angle=90.0) for k in range(60)])
     put = lambda fi, slot, team, x, y, angle, alive, conf: rows.__setitem__((fi, slot), (fi, round(fi * 0.1, 2), slot, team, x, y, angle, int(alive), conf))
     coherence = {}
-    tracking.apply_marks(rows, [(3.0, 2, 0.4, 0.4, 200.0), (4.4, 2, 0.4, 0.4, 20.0)], times, 0.1, put, final=True, coherence_out=coherence)
+    tracking.apply_marks(rows, [(3.0 + tracking.FRAME_LAG_S, 2, 0.4, 0.4, 200.0), (4.4 + tracking.FRAME_LAG_S, 2, 0.4, 0.4, 20.0)], times, 0.1, put, final=True, coherence_out=coherence)
     assert rows[(26, 2)][6] == 200.0 and rows[(31, 2)][6] == 200.0  # dans la seconde de la première correction
     assert rows[(38, 2)][6] == 20.0  # plus près de la seconde correction
     assert rows[(56, 2)][6] == 90.0  # plus loin que la seconde voisine : inchangé
@@ -344,3 +344,42 @@ def test_the_killer_keeps_a_gaze_already_turned_towards_the_victim():
     times = {k: k * 0.1 for k in range(60)}
     rows = table(*[row(k, 1, 0.30, 0.50, angle=20.0) for k in range(60)], *[row(k, 8, 0.45, 0.50, angle=100.0) for k in range(60)])
     assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE")], times, 0.1) == 0
+
+
+def test_lateral_move_costs_less_than_backwards_and_the_crab_allowance_lowers_it():
+    assert tracking._move_cost(0) == 0 and abs(tracking._move_cost(180) - 1.0) < 1e-9
+    old = tracking.LATERAL_ALLOW
+    try:
+        tracking.LATERAL_ALLOW = 0.0
+        cos_only = tracking._move_cost(90)
+        tracking.LATERAL_ALLOW = 1.0
+        quad_only = tracking._move_cost(90)
+    finally:
+        tracking.LATERAL_ALLOW = old
+    assert abs(cos_only - 0.5) < 1e-9 and abs(quad_only - 0.25) < 1e-9  # un regard à 90 degrés du cap coûte un quart au lieu de la moitié
+
+
+def test_lag_of_the_tracking_is_measured_from_the_moving_corrections():
+    import marks_eval
+
+    step = 0.1
+    times = {k: k * step for k in range(60)}
+    # joueur qui avance de 0,01 par image ; le suivi anticipe de deux images : sa ligne k est à la position vraie de l'image k + 2
+    rows = [(k, k * step, 1, "A", 0.2 + 0.01 * (k + 2), 0.5, None, 1, 1.0) for k in range(60)]
+    marks = [(30 * step + tracking.FRAME_LAG_S, 1, 0.2 + 0.01 * 30, 0.5, None)]
+    lg = marks_eval.lags(rows, marks, times)
+    assert len(lg) == 1 and lg[0][2] == -2  # la position posée est dans la ligne deux images plus tôt : le suivi anticipe
+    assert marks_eval.lag_summary(lg)["anticipe"] == 1
+
+
+def test_marks_are_attached_to_the_nearest_analysis_frame(tmp_path):
+    import db
+
+    conn = db.connect(str(tmp_path / "t.db"))
+    conn.execute("INSERT INTO videos (id, path, duration_s, fps, width, height) VALUES (1, 'v.mp4', 600, 60, 1920, 1080)")
+    conn.execute("INSERT INTO games (id, video_id, start_s, end_s, map, status) VALUES (1, 1, 0, 300, 'Polaris', 'confirmed')")
+    db.replace_samples(conn, 1, [(k, k * 0.1, 1, "A", 0.5, 0.5, None, 1, 1.0) for k in range(20)])
+    conn.execute("INSERT INTO user_marks (game_id, slot, t, x, y, angle) VALUES (1, 1, 0.74, 0.5, 0.5, 10)")
+    conn.commit()
+    assert db.index_marks(conn, 1) == 1
+    assert tuple(conn.execute("SELECT frame, round(frame_t, 2) FROM user_marks").fetchone()) == (7, 0.7)

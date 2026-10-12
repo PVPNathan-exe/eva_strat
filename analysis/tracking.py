@@ -1150,6 +1150,15 @@ MOVE_SPEED_FULL = 0.08  # vitesse (normalisée, par seconde) à partir de laquel
 FLIP_COST = 2.5  # coût d'un retournement de sens entre deux lectures successives
 
 
+LATERAL_ALLOW = 0.5  # 0 : un regard à 90 degrés du cap coûte la moitié d'un regard à contre-sens (cosinus) ; 1 : il ne coûte qu'un quart (le joueur marche « en crabe » pour un déplacement rapide ou une prise d'information)
+
+
+def _move_cost(delta_deg):
+    """Coût (0 à 1) d'un regard qui s'écarte de delta_deg du cap : le cosinus d'avant, ou une parabole qui tolère l'écart latéral (crabe), mélangés par LATERAL_ALLOW."""
+    d = abs((delta_deg + 180) % 360 - 180)
+    return (1 - LATERAL_ALLOW) * (1 - math.cos(math.radians(d))) / 2 + LATERAL_ALLOW * (d / 180) ** 2
+
+
 def _angdist(a, b):
     return abs((a - b + 180) % 360 - 180)
 
@@ -1203,7 +1212,7 @@ def _choose_directions(obs, moves=None, positions=None, enemy=None):
             heading, speed = move
             weight = MOVE_WEIGHT * min(1.0, speed / MOVE_SPEED_FULL)
             # 0 si le regard suit le déplacement, 1 s'il lui tourne le dos
-            cost += weight * (1 - math.cos(math.radians(ang[k][c] - heading))) / 2
+            cost += weight * _move_cost(ang[k][c] - heading)
         if positions:
             cost += WALL_WEIGHT * _wall_penalty(positions.get(k), ang[k][c])
         if enemy is not None:
@@ -1590,7 +1599,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     kill_gaze(rows, kills, times, step_s, coherence_out)
     separate_players(rows)
     apply_marks(rows, marks, times, step_s, put, final=True, coherence_out=coherence_out)
-    return sorted(rows.values(), key=lambda r: (r[0], r[2]))
+    return sorted((r[:1] + (round(r[1] + FRAME_LAG_S, 2),) + r[2:] for r in rows.values()), key=lambda r: (r[0], r[2]))
 
 
 IMPOSSIBLE_V_MS = 14.0  # un pas plus rapide que cela (hors tyrolienne) n'est pas un déplacement : une des deux lectures est fausse
@@ -1746,6 +1755,7 @@ def kill_gaze(rows, kills, times, step_s, coherence_out=None):
 KILL_GAZE_EXCEPT = ()  # armes (noms) dont le tueur ne regarde pas sa victime : à renseigner
 DUEL_TOLERANCE = 40  # un regard déjà à moins de cela de la direction de l'adversaire est gardé
 DUEL_COHERENCE = 0.7  # indice d'un regard tiré de la règle du duel
+FRAME_LAG_S = 0.1  # une image d'analyse montre la minimap de la vidéo 0,1 s plus tard que son temps de lecture (mesuré sur 66 corrections d'un joueur en mouvement : décalage médian de 0,095 s) : son temps affiché est décalé d'autant
 MARK_CLEAR_S = 1.0  # autour d'une position posée à la main, les lignes du même joueur plus loin que MARK_CLEAR_DIST sont retirées (le trou est comblé à partir de la vérité)
 MARK_CLEAR_DIST = 0.08
 
@@ -1760,8 +1770,8 @@ def apply_marks(rows, marks, times, step_s, put, final=False, coherence_out=None
     span = max(1, round(MARK_CLEAR_S / step_s))
     applied = 0
     for t, slot, x, y, angle in marks:
-        k = min(ordered, key=lambda j: abs(times[j] - t))
-        if abs(times[k] - t) > 1.0:
+        k = min(ordered, key=lambda j: abs(times[j] + FRAME_LAG_S - t))
+        if abs(times[k] + FRAME_LAG_S - t) > 1.0:
             continue
         if not final:
             for j in range(k - span, k + span + 1):
@@ -1779,7 +1789,7 @@ def apply_marks(rows, marks, times, step_s, put, final=False, coherence_out=None
         for (k, slot), r in list(rows.items()):
             if not r[7] or k not in times:
                 continue
-            near = [(abs(times[k] - t), a) for t, s2, a in gazed if s2 == slot and abs(times[k] - t) <= MARK_CLEAR_S]
+            near = [(abs(times[k] + FRAME_LAG_S - t), a) for t, s2, a in gazed if s2 == slot and abs(times[k] + FRAME_LAG_S - t) <= MARK_CLEAR_S]
             if near:
                 rows[(k, slot)] = r[:6] + (min(near)[1],) + r[7:]
                 if coherence_out is not None:
@@ -2156,7 +2166,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 41  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 42  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

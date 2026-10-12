@@ -77,7 +77,9 @@ CREATE TABLE IF NOT EXISTS user_marks (
   x REAL NOT NULL,
   y REAL NOT NULL,
   angle REAL,
-  created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  frame INTEGER,
+  frame_t REAL
 );
 
 -- Joueur observé (cadre blanc du bandeau) au cours de la game : un intervalle par période, temps de la vidéo.

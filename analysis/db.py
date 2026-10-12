@@ -33,6 +33,9 @@ def connect(db_path):
         conn.execute("ALTER TABLE kills ADD COLUMN headshot INTEGER NOT NULL DEFAULT 0")
     if "gaze_coh" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples)")}:
         conn.execute("ALTER TABLE samples ADD COLUMN gaze_coh REAL")
+    if "frame" not in {row["name"] for row in conn.execute("PRAGMA table_info(user_marks)")}:
+        conn.execute("ALTER TABLE user_marks ADD COLUMN frame INTEGER")
+        conn.execute("ALTER TABLE user_marks ADD COLUMN frame_t REAL")
     if "zone_key" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
         conn.execute("ALTER TABLE samples_meta ADD COLUMN zone_key TEXT")
     if "with_kills" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
@@ -314,6 +317,21 @@ def replace_samples(conn, game_id, rows, params_version=0, with_kills=False, coh
         (game_id, params_version, int(with_kills), minimap_zone_key(conn, game["map"] if game else None)),
     )
     conn.commit()
+
+
+def index_marks(conn, game_id):
+    """Rattache chaque correction à l'image d'analyse la plus proche (colonnes frame et frame_t de user_marks) : le programme peut alors comparer sa lecture de cette image
+    et des images voisines à ce que l'utilisateur a posé. Renvoie le nombre de corrections rattachées."""
+    frames = [(r["frame"], r["t"]) for r in conn.execute("SELECT DISTINCT frame, t FROM samples WHERE game_id = ? ORDER BY frame", (game_id,))]
+    if not frames:
+        return 0
+    done = 0
+    for m in conn.execute("SELECT id, t FROM user_marks WHERE game_id = ?", (game_id,)).fetchall():
+        frame, frame_t = min(frames, key=lambda f: abs(f[1] - m["t"]))
+        conn.execute("UPDATE user_marks SET frame = ?, frame_t = ? WHERE id = ?", (frame, frame_t, m["id"]))
+        done += 1
+    conn.commit()
+    return done
 
 
 def marks_of(conn, game_id):
