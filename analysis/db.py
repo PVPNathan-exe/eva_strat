@@ -218,11 +218,11 @@ def teleports_for(map_name):
 
 
 def spawns_for(map_name):
-    """Zones de départ d'une carte : {"A": (x0, y0, x1, y1), "B": ...}, vide si la carte n'en a pas de connues."""
+    """Zones de départ d'une carte : {"A": (x0, y0, x1, y1), "B": ...} (une équipe peut avoir plusieurs rectangles : "A": ((...), (...))), vide si la carte n'en a pas de connues."""
     if not map_name or not SPAWNS_PATH.exists():
         return {}
     zones = json.loads(SPAWNS_PATH.read_text(encoding="utf-8")).get(map_name, {})
-    return {team: tuple(rect) for team, rect in zones.items()}
+    return {team: (tuple(rect) if not isinstance(rect[0], list) else tuple(tuple(r) for r in rect)) for team, rect in zones.items() if team in ("A", "B")}
 
 
 def reliability_for(map_name):

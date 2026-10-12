@@ -1,6 +1,6 @@
 // Onglet « Lecture » : ce que le programme sait de la carte (couloirs) et la forme des joueurs qu'il a lue sur la minimap.
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { mapsWithReading } from '../../lib/mapReading';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { CorridorMap } from './CorridorMap';
@@ -14,6 +14,8 @@ export function ReadingTab() {
   const analysed = games.filter((g) => g.samples > 0);
   const game = analysed.find((g) => g.id === selectedId) ?? analysed[0];
   const maps = mapsWithReading();
+  const [chosenMap, setChosenMap] = useState('Polaris');
+  const map = maps.includes(chosenMap) ? chosenMap : maps[0];
 
   useEffect(() => {
     void loadVideos();
@@ -23,7 +25,23 @@ export function ReadingTab() {
     <div className="reading">
       <section className="reading__section">
         <h3>Couloirs lus par le programme</h3>
-        {maps.length === 0 ? <p className="games__empty">Aucune carte n'a de masque de couloirs (analysis/map_mask.py).</p> : maps.map((m) => <CorridorMap key={m} map={m} />)}
+        {maps.length === 0 ? (
+          <p className="games__empty">Aucune carte n'a de masque de couloirs (analysis/map_mask.py).</p>
+        ) : (
+          <>
+            <label className="reading__pick">
+              Carte :{' '}
+              <select value={map} onChange={(e) => setChosenMap(e.target.value)}>
+                {maps.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <CorridorMap key={map} map={map} />
+          </>
+        )}
       </section>
       <section className="reading__section">
         <h3>Forme des joueurs sur la minimap</h3>

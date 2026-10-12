@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { loadTinted, readingOf, type Rgb } from '../../lib/mapReading';
-import { defaultInset, project } from '../../lib/planInsets';
+import { defaultInset, isAligned, project } from '../../lib/planInsets';
 import { ReliabilityLayer } from './ReliabilityLayer';
 import { useGameFlags } from './useGameFlags';
 
@@ -33,9 +33,11 @@ function Tinted({ url, color, alpha }: { url: string; color: Rgb; alpha: number 
 }
 
 export function CorridorMap({ map }: { map: string }) {
-  const plan = builtinMaps.find((m) => m.name === map);
+  const aligned = isAligned(map); // plan aligné sur la minimap : le plan sert de fond ; sinon la médiane de la minimap elle-même (aucun recalage nécessaire)
   const reading = readingOf(map);
-  const inset = defaultInset(map);
+  const plan = aligned ? builtinMaps.find((m) => m.name === map) : undefined;
+  const background = plan?.src ?? reading.medianUrl;
+  const inset = aligned ? defaultInset(map) : { l: 0, t: 0, r: 0, b: 0 };
   const [corridors, setCorridors] = useState(true);
   const [walls, setWalls] = useState(false);
   const [stations, setStations] = useState(true);
@@ -50,7 +52,7 @@ export function CorridorMap({ map }: { map: string }) {
   return (
     <div className="corridor">
       <div className="corridor__stage">
-        {plan && <img src={plan.src} alt={`Plan ${map}`} draggable={false} />}
+        {background && <img src={background} alt={aligned ? `Plan ${map}` : `Minimap de ${map}`} draggable={false} />}
         {corridors && reading.maskUrl && (
           <div className="corridor__layer" style={frame}>
             <Tinted url={reading.maskUrl} color={RED} alpha={115} />
@@ -92,8 +94,8 @@ export function CorridorMap({ map }: { map: string }) {
       </div>
       <p className="corridor__note">
         Rouge : couloirs lus par le programme (construits à partir du fond de la minimap). Hors du rouge, une pastille est refusée (reflet, effet d'écran) et une position
-        calculée est ramenée au couloir le plus proche. Un joueur peut longer un mur, pas sortir de ces limites. Le cadre de la minimap sur le plan est aligné
-        automatiquement sur les murs du plan.
+        calculée est ramenée au couloir le plus proche. Un joueur peut longer un mur, pas sortir de ces limites. Sur Polaris, le cadre de la minimap sur le plan est aligné
+        automatiquement sur les murs du plan ; les autres cartes sont montrées sur la médiane de leur minimap.
       </p>
     </div>
   );

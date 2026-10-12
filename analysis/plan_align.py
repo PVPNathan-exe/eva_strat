@@ -19,6 +19,8 @@ HERE = Path(__file__).parent
 PLANS = HERE.parent / "src" / "assets" / "maps"
 OUT = HERE / "map_plan_insets.json"
 DEFAULT_INSET = (0.01, 0.022, 0.01, 0.045)  # cadre du replay quand la carte n'est pas alignée
+MAX_INSET = 0.08  # un cadre qui déborde du plan de plus que cela est un faux alignement
+MIN_CORRELATION = 0.35
 WHITE_V, WHITE_S = 238, 35  # contour blanc du plan
 
 
@@ -48,7 +50,14 @@ def main(argv=None):
     if not lines_path.exists() or plan_path is None:
         print(f"Il faut {lines_path.name} (map_mask.py) et un plan dans src/assets/maps pour la carte {args.map}.")
         return 1
-    inset, cc = align(cv2.imread(str(plan_path)), cv2.imread(str(lines_path), 0))
+    try:
+        inset, cc = align(cv2.imread(str(plan_path)), cv2.imread(str(lines_path), 0))
+    except cv2.error:
+        print(f"{args.map} : l'alignement ne converge pas (plan de style différent de la minimap) : la carte garde le fond de sa médiane dans l'onglet Lecture.")
+        return 1
+    if max(abs(v) for v in inset) > MAX_INSET or cc < MIN_CORRELATION:
+        print(f"{args.map} : alignement refusé (cadre {tuple(round(v, 3) for v in inset)}, corrélation {cc:.2f}) : écart trop grand ou trop peu de corrélation.")
+        return 1
     known = json.loads(OUT.read_text(encoding="utf-8")) if OUT.exists() else {}
     known[args.map] = {"l": round(inset[0], 4), "t": round(inset[1], 4), "r": round(inset[2], 4), "b": round(inset[3], 4), "correlation": round(cc, 3)}
     OUT.write_text(json.dumps(known, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

@@ -11,18 +11,27 @@ const find = (name: string) => Object.entries(masks).find(([path]) => path.endsW
 export interface MapReading {
   maskUrl: string | null; // couloirs : pixels blancs = praticable
   linesUrl: string | null; // traits de murs
+  medianUrl: string | null; // médiane de la minimap du jeu (fond des cartes dont le plan n'est pas aligné)
   stations: [number, number][][]; // paires [entrée, sortie] en fraction de la minimap
-  spawns: { team: 'A' | 'B'; rect: [number, number, number, number] }[]; // x0, y0, x1, y1
+  spawns: { team: 'A' | 'B'; rect: [number, number, number, number] }[]; // x0, y0, x1, y1 (une équipe peut avoir plusieurs zones)
 }
 
 export function readingOf(map: string): MapReading {
   const tp = (teleports as Record<string, unknown>)[map];
-  const sp = (spawns as Record<string, unknown>)[map] as Record<string, [number, number, number, number]> | undefined;
+  const sp = (spawns as Record<string, unknown>)[map] as Record<string, number[] | number[][]> | undefined;
   return {
     maskUrl: find(`${map}.png`),
     linesUrl: find(`${map}_lignes.png`),
+    medianUrl: find(`${map}_mediane.png`),
     stations: Array.isArray(tp) ? (tp as [number, number][][]) : [],
-    spawns: sp ? (['A', 'B'] as const).filter((t) => sp[t]).map((t) => ({ team: t, rect: sp[t] })) : [],
+    spawns: sp
+      ? (['A', 'B'] as const).flatMap((t) => {
+          const v = sp[t];
+          if (!v) return [];
+          const rects = (typeof v[0] === 'number' ? [v] : v) as number[][];
+          return rects.map((rect) => ({ team: t, rect: rect as [number, number, number, number] }));
+        })
+      : [],
   };
 }
 

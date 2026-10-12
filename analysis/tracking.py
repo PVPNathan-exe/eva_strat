@@ -622,9 +622,21 @@ def _anchor_ok(d, t, anchors):
     return math.hypot(here[0] - expected[0], here[1] - expected[1]) <= base + rate * dt
 
 
+def _rects(spawns, team):
+    """Rectangles de départ d'une équipe : un seul (x0, y0, x1, y1) ou plusieurs (Artefact : deux plateformes de départ par équipe). Liste vide si la carte n'en a pas."""
+    v = (spawns or {}).get(team)
+    if not v:
+        return []
+    return [tuple(v)] if not isinstance(v[0], (tuple, list)) else [tuple(r) for r in v]
+
+
+def _in_rect(r, x, y):
+    return r[0] <= x <= r[2] and r[1] <= y <= r[3]
+
+
 def _in_spawn(d, spawns):
-    rect = (spawns or {}).get(d["team"])
-    return rect is None or (rect[0] <= d["x"] <= rect[2] and rect[1] <= d["y"] <= rect[3])
+    rects = _rects(spawns, d["team"])
+    return not rects or any(_in_rect(r, d["x"], d["y"]) for r in rects)
 
 
 def anchor_spectated(frames, states, spawns=None):
@@ -770,12 +782,12 @@ WAITING_STILL = 0.03  # une trajectoire dont les points tiennent dans ce rayon (
 
 def _waiting_like(t, spawns):
     """Trajectoire sans numéro, immobile, entièrement dans la zone de départ de son équipe : le disque d'un coéquipier mort qui attend sa réapparition."""
-    if not spawns or t.votes or "A" not in spawns or t.team not in spawns:
+    rects = _rects(spawns, t.team)
+    if not rects or t.votes:
         return False
     pts = list(t.pts.values())
     xs, ys = [d["x"] for d in pts], [d["y"] for d in pts]
-    r = spawns[t.team]
-    return max(xs) - min(xs) <= WAITING_STILL and max(ys) - min(ys) <= WAITING_STILL and all(r[0] <= x <= r[2] and r[1] <= y <= r[3] for x, y in zip(xs, ys))
+    return max(xs) - min(xs) <= WAITING_STILL and max(ys) - min(ys) <= WAITING_STILL and any(all(_in_rect(r, x, y) for x, y in zip(xs, ys)) for r in rects)
 
 
 def _ended_in_spawn(tracks, t, spawns):
@@ -784,8 +796,7 @@ def _ended_in_spawn(tracks, t, spawns):
     if not before:
         return True  # aucune trajectoire avant : début de game, il est au départ
     o = max(before, key=lambda o: o.last)
-    r = spawns[t.team]
-    return r[0] <= o.pos[0] <= r[2] and r[1] <= o.pos[1] <= r[3]
+    return any(_in_rect(r, o.pos[0], o.pos[1]) for r in _rects(spawns, t.team))
 
 
 def _assign(alive_tracks, step_s, dead=None, spawns=None):
@@ -1183,9 +1194,9 @@ ENEMY_WEIGHT = 0.6  # préférence pour le sens qui regarde vers le camp ennemi 
 
 def _enemy_headings(spawns):
     """{équipe: cap (degrés) vers le camp ennemi} d'après les zones de départ de la carte : du centre de la zone de son équipe au centre de l'autre. Vide sans zones."""
-    if not spawns or "A" not in spawns or "B" not in spawns:
+    if not _rects(spawns, "A") or not _rects(spawns, "B"):
         return {}
-    centre = {t: ((r[0] + r[2]) / 2, (r[1] + r[3]) / 2) for t, r in spawns.items()}
+    centre = {t: (sum((r[0] + r[2]) / 2 for r in _rects(spawns, t)) / len(_rects(spawns, t)), sum((r[1] + r[3]) / 2 for r in _rects(spawns, t)) / len(_rects(spawns, t))) for t in ("A", "B")}
     heading = lambda a, b: math.degrees(math.atan2(centre[b][1] - centre[a][1], centre[b][0] - centre[a][0])) % 360
     return {"A": heading("A", "B"), "B": heading("B", "A")}
 
