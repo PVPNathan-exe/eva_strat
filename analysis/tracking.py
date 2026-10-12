@@ -1415,6 +1415,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     placed = [t for t in alive_tracks if t.slot is not None]
     crosses = _attach_crosses([t for t in dead_tracks if len(t.pts) >= 2], placed, step_s, deaths, times)
 
+    areas = sorted(d["area"] for _, _, dets in frames for d in dets if d["alive"] and d.get("number") and not d.get("spectated") and d.get("area"))
+    area_ref = areas[len(areas) // 2] if areas else None  # surface d'un disque seul : deux joueurs superposés en font une tache plus grande
     half = max(1, round(SMOOTH_S / step_s / 2))
     enemy_heading = _enemy_headings(spawns)
     by_slot = {}
@@ -1469,6 +1471,15 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     speed = math.hypot(dx, dy) / dt
                     if speed >= MOVE_MIN_SPEED:
                         moves[k] = (math.degrees(math.atan2(dy, dx)) % 360, speed)
+            # Directions lues qui s'accordent sur plusieurs images (indice de cohérence élevé) : la forme du disque est nette même si l'asymétrie de chaque image est faible ;
+            # elle pèse alors plein pot face au camp ennemi et aux murs (le 9 à 1:37 : tournées vers la droite à 340 degrés pendant 2 s, ramené vers la gauche par le camp ennemi).
+            raw_angles = {j: t.pts[j].get("angle") for j in idx if not t.pts[j].get("spectated")}
+            for k, value in gaze_coherence(raw_angles).items():
+                merged = area_ref is not None and t.pts[k].get("area", 0) > MERGED_AREA * area_ref
+                if value >= COHERENCE_TRUST and k in obs and not merged:  # une tache de deux joueurs a un axe cohérent (la droite qui les joint) qui ne dit rien du regard
+                    window = [raw_angles[j] for j in raw_angles if abs(j - k) <= COHERENCE_FRAMES and raw_angles[j] is not None]
+                    mean = math.degrees(math.atan2(sum(math.sin(math.radians(a)) for a in window), sum(math.cos(math.radians(a)) for a in window))) % 360
+                    obs[k] = (mean % 180, (1.0 if mean < 180 else -1.0) * SKEW_FULL)
             followed = set()
             for k in list(obs):  # disque blanc en mouvement : sa forme ne dit presque rien du regard (mesuré : au hasard, axe faux une fois sur deux), le cap le dit
                 if k in moves and t.pts[k].get("spectated") and moves[k][1] >= OBSERVED_FOLLOW_SPEED:
@@ -1645,6 +1656,8 @@ def drop_isolated_reads(rows, step_s=0.1):
     return dropped
 
 
+MERGED_AREA = 1.3  # une détection plus grande que cela (fois le disque seul) est deux joueurs superposés
+COHERENCE_TRUST = 0.7  # indice à partir duquel les directions lues s'accordent assez pour peser plein pot (mesuré : 82 à 96 % dans le cap)
 COHERENCE_FRAMES = 4  # images de chaque côté dont les directions lues sont comparées
 
 
@@ -1955,7 +1968,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 37  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 38  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
