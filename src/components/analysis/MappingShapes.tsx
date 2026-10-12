@@ -59,7 +59,7 @@ export function MappingShapes({ annotation, draft, aspect }: { annotation: MapAn
       ))}
       {annotation.doors.map((d, i) => {
         const arrow = visionArrow(d.from, d.to, d.side, aspect);
-        const cls = d.kind === 'fenetre' ? 'mapping__window' : d.kind === 'mur' ? 'mapping__wall' : d.glass ? 'mapping__door mapping__door--glass' : 'mapping__door';
+        const cls = d.kind === 'fenetre' ? 'mapping__window' : d.kind === 'mur' ? 'mapping__wall' : d.kind === 'tir' ? 'mapping__shoot' : d.glass ? 'mapping__door mapping__door--glass' : 'mapping__door';
         return (
           <g key={`door${i}`}>
             <line x1={pct(d.from[0])} y1={pct(d.from[1])} x2={pct(d.to[0])} y2={pct(d.to[1])} className={cls} vectorEffect="non-scaling-stroke" />
@@ -71,6 +71,9 @@ export function MappingShapes({ annotation, draft, aspect }: { annotation: MapAn
       })}
       {annotation.capture.map((polygon, i) => (
         <polygon key={`cap${i}`} points={polygon.map((p) => `${pct(p[0])},${pct(p[1])}`).join(' ')} className="mapping__capture" vectorEffect="non-scaling-stroke" />
+      ))}
+      {annotation.overrides.map((o, i) => (
+        <polygon key={`ov${i}`} points={o.polygon.map((p) => `${pct(p[0])},${pct(p[1])}`).join(' ')} className="mapping__override" vectorEffect="non-scaling-stroke" />
       ))}
       {(['A', 'B'] as const).flatMap((team) =>
         annotation.spawns[team].map((r, i) => <rect key={`${team}${i}`} {...rectProps(r)} className={`mapping__spawn mapping__spawn--${team}`} vectorEffect="non-scaling-stroke" />),

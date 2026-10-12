@@ -13,7 +13,7 @@ export interface Inset {
 
 export const APPROX_INSET: Inset = { l: 0.01, t: 0.022, r: 0.01, b: 0.045 };
 
-const known = aligned as Record<string, Inset & { correlation: number }>;
+const known = aligned as Record<string, Inset & { correlation: number | null }>; // correlation : null pour un cadre posé à la main (cartographie)
 
 /** Cadre par défaut d'une carte : aligné sur le plan s'il l'est, sinon approximatif. */
 export function defaultInset(map: string): Inset {

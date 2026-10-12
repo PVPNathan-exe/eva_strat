@@ -92,6 +92,23 @@
   stroke-width: 3;
 }
 
+.mapping__shoot {
+  stroke: var(--c-orange);
+  stroke-width: 3;
+}
+
+.mapping__override {
+  fill: var(--c-amber);
+  fill-opacity: 0.08;
+  stroke: var(--c-amber);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 3;
+}
+
+.mapping__conflicts {
+  margin-bottom: 0.6rem;
+}
+
 .mapping__vision {
   stroke: var(--c-warn);
   stroke-width: 2;

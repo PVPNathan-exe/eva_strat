@@ -260,3 +260,30 @@ def test_apply_writes_mask_walls_teleports_spawns_and_doors(tmp_path, monkeypatc
     assert "masque_non_ecrit" in bad and bad["lectures_sures_refusees"] > 0.2
     assert (tmp_path / "Test.png").read_bytes() == before  # le masque précédent est gardé
     assert map_annotations.apply(conn, "Inconnue") is None
+
+
+def test_a_class_zone_replaces_one_class_by_another_only_inside_the_polygon():
+    labels = np.full((50, 50), map_annotations.CODES["tir"], np.uint8)
+    labels[0:5, :] = map_annotations.CODES["mur"]
+    zone = {"polygon": [[0.0, 0.0], [0.5, 0.0], [0.5, 1.0], [0.0, 1.0]], "from": "tir", "to": "vue"}  # moitié gauche
+    got = map_annotations.validate({"overrides": [zone]})["overrides"]
+    map_annotations.apply_overrides(labels, got)
+    assert labels[25, 10] == map_annotations.CODES["vue"] and labels[25, 40] == map_annotations.CODES["tir"]
+    assert labels[2, 10] == map_annotations.CODES["mur"]  # un mur dans la zone n'est pas un tir
+    any_zone = map_annotations.validate({"overrides": [{**zone, "from": "any", "to": "sol"}]})["overrides"]
+    map_annotations.apply_overrides(labels, any_zone)
+    assert labels[2, 10] == map_annotations.CODES["sol"] and labels[25, 40] == map_annotations.CODES["tir"]
+    with pytest.raises(ValueError):
+        map_annotations.validate({"overrides": [{**zone, "to": "lave"}]})
+    with pytest.raises(ValueError):
+        map_annotations.validate({"overrides": [{**zone, "polygon": [[0, 0], [1, 1]]}]})
+
+
+def test_shoot_over_lines_are_not_walkable_but_stay_shoot_over_in_the_classes():
+    labels = np.full((40, 40), map_annotations.CODES["sol"], np.uint8)
+    line = {"from": [0.2, 0.5], "to": [0.8, 0.5], "kind": "tir", "glass": False, "side": 0}
+    got = map_annotations.validate({"doors": [line]})["doors"]
+    map_annotations.burn_shapes(labels, got, [])
+    assert labels[round(0.5 * 39), 20] == map_annotations.CODES["tir"] and got[0]["kind"] == "tir"
+    walk = map_annotations.walkable_from_classes(labels)
+    assert not walk[round(0.5 * 39), 20] and walk[5, 20]

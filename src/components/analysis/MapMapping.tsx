@@ -10,6 +10,8 @@ import {
   alignmentError,
   completePair,
   closesPolygon,
+  findConflicts,
+  separateTolerances,
   pixelColor,
   polygonFromRect,
   rectFrom,
@@ -18,7 +20,9 @@ import {
   stationAngle,
   stationRadius,
   upsertColor,
+  CLASS_INFO,
   MAX_CAPTURE_ZONES,
+  MAX_OVERRIDES,
   MAX_POLYGON_POINTS,
   MIN_POLYGON_POINTS,
   MAX_SPAWNS_PER_TEAM,
@@ -35,9 +39,10 @@ import { MappingPlan } from './MappingPlan';
 import type { Draft } from './MappingShapes';
 import { useMapAnnotation } from './useMapAnnotation';
 
-type Tool = 'colors' | 'tps' | 'openings' | 'capture' | 'spawns' | 'align';
+type Tool = 'colors' | 'zones' | 'tps' | 'openings' | 'capture' | 'spawns' | 'align';
 const TOOLS: { id: Tool; label: string }[] = [
   { id: 'colors', label: 'Couleurs' },
+  { id: 'zones', label: 'Zones de classe' },
   { id: 'tps', label: 'Tyroliennes' },
   { id: 'openings', label: 'Portes et fenêtres' },
   { id: 'capture', label: 'Points de capture' },
@@ -49,6 +54,7 @@ const OPENING_KINDS = [
   { id: 'porte_vitre', label: 'Porte vitrée (on la traverse et on voit à travers)' },
   { id: 'fenetre', label: 'Fenêtre (on voit seulement à travers)' },
   { id: 'mur', label: 'Trait de mur (infranchissable, par exemple dans un carré de capture)' },
+  { id: 'tir', label: 'Trait de tir par-dessus (infranchissable, on tire par-dessus)' },
 ] as const;
 type OpeningChoice = (typeof OPENING_KINDS)[number]['id'];
 const ZOOMS = [0, 1, 2, 3, 4, 6]; // 0 : ajusté à la largeur
@@ -73,6 +79,9 @@ export function MapMapping({ map }: { map: string }) {
     setDraftState(d);
   };
   const [opening, setOpening] = useState<OpeningChoice>('porte');
+  const [showConflicts, setShowConflicts] = useState(false);
+  const [overrideFrom, setOverrideFrom] = useState<ClassName | 'any'>('tir');
+  const [overrideTo, setOverrideTo] = useState<ClassName>('vue');
   const [oneWay, setOneWay] = useState(false);
   const [team, setTeam] = useState<Team>('A');
   const [note, setNote] = useState<string | null>(null);
@@ -82,6 +91,8 @@ export function MapMapping({ map }: { map: string }) {
   const inset = useMemo(() => solveAlignment(annotation.pairs), [annotation.pairs]);
   const error = inset ? alignmentError(annotation.pairs, inset) : null;
   const drawing = JSON.stringify(draft) !== JSON.stringify(NO_DRAFT);
+  const conflicts = useMemo(() => (image ? findConflicts(image.data, annotation.colors) : null), [image, annotation.colors]);
+  const polygonTool = tool === 'capture' || tool === 'zones'; // outils où l'on trace un rectangle (glisser) ou une forme libre (clics)
 
   if (!reading.medianUrl) return <p className="games__empty">Pas de médiane de minimap pour {map} (analysis/map_mask.py).</p>;
 
@@ -111,7 +122,7 @@ export function MapMapping({ map }: { map: string }) {
   };
 
   const addOpening = (from: Point, to: Point, side: Opening['side']) =>
-    update((a) => ({ ...a, doors: [...a.doors, { from, to, kind: opening === 'fenetre' || opening === 'mur' ? opening : 'porte', glass: opening === 'porte_vitre', side }] }));
+    update((a) => ({ ...a, doors: [...a.doors, { from, to, kind: opening === 'fenetre' || opening === 'mur' || opening === 'tir' ? opening : 'porte', glass: opening === 'porte_vitre', side }] }));
 
   const onDown = (p: Pixel) => {
     const d = draftRef.current;
@@ -132,7 +143,7 @@ export function MapMapping({ map }: { map: string }) {
       if (oneWay && canOneWay) return setDraft({ ...NO_DRAFT, segment: { from: d.pending, to: p.frac } });
       addOpening(d.pending, p.frac, 0);
       setDraft(NO_DRAFT);
-    } else if (tool === 'capture' || tool === 'spawns') {
+    } else if (polygonTool || tool === 'spawns') {
       // glisser trace un rectangle ; un simple clic (capture) pose un point de la forme libre
       setDraft({ ...d, rect: [p.frac[0], p.frac[1], p.frac[0], p.frac[1]], anchor: p.frac, cursor: p.frac });
     } else if (tool === 'align') {
@@ -144,7 +155,7 @@ export function MapMapping({ map }: { map: string }) {
     const d = draftRef.current;
     if (tool === 'tps' && d.circle && !d.awaitingDirection) {
       setDraft({ ...d, circle: { c: d.circle.c, r: stationRadius(d.circle.c, p.frac, aspect) } });
-    } else if ((tool === 'capture' || tool === 'spawns') && d.rect && d.anchor) {
+    } else if ((polygonTool || tool === 'spawns') && d.rect && d.anchor) {
       // le coin fixe est le point de départ du glisser (et non le coin haut gauche du rectangle) : on peut glisser vers la gauche et vers le haut
       const r = rectFrom(d.anchor, p.frac, 0);
       setDraft({ ...d, rect: r ?? d.rect, cursor: p.frac });
@@ -160,18 +171,18 @@ export function MapMapping({ map }: { map: string }) {
       if (d.first && d.first.angle !== null) return finishStation('opposite');
       return setDraft({ ...d, awaitingDirection: true, cursor: p.frac });
     }
-    if ((tool === 'capture' || tool === 'spawns') && d.rect && d.anchor) {
+    if ((polygonTool || tool === 'spawns') && d.rect && d.anchor) {
       const rect = rectFrom(d.anchor, p.frac);
       const keep = { ...d, rect: null, anchor: null };
-      if (tool === 'capture') {
-        if (annotation.capture.length >= MAX_CAPTURE_ZONES) {
+      if (polygonTool) {
+        if (tool === 'capture' ? annotation.capture.length >= MAX_CAPTURE_ZONES : annotation.overrides.length >= MAX_OVERRIDES) {
           setDraft(NO_DRAFT);
-          return setNote(`Au plus ${MAX_CAPTURE_ZONES} zones de capture.`);
+          return setNote(`Au plus ${tool === 'capture' ? MAX_CAPTURE_ZONES : MAX_OVERRIDES} zones.`);
         }
         // glisser sans forme en cours : un rectangle ; sinon (ou simple clic) : un point de la forme libre, et un clic sur le premier point la ferme
         if (rect && d.poly.length === 0) {
           setDraft(NO_DRAFT);
-          return update((a) => ({ ...a, capture: [...a.capture, polygonFromRect(rect)] }));
+          return addPolygon(polygonFromRect(rect));
         }
         if (closesPolygon(d.poly, p.frac, aspect)) return closePolygon(d.poly);
         if (d.poly.length >= MAX_POLYGON_POINTS) return setDraft(keep);
@@ -185,10 +196,14 @@ export function MapMapping({ map }: { map: string }) {
     }
   };
 
-  const closePolygon = (points: Point[]) => {
-    if (points.length < MIN_POLYGON_POINTS) return;
-    update((a) => ({ ...a, capture: [...a.capture, points] }));
+  // Forme terminée : zone de capture (jouable) ou zone de classe (remplace une classe par une autre).
+  const addPolygon = (points: Point[]) => {
+    if (tool === 'zones') update((a) => ({ ...a, overrides: [...a.overrides, { polygon: points, from: overrideFrom, to: overrideTo }] }));
+    else update((a) => ({ ...a, capture: [...a.capture, points] }));
     setDraft(NO_DRAFT);
+  };
+  const closePolygon = (points: Point[]) => {
+    if (points.length >= MIN_POLYGON_POINTS) addPolygon(points);
   };
 
   const onPlanClick = (p: Point) => {
@@ -201,7 +216,7 @@ export function MapMapping({ map }: { map: string }) {
     setDraft(NO_DRAFT);
   };
 
-  const without = <K extends 'tps' | 'doors' | 'capture'>(key: K, i: number) => update((a) => ({ ...a, [key]: a[key].filter((_, j) => j !== i) }) as MapAnnotation);
+  const without = <K extends 'tps' | 'doors' | 'capture' | 'overrides'>(key: K, i: number) => update((a) => ({ ...a, [key]: a[key].filter((_, j) => j !== i) }) as MapAnnotation);
   const removePair = (i: number) =>
     update((a) => {
       const pairs = a.pairs.filter((_, j) => j !== i);
@@ -209,7 +224,7 @@ export function MapMapping({ map }: { map: string }) {
     });
 
   let hint = '';
-  if (tool === 'capture') hint = draft.poly.length > 0 ? `Forme libre : ${draft.poly.length} point(s). Clique les autres coins ; un clic sur le premier point (ou « Fermer la forme ») la ferme.` : 'Glisse pour un rectangle, ou clique les coins d\'une forme libre (le point n\'est pas toujours un carré fermé).';
+  if (polygonTool) hint = draft.poly.length > 0 ? `Forme libre : ${draft.poly.length} point(s). Clique les autres coins ; un clic sur le premier point (ou « Fermer la forme ») la ferme.` : tool === 'zones' ? 'Glisse pour un rectangle, ou clique les coins de la zone (un clic sur le premier point la ferme).' : 'Glisse pour un rectangle, ou clique les coins d\'une forme libre (le point n\'est pas toujours un carré fermé).';
   if (tool === 'tps') {
     if (draft.awaitingDirection) hint = "Clique la direction dans laquelle on sort de la tyrolienne par cette station (on y entre en regardant à l'opposé ; un clic dans le cercle : aucune direction).";
     else if (draft.first) hint = "Station posée. Glisse du centre au bord de l'autre station pour tracer son cercle (sa direction se déduit de la première : 180 degrés).";
@@ -245,12 +260,12 @@ export function MapMapping({ map }: { map: string }) {
 
       <div className="mapping__body">
         <div className="mapping__left">
-          {loaded && <MappingCanvas url={reading.medianUrl} annotation={annotation} zoom={zoom} preview={preview} draft={draft} onImage={setImage} onHover={setHover} onDown={onDown} onMove={onMove} onUp={onUp} />}
+          {loaded && <MappingCanvas url={reading.medianUrl} annotation={annotation} zoom={zoom} preview={preview} conflicts={showConflicts && conflicts ? conflicts.mask : null} draft={draft} onImage={setImage} onHover={setHover} onDown={onDown} onMove={onMove} onUp={onUp} />}
         </div>
         <div className="mapping__right">
           <Loupe image={image} pixel={hover} />
           <div className="mapping__draft-actions">
-            <button onClick={() => closePolygon(draft.poly)} disabled={!(tool === 'capture' && draft.poly.length >= MIN_POLYGON_POINTS)}>Fermer la forme</button>
+            <button onClick={() => closePolygon(draft.poly)} disabled={!(polygonTool && draft.poly.length >= MIN_POLYGON_POINTS)}>Fermer la forme</button>
             <button onClick={reset} disabled={!drawing}>Annuler le tracé</button>
           </div>
           {hint && <p className="mapping__hint">{hint}</p>}
@@ -261,7 +276,46 @@ export function MapMapping({ map }: { map: string }) {
               onClass={setCls}
               onChange={(i, patch) => update((a) => ({ ...a, colors: a.colors.map((c, j) => (j === i ? { ...c, ...patch } : c)) }))}
               onRemove={(i) => update((a) => ({ ...a, colors: a.colors.filter((_, j) => j !== i) }))}
+              conflicts={conflicts?.pairs ?? []}
+              showConflicts={showConflicts}
+              onShowConflicts={setShowConflicts}
+              onSeparate={() => update((a) => ({ ...a, colors: separateTolerances(a.colors) }))}
             />
+          )}
+          {tool === 'zones' && (
+            <div>
+              <p className="mapping__hint">
+                Une même couleur peut désigner une fenêtre ici et une couverture basse ailleurs. Choisis la classe à remplacer et la nouvelle classe, puis entoure la zone (rectangle au glisser ou forme
+                libre au clic) : dans cette zone, les pixels de la première classe prennent la seconde.
+              </p>
+              <label>
+                Remplacer{' '}
+                <select value={overrideFrom} onChange={(e) => setOverrideFrom(e.target.value as ClassName | 'any')}>
+                  <option value="any">tout pixel</option>
+                  {CLASS_INFO.map((k) => (
+                    <option key={k.name} value={k.name}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>{' '}
+                par{' '}
+                <select value={overrideTo} onChange={(e) => setOverrideTo(e.target.value as ClassName)}>
+                  {CLASS_INFO.map((k) => (
+                    <option key={k.name} value={k.name}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <ul className="mapping__list">
+                {annotation.overrides.map((o, i) => (
+                  <li key={i}>
+                    Zone {i + 1} : {o.from === 'any' ? 'tout pixel' : CLASS_INFO.find((k) => k.name === o.from)?.label} devient {CLASS_INFO.find((k) => k.name === o.to)?.label} ({o.polygon.length} points)
+                    <button onClick={() => without('overrides', i)}>Retirer</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {tool === 'tps' && (
             <div>
@@ -294,7 +348,7 @@ export function MapMapping({ map }: { map: string }) {
               <ul className="mapping__list">
                 {annotation.doors.map((d, i) => (
                   <li key={i}>
-                    {d.kind === 'fenetre' ? 'Fenêtre' : d.kind === 'mur' ? 'Mur' : d.glass ? 'Porte vitrée' : 'Porte'} {i + 1}
+                    {d.kind === 'fenetre' ? 'Fenêtre' : d.kind === 'mur' ? 'Mur' : d.kind === 'tir' ? 'Tir par-dessus' : d.glass ? 'Porte vitrée' : 'Porte'} {i + 1}
                     {d.side !== 0 ? ' à sens unique' : ''}
                     <button onClick={() => without('doors', i)}>Retirer</button>
                   </li>

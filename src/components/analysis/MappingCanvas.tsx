@@ -2,7 +2,7 @@
 // Le clic est interprété par l'outil actif (voir MapMapping) : cette zone ne fait que dessiner et rendre la position du pointeur en pixel de la médiane et en fraction.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CLASS_INFO, classifyImage, type MapAnnotation, type Point } from '../../lib/mapAnnotation';
+import { CLASS_INFO, applyOverrides, classifyImage, type MapAnnotation, type Point } from '../../lib/mapAnnotation';
 import { MappingShapes, type Draft } from './MappingShapes';
 
 export interface Pixel {
@@ -16,6 +16,7 @@ interface Props {
   annotation: MapAnnotation;
   zoom: number; // 0 : ajusté à la largeur disponible
   preview: boolean; // coloriser les pixels classés
+  conflicts: Uint8Array | null; // pixels ambigus à montrer (couleurs de deux classes qui se recouvrent), ou null
   draft: Draft; // tracé en cours
   onImage: (image: ImageData) => void;
   onHover: (pixel: Pixel | null) => void;
@@ -47,7 +48,7 @@ function useImageData(url: string): ImageData | null {
   return data;
 }
 
-export function MappingCanvas({ url, annotation, zoom, preview, draft, onImage, onHover, onDown, onMove, onUp }: Props) {
+export function MappingCanvas({ url, annotation, zoom, preview, conflicts, draft, onImage, onHover, onDown, onMove, onUp }: Props) {
   const image = useImageData(url);
   const base = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLCanvasElement>(null);
@@ -65,7 +66,7 @@ export function MappingCanvas({ url, annotation, zoom, preview, draft, onImage, 
   }, [image]);
 
   // Aperçu des classes : une couleur par classe, semi-transparente, au pixel près.
-  const labels = useMemo(() => (image ? classifyImage(image.data, annotation.colors) : null), [image, annotation.colors]);
+  const labels = useMemo(() => (image ? applyOverrides(classifyImage(image.data, annotation.colors), image.width, image.height, annotation.overrides) : null), [image, annotation.colors, annotation.overrides]);
   useEffect(() => {
     const cv = layer.current;
     const ctx = cv?.getContext('2d');
@@ -75,6 +76,13 @@ export function MappingCanvas({ url, annotation, zoom, preview, draft, onImage, 
     const out = ctx.createImageData(image.width, image.height);
     for (let p = 0; p < labels.length; p++) {
       const info = labels[p] > 0 ? CLASS_INFO[labels[p] - 1] : null;
+      if (conflicts && conflicts[p]) {
+        out.data[p * 4] = 255; // pixel ambigu : magenta
+        out.data[p * 4 + 1] = 0;
+        out.data[p * 4 + 2] = 255;
+        out.data[p * 4 + 3] = 255;
+        continue;
+      }
       if (!info || !preview) continue;
       out.data[p * 4] = info.preview[0];
       out.data[p * 4 + 1] = info.preview[1];
@@ -82,7 +90,7 @@ export function MappingCanvas({ url, annotation, zoom, preview, draft, onImage, 
       out.data[p * 4 + 3] = 170;
     }
     ctx.putImageData(out, 0, 0);
-  }, [image, labels, preview]);
+  }, [image, labels, preview, conflicts]);
 
   const pixelOf = (e: React.PointerEvent<HTMLDivElement>): Pixel | null => {
     if (!image) return null;

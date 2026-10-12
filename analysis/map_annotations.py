@@ -10,8 +10,9 @@ L'utilisateur choisit des couleurs à la pipette (au pixel près) sur la médian
   vue         on voit à travers mais on ne tire pas et on ne passe pas (vitre) ;
   porte       porte hachurée : on la traverse (praticable) ;
   porte_vitre porte avec une vitre : on la traverse et on voit à travers.
-Les portes, les fenêtres et les murs se tracent aussi en traits (extrémité à extrémité) : une porte (vitrée ou non) est rendue praticable, une fenêtre est « vue seulement » (ni passage ni
-tir), un trait de mur est infranchissable (mur dans un carré de capture) ; l'une comme l'autre peut être à sens unique (on ne voit à travers que d'un côté, noté `side`). Les zones des points de capture (forme libre : le carré n'est pas toujours fermé, comme sur Polaris) sont jouables : sol sous les pixels sans classe, les murs classés ou tracés dedans restent des murs. Les zones de départ et les disques des stations de tyrolienne sont jouables de la même façon.
+Les portes, les fenêtres, les murs et les tirs par-dessus se tracent aussi en traits (extrémité à extrémité) : une porte (vitrée ou non) est rendue praticable, une fenêtre est « vue seulement » (ni passage ni
+tir), un trait de mur est infranchissable (mur dans un carré de capture), un trait « tir » aussi mais on tire par-dessus. Une même couleur peut avoir deux sens (une fenêtre ici, une couverture
+basse ailleurs) : une zone de classe remplace une classe par une autre à l'intérieur d'un polygone (appliquée avant les tracés) ; l'une comme l'autre peut être à sens unique (on ne voit à travers que d'un côté, noté `side`). Les zones des points de capture (forme libre : le carré n'est pas toujours fermé, comme sur Polaris) sont jouables : sol sous les pixels sans classe, les murs classés ou tracés dedans restent des murs. Les zones de départ et les disques des stations de tyrolienne sont jouables de la même façon.
 Chaque pixel prend la classe de la couleur choisie la plus proche, à moins de la tolérance de cette couleur.
 Les tyroliennes sont des paires de cercles : une station chacun (centre, rayon, direction par laquelle on y entre ou on en sort, les deux directions d'une paire étant à 180 degrés l'une de l'autre : l'écart est réparti entre les deux), valables dans les deux sens. Le trait qui relie
 les deux centres sur la minimap a souvent la couleur des murs : sous ce trait, les pixels non praticables entourés de sol sont rendus praticables (le trait ne coupe pas le sol),
@@ -50,6 +51,7 @@ DOOR_WIDTH_PX = 3  # épaisseur d'un trait de porte sur la médiane
 CODES = {name: i + 1 for i, name in enumerate(CLASSES)}  # 0 : aucune classe
 MAX_SPAWNS = 2
 MAX_CAPTURE_ZONES = 8
+MAX_OVERRIDES = 40
 MAX_POLYGON_POINTS = 80  # zones de départ par équipe
 TP_FLOOR_SHARE = 0.5  # un pixel sous le tracé d'une tyrolienne est du sol si au moins cette part de ses voisins l'est
 TP_NEIGHBOURHOOD = 7
@@ -116,7 +118,7 @@ def burn_shapes(labels, doors, capture, spawns=None, stations=None):
         shape = np.zeros((h, w), np.uint8)
         cv2.circle(shape, (round(s["x"] * (w - 1)), round(s["y"] * (h - 1))), max(1, round(s["r"] * w)), 255, -1)
         labels[(shape > 0) & (labels == 0)] = CODES["sol"]
-    for kind, glass, code in (("porte", False, CODES["porte"]), ("porte", True, CODES["porte_vitre"]), ("fenetre", False, CODES["vue"]), ("mur", False, CODES["mur"])):
+    for kind, glass, code in (("porte", False, CODES["porte"]), ("porte", True, CODES["porte_vitre"]), ("fenetre", False, CODES["vue"]), ("mur", False, CODES["mur"]), ("tir", False, CODES["tir"])):
         labels[_line_layer(labels.shape, [d for d in doors if d["kind"] == kind and d["glass"] == glass])] = code
 
 
@@ -167,6 +169,24 @@ def _polygon(z, unit):
     return [[p[0], p[1]] for p in z]
 
 
+def _override(o, unit):
+    """Zone de remplacement de classe : polygone, classe remplacée (ou « any » : tout pixel de la zone) et classe d'arrivée."""
+    if not (isinstance(o, dict) and o.get("to") in CODES and (o.get("from") == "any" or o.get("from") in CODES)):
+        raise ValueError(f"zone de classe invalide : {o}")
+    return {"polygon": _polygon(o.get("polygon"), unit), "from": o["from"], "to": o["to"]}
+
+
+def apply_overrides(labels, overrides):
+    """Remplace dans chaque zone la classe `from` (ou toute classe, y compris aucune, pour « any ») par `to`. Même règle que applyOverrides du site : le centre du pixel décide."""
+    h, w = labels.shape
+    for o in overrides:
+        shape = np.zeros((h, w), np.uint8)
+        # les pixels ont leur centre à (x + 0,5) / w : on remplit le polygone à l'échelle w x h, sans le décalage de burn_shapes (sommets à (w - 1))
+        cv2.fillPoly(shape, [np.array([[round(x * w - 0.5), round(y * h - 0.5)] for x, y in o["polygon"]], np.int32)], 255)
+        inside = shape > 0
+        labels[inside & (True if o["from"] == "any" else labels == CODES[o["from"]])] = CODES[o["to"]]
+
+
 def validate(data):
     """Annotation propre (couleurs valides, au plus MAX_SPAWNS zones par équipe, coordonnées dans la minimap) ; ValueError sinon."""
     if not isinstance(data, dict):
@@ -185,7 +205,7 @@ def validate(data):
     for d in data.get("doors", []):
         if not (unit(d.get("from")) and unit(d.get("to"))):
             raise ValueError(f"porte invalide : {d}")
-        kind = d.get("kind") if d.get("kind") in ("fenetre", "mur") else "porte"
+        kind = d.get("kind") if d.get("kind") in ("fenetre", "mur", "tir") else "porte"
         doors.append({"from": d["from"], "to": d["to"], "kind": kind, "glass": kind == "porte" and bool(d.get("glass")), "side": d["side"] if (kind == "fenetre" or (kind == "porte" and d.get("glass"))) and d.get("side") in (-1, 1) else 0})
     spawns = {}
     for team in ("A", "B"):
@@ -199,10 +219,13 @@ def validate(data):
     inset = data.get("inset")
     if inset is not None and not (isinstance(inset, dict) and all(isinstance(inset.get(k), (int, float)) for k in ("l", "t", "r", "b"))):
         raise ValueError("alignement invalide")
+    overrides = [_override(o, unit) for o in data.get("overrides", [])]
+    if len(overrides) > MAX_OVERRIDES:
+        raise ValueError(f"au plus {MAX_OVERRIDES} zones de classe")
     capture = [_polygon(z, unit) for z in data.get("capture", [])]
     if len(capture) > MAX_CAPTURE_ZONES:
         raise ValueError(f"au plus {MAX_CAPTURE_ZONES} zones de capture")
-    return {"colors": colors, "tps": tps, "doors": doors, "capture": capture, "spawns": spawns, "inset": inset, "pairs": data.get("pairs", [])}
+    return {"colors": colors, "tps": tps, "doors": doors, "capture": capture, "overrides": overrides, "spawns": spawns, "inset": inset, "pairs": data.get("pairs", [])}
 
 
 def annotation_of(conn, map_name):
@@ -238,8 +261,9 @@ def apply(conn, map_name):
         return None
     data = validate(raw)
     summary = {"map": map_name}
-    if data["colors"] or data["capture"] or data["doors"]:
+    if data["colors"] or data["capture"] or data["doors"] or data["overrides"]:
         labels = classify(median, data["colors"])
+        apply_overrides(labels, data["overrides"])
         burn_shapes(labels, data["doors"], data["capture"], data["spawns"], [s for t in data["tps"] for s in (t["a"], t["b"])])
         walk = walkable_from_classes(labels)
         open_tp_paths(walk, data["tps"])
@@ -257,12 +281,14 @@ def apply(conn, map_name):
             if walls.any():
                 cv2.imwrite(str(MASK_DIR / f"{map_name}_lignes.png"), cv2.dilate(walls, np.ones((3, 3), np.uint8)) * 255)
             cv2.imwrite(str(MASK_DIR / f"{map_name}_classes.png"), labels)
-            summary["classes"] = {name: int((labels == code).sum()) for name, code in CODES.items()}
+            summary["zones_de_classe"] = len(data["overrides"])
+        summary["classes"] = {name: int((labels == code).sum()) for name, code in CODES.items()}
     if data["doors"]:
         _merge_json(DOORS, map_name, data["doors"])
         summary["portes"] = sum(d["kind"] == "porte" for d in data["doors"])
         summary["fenetres"] = sum(d["kind"] == "fenetre" for d in data["doors"])
         summary["murs_traces"] = sum(d["kind"] == "mur" for d in data["doors"])
+        summary["tirs_traces"] = sum(d["kind"] == "tir" for d in data["doors"])
     if data["capture"]:
         _merge_json(CAPTURE, map_name, data["capture"])
         summary["zones_de_capture"] = len(data["capture"])

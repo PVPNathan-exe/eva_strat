@@ -29,10 +29,10 @@ export interface TeleportPair {
   a: Station;
   b: Station;
 }
-export type OpeningKind = 'porte' | 'fenetre' | 'mur';
+export type OpeningKind = 'porte' | 'fenetre' | 'mur' | 'tir';
 /**
  * Porte, fenêtre ou mur tracé en trait. Une porte se traverse (vitrée ou non : on voit à travers) ; une fenêtre ne se traverse pas et ne se tire pas : on voit seulement à travers ;
- * un mur ne se traverse pas (par exemple un mur dans un carré de capture).
+ * un mur ne se traverse pas (par exemple un mur dans un carré de capture) ; un trait « tir » ne se traverse pas non plus mais on tire par-dessus.
  * side : 0 = visible des deux côtés ; 1 ou -1 = sens unique, on ne voit à travers que depuis le côté où le produit vectoriel (to - from) x (point - from) a ce signe
  * (axes de l'image, y vers le bas).
  */
@@ -45,11 +45,18 @@ export interface LandmarkPair {
   minimap: Point;
   plan: Point;
 }
+/** Zone où une classe de couleur est remplacée par une autre : une même couleur peut désigner une fenêtre ici et une couverture basse ailleurs. from : classe remplacée, ou 'any' (tout pixel de la zone). */
+export interface ClassOverride {
+  polygon: Point[];
+  from: ClassName | 'any';
+  to: ClassName;
+}
 export interface MapAnnotation {
   colors: PickedColor[];
   tps: TeleportPair[];
   doors: Opening[];
   spawns: Record<Team, Rect[]>;
+  overrides: ClassOverride[];
   capture: Point[][]; // zones des points de capture (forme libre, au moins 3 points) : zones jouables
   pairs: LandmarkPair[];
   inset: Inset | null;
@@ -57,6 +64,7 @@ export interface MapAnnotation {
 
 export const MAX_SPAWNS_PER_TEAM = 2;
 export const MAX_CAPTURE_ZONES = 8;
+export const MAX_OVERRIDES = 40;
 export const MAX_POLYGON_POINTS = 80;
 export const MIN_POLYGON_POINTS = 3;
 const CLOSE_DISTANCE = 0.02; // un clic à cette distance du premier point ferme la forme (fraction de la largeur)
@@ -77,7 +85,7 @@ export const CLASS_INFO: { name: ClassName; label: string; help: string; preview
 
 export const classCode = (name: ClassName) => CLASS_INFO.findIndex((c) => c.name === name) + 1; // 0 : aucune classe
 
-export const emptyAnnotation = (): MapAnnotation => ({ colors: [], tps: [], doors: [], spawns: { A: [], B: [] }, capture: [], pairs: [], inset: null });
+export const emptyAnnotation = (): MapAnnotation => ({ colors: [], tps: [], doors: [], spawns: { A: [], B: [] }, capture: [], overrides: [], pairs: [], inset: null });
 
 const isPoint = (p: unknown): p is Point => Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === 'number' && v >= 0 && v <= 1);
 const isRect = (r: unknown): r is Rect => Array.isArray(r) && r.length === 4 && r.every((v) => typeof v === 'number' && v >= 0 && v <= 1) && r[0] < r[2] && r[1] < r[3];
@@ -132,7 +140,7 @@ export function sanitize(raw: unknown): MapAnnotation {
   }
   for (const d of Array.isArray(r.doors) ? r.doors : []) {
     if (!isPoint(d?.from) || !isPoint(d?.to)) continue;
-    const kind: OpeningKind = d.kind === 'fenetre' || d.kind === 'mur' ? d.kind : 'porte';
+    const kind: OpeningKind = d.kind === 'fenetre' || d.kind === 'mur' || d.kind === 'tir' ? d.kind : 'porte';
     out.doors.push({ from: d.from, to: d.to, kind, glass: kind === 'porte' && Boolean(d.glass), side: (kind === 'fenetre' || (kind === 'porte' && d.glass)) && (d.side === 1 || d.side === -1) ? d.side : 0 });
   }
   const sp = (r.spawns ?? {}) as Record<string, unknown>;
@@ -140,6 +148,10 @@ export function sanitize(raw: unknown): MapAnnotation {
   for (const z of Array.isArray(r.capture) ? (r.capture as unknown[]) : []) {
     const polygon = isRect(z) ? polygonFromRect(z) : readPolygon(z);
     if (polygon && out.capture.length < MAX_CAPTURE_ZONES) out.capture.push(polygon);
+  }
+  for (const o of Array.isArray(r.overrides) ? (r.overrides as ClassOverride[]) : []) {
+    const polygon = readPolygon(o?.polygon);
+    if (polygon && (o.from === 'any' || names.has(o.from)) && names.has(o.to) && out.overrides.length < MAX_OVERRIDES) out.overrides.push({ polygon, from: o.from, to: o.to });
   }
   for (const p of Array.isArray(r.pairs) ? r.pairs : []) if (isPoint(p?.minimap) && isPoint(p?.plan)) out.pairs.push({ minimap: p.minimap, plan: p.plan });
   const i = r.inset as Inset | null | undefined;
@@ -245,6 +257,92 @@ export function visionArrow(from: Point, to: Point, side: -1 | 0 | 1, aspect: nu
   const ny = (tx / norm) * side * length;
   const mid: Point = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
   return [[mid[0] + nx / aspect, mid[1] + ny], [mid[0] - nx / aspect, mid[1] - ny]];
+}
+
+/** Vrai si p est dans le polygone (règle pair-impair). */
+export function pointInPolygon(p: Point, polygon: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Applique les zones de remplacement de classe à l'image de classes (modifiée sur place). Même règle que apply_overrides de map_annotations.py : le centre du pixel décide. */
+export function applyOverrides(labels: Uint8Array, width: number, height: number, overrides: ClassOverride[]): Uint8Array {
+  for (const o of overrides) {
+    const xs = o.polygon.map((p) => p[0]);
+    const ys = o.polygon.map((p) => p[1]);
+    const x0 = Math.max(0, Math.floor(Math.min(...xs) * width));
+    const x1 = Math.min(width - 1, Math.ceil(Math.max(...xs) * width));
+    const y0 = Math.max(0, Math.floor(Math.min(...ys) * height));
+    const y1 = Math.min(height - 1, Math.ceil(Math.max(...ys) * height));
+    const from = o.from === 'any' ? null : classCode(o.from);
+    const to = classCode(o.to);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const i = y * width + x;
+        if ((from === null || labels[i] === from) && pointInPolygon([(x + 0.5) / width, (y + 0.5) / height], o.polygon)) labels[i] = to;
+      }
+    }
+  }
+  return labels;
+}
+
+/** Deux couleurs de classes différentes dont les tolérances se recouvrent. */
+export interface ColorConflict {
+  i: number;
+  j: number;
+  distance: number;
+  pixels: number; // pixels de la médiane couverts par les deux
+}
+
+/**
+ * Pixels couverts par deux couleurs de classes différentes (ambigus : la plus proche l'emporte, mais la décision tient à quelques niveaux de gris), et les paires de couleurs
+ * responsables.
+ */
+export function findConflicts(rgba: Uint8ClampedArray, colors: PickedColor[]): { mask: Uint8Array; pairs: ColorConflict[] } {
+  const n = rgba.length / 4;
+  const mask = new Uint8Array(n);
+  const hits = colors.map((c) => {
+    const hit = new Uint8Array(n);
+    const limit = c.tol * c.tol;
+    for (let p = 0; p < n; p++) {
+      const dr = rgba[p * 4] - c.rgb[0];
+      const dg = rgba[p * 4 + 1] - c.rgb[1];
+      const db = rgba[p * 4 + 2] - c.rgb[2];
+      hit[p] = dr * dr + dg * dg + db * db <= limit ? 1 : 0;
+    }
+    return hit;
+  });
+  const pairs: ColorConflict[] = [];
+  for (let i = 0; i < colors.length; i++) {
+    for (let j = i + 1; j < colors.length; j++) {
+      if (colors[i].cls === colors[j].cls) continue;
+      let pixels = 0;
+      for (let p = 0; p < n; p++) {
+        if (hits[i][p] && hits[j][p]) {
+          mask[p] = 1;
+          pixels++;
+        }
+      }
+      if (pixels > 0) pairs.push({ i, j, distance: Math.hypot(colors[i].rgb[0] - colors[j].rgb[0], colors[i].rgb[1] - colors[j].rgb[1], colors[i].rgb[2] - colors[j].rgb[2]), pixels });
+    }
+  }
+  return { mask, pairs };
+}
+
+/** Tolérances réduites pour qu'aucune couleur ne recouvre une couleur d'une autre classe : au plus la moitié de la distance à la couleur de classe différente la plus proche. */
+export function separateTolerances(colors: PickedColor[]): PickedColor[] {
+  return colors.map((c, i) => {
+    let limit = c.tol;
+    colors.forEach((o, j) => {
+      if (i !== j && o.cls !== c.cls) limit = Math.min(limit, Math.floor(Math.hypot(c.rgb[0] - o.rgb[0], c.rgb[1] - o.rgb[1], c.rgb[2] - o.rgb[2]) / 2));
+    });
+    return { ...c, tol: limit };
+  });
 }
 
 /** Rectangle normalisé (coins dans l'ordre) à partir de deux points du glisser ; null s'il est trop petit pour être voulu. */

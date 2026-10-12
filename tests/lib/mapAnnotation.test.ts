@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addSpawn, alignmentError, balancePair, completePair, closesPolygon, sideOf, stationAngle, visionArrow, stationRadius, classifyImage, rectFrom, sanitize, solveAlignment, upsertColor, type PickedColor } from '../../src/lib/mapAnnotation.ts';
+import { addSpawn, alignmentError, applyOverrides, findConflicts, pointInPolygon, separateTolerances, balancePair, completePair, closesPolygon, sideOf, stationAngle, visionArrow, stationRadius, classifyImage, rectFrom, sanitize, solveAlignment, upsertColor, type PickedColor } from '../../src/lib/mapAnnotation.ts';
 
 const px = (...rgbs: number[][]) => Uint8ClampedArray.from(rgbs.flatMap((c) => [...c, 255]));
 
@@ -139,4 +139,42 @@ test('les deux stations d\'une tyrolienne ont des directions opposées (180 degr
   assert.ok(Math.abs((read.a.angle ?? 0) - 326.5) < 1e-9 && Math.abs((read.b.angle ?? 0) - 146.5) < 1e-9);
   const none = completePair(a && { ...a, angle: null }, b);
   assert.deepEqual([none.a.angle, none.b.angle], [null, null]);
+});
+
+test('une zone de remplacement change la classe des seuls pixels voulus, dans la zone', () => {
+  // image 10 x 10 : colonne de gauche (x < 5) en classe 3 (tir), droite en classe 3 aussi, la ligne 0 en classe 2 (mur)
+  const labels = new Uint8Array(100).fill(3);
+  for (let x = 0; x < 10; x++) labels[x] = 2;
+  const zone: [number, number][] = [[0, 0], [0.5, 0], [0.5, 1], [0, 1]]; // moitié gauche
+  applyOverrides(labels, 10, 10, [{ polygon: zone, from: 'tir', to: 'vue' }]);
+  assert.equal(labels[5 * 10 + 2], 4); // tir dans la zone devient vue seulement (code 4)
+  assert.equal(labels[5 * 10 + 7], 3); // hors de la zone : inchangé
+  assert.equal(labels[2], 2); // un mur dans la zone n'est pas un tir : inchangé
+  applyOverrides(labels, 10, 10, [{ polygon: zone, from: 'any', to: 'sol' }]);
+  assert.equal(labels[2], 1); // « toutes les classes » : le mur aussi
+  assert.equal(labels[5 * 10 + 7], 3);
+});
+
+test('pointInPolygon gère une forme concave', () => {
+  const l: [number, number][] = [[0.2, 0.2], [0.5, 0.2], [0.5, 0.5], [0.8, 0.5], [0.8, 0.8], [0.2, 0.8]];
+  assert.equal(pointInPolygon([0.3, 0.3], l), true);
+  assert.equal(pointInPolygon([0.7, 0.7], l), true);
+  assert.equal(pointInPolygon([0.7, 0.3], l), false); // le creux du L
+});
+
+test('les couleurs de classes différentes qui se recouvrent sont détectées et leurs tolérances séparées', () => {
+  const colors: PickedColor[] = [
+    { rgb: [100, 100, 100], tol: 10, cls: 'tir' },
+    { rgb: [107, 100, 100], tol: 10, cls: 'mur' }, // à 7 de la première
+    { rgb: [200, 200, 200], tol: 10, cls: 'sol' },
+    { rgb: [100, 100, 104], tol: 10, cls: 'tir' }, // même classe que la première : pas un conflit
+  ];
+  const rgba = Uint8ClampedArray.from([103, 100, 100, 255, 100, 100, 100, 255, 200, 200, 200, 255]);
+  const { mask, pairs } = findConflicts(rgba, colors);
+  assert.deepEqual([...mask], [1, 1, 0]); // les deux premiers pixels sont à la fois tir et mur
+  assert.deepEqual(pairs.map((p) => [p.i, p.j]), [[0, 1], [1, 3]]);
+  const tight = separateTolerances(colors);
+  assert.equal(tight[0].tol, 3); // moitié de 7 (arrondie vers le bas)
+  assert.equal(tight[2].tol, 10); // couleur isolée : inchangée
+  assert.equal(findConflicts(rgba, tight).pairs.length, 0);
 });
