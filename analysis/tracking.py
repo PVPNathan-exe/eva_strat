@@ -1113,6 +1113,8 @@ def bridge_gaps(rows, runs, step_s, put):
 SKEW_FULL = 0.25  # asymétrie à partir de laquelle le sens est considéré comme sûr
 MOVE_WEIGHT = 1.5  # poids du critère « le regard suit le déplacement » dans le choix du sens
 GAZE_DOUBT_SKEW = 0.4  # poids de la forme d'un disque dans une case où les regards se lisent mal (carte de fiabilité)
+OBSERVED_STILL_SKEW = 0.2  # poids de la forme du disque blanc d'un joueur observé à l'arrêt
+STILL_OBSERVED_COHERENCE = 0.3  # plafond de l'indice de cohérence d'un regard de joueur observé qui n'est pas son cap : estimé, pas lu
 OBSERVED_FOLLOW_SPEED = 0.03  # vitesse (relative à la minimap, par seconde) à partir de laquelle le regard du joueur observé suit son cap
 MOVE_BREAK_DIST = 0.12  # un pas plus grand entre deux lectures successives coupe la trajectoire pour mesurer le cap
 MOVE_MIN_SPEED = 0.02  # en dessous, le joueur est à l'arrêt : son regard n'a aucun lien avec un déplacement
@@ -1473,6 +1475,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     heading = moves[k][0]
                     obs[k] = (heading % 180, (1.0 if heading < 180 else -1.0) * SKEW_FULL)
                     followed.add(k)
+                elif t.pts[k].get("spectated"):  # disque blanc à l'arrêt : sa forme est quasi ronde, la lecture vaut le hasard (mesuré) : les repères (camp ennemi, murs) décident
+                    obs[k] = (obs[k][0], obs[k][1] * OBSERVED_STILL_SKEW)
             if reliability and reliability.get("gaze"):  # zone où les disques se lisent mal : la forme décide moins
                 g = reliability["grid"]
                 for k in list(obs):
@@ -1484,7 +1488,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                 raw_coh = gaze_coherence({j: t.pts[j].get("angle") for j in idx})
                 head_coh = gaze_coherence({j: (moves[j][0] if j in followed else None) for j in idx}) if followed else {}
                 for k in idx:  # regard qui suit le cap : la cohérence est celle du cap (un cap qui saute n'est pas fiable), sinon celle des directions lues
-                    coherence_out[(k, slot)] = head_coh.get(k, 0.0) if k in followed else raw_coh[k]
+                    coherence_out[(k, slot)] = head_coh.get(k, 0.0) if k in followed else (min(raw_coh[k], STILL_OBSERVED_COHERENCE) if t.pts[k].get("spectated") else raw_coh[k])
             for k in idx:
                 d = t.pts[k]
                 conf = t.how if d.get("slot") != t.slot else CONF_VOTE
@@ -1951,7 +1955,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 36  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 37  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
