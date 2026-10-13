@@ -6,8 +6,8 @@ import { CLASS_INFO, applyOverrides, classifyImage, type MapAnnotation, type Poi
 import { loadTinted, type Rgb } from '../../lib/mapReading';
 import { MappingShapes, type Draft } from './MappingShapes';
 
-const GREEN: Rgb = [53, 224, 122];
-const RED: Rgb = [255, 59, 59];
+const ADDED: Rgb = [255, 255, 255]; // sol ajouté par le plan : blanc (le vert est déjà la classe Sol)
+const CUT: Rgb = [255, 0, 255]; // mur du plan retiré : magenta
 
 export interface Pixel {
   x: number; // pixel de la médiane
@@ -20,7 +20,7 @@ interface Props {
   annotation: MapAnnotation;
   zoom: number; // 0 : ajusté à la largeur disponible
   preview: boolean; // coloriser les pixels classés
-  planDiff: { added: string | null; cut: string | null } | null; // corrections du plan stratégique à montrer (sol ajouté en vert, murs retirés en rouge)
+  planDiff: { added: string | null; cut: string | null } | null; // corrections du plan stratégique à montrer (sol ajouté en blanc, murs retirés en magenta)
   conflicts: Uint8Array | null; // pixels ambigus à montrer (couleurs de deux classes qui se recouvrent), ou null
   draft: Draft; // tracé en cours
   onImage: (image: ImageData) => void;
@@ -107,7 +107,7 @@ export function MappingCanvas({ url, annotation, zoom, preview, conflicts, planD
     cv.height = image.height;
     ctx.clearRect(0, 0, cv.width, cv.height);
     let cancelled = false;
-    for (const [url, color] of [[planDiff?.added, GREEN], [planDiff?.cut, RED]] as const) {
+    for (const [url, color] of [[planDiff?.added, ADDED], [planDiff?.cut, CUT]] as const) {
       if (!url) continue;
       loadTinted(url, color, 190)
         .then((src) => {

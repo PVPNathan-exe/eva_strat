@@ -427,7 +427,7 @@ export function MapMapping({ map }: { map: string }) {
           <input type="checkbox" checked={annotation.usePlan} onChange={(e) => update((a) => ({ ...a, usePlan: e.target.checked }))} /> Corriger le masque avec le plan stratégique à l'application (nécessite le cadre de l'outil Alignement)
         </label>
         <label>
-          <input type="checkbox" checked={showPlan} disabled={!annotation.usePlan} onChange={(e) => setShowPlan(e.target.checked)} /> Montrer les corrections du dernier « Appliquer » (vert : sol ajouté, rouge : mur du plan retiré)
+          <input type="checkbox" checked={showPlan} disabled={!annotation.usePlan} onChange={(e) => setShowPlan(e.target.checked)} /> Montrer les corrections du dernier « Appliquer » (blanc : sol ajouté, magenta : mur du plan retiré)
         </label>
         <p className="mapping__hint">
           Le plan ajoute le sol que la saisie a oublié à l'intérieur de l'arène et retire les murs du plan sur lesquels la saisie dit « praticable ». Il n'est utilisé que si son sol ressemble à celui de la
