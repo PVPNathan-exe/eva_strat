@@ -1169,7 +1169,7 @@ GAZE_DOUBT_SKEW = 0.4  # poids de la forme d'un disque dans une case où les reg
 HEADING_COHERENCE = 0.6  # indice de cohérence des caps voisins à partir duquel le joueur observé est jugé en marche
 GAZE_HOLD_UNKNOWN_S = 8.0  # un regard inconnu (joueur observé arrêté) est déduit des lectures sûres voisines jusqu'à cet écart
 STILL_OBSERVED_COHERENCE = 0.3  # plafond de l'indice de cohérence d'un regard de joueur observé qui n'est pas son cap : estimé, pas lu
-OBSERVED_FOLLOW_SPEED = 0.03  # vitesse (relative à la minimap, par seconde) à partir de laquelle le regard du joueur observé suit son cap
+OBSERVED_FOLLOW_SPEED = 0.07  # vitesse (relative à la minimap, par seconde) à partir de laquelle le regard du joueur observé suit son cap (mesuré sur 145 corrections à la main, le cap s écarte de plus de 60 degrés du regard posé dans 41 cas sur 70 sous 0,02, 28 sur 38 de 0,02 à 0,04, 14 sur 25 de 0,04 à 0,07 et 4 sur 12 au-dessus de 0,07 ; avant : 0,03, un pas d un pixel faisait tourner le regard d un coup)
 MOVE_BREAK_DIST = 0.12  # un pas plus grand entre deux lectures successives coupe la trajectoire pour mesurer le cap
 MOVE_MIN_SPEED = 0.02  # en dessous, le joueur est à l'arrêt : son regard n'a aucun lien avec un déplacement
 MOVE_SPEED_FULL = 0.08  # vitesse (normalisée, par seconde) à partir de laquelle ce critère a son poids plein
@@ -2427,7 +2427,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 49  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 50  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
