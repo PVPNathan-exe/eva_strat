@@ -7,6 +7,7 @@ export interface RotorRing {
   r_max: number;
   omega: number; // degrés par seconde (positif : horaire)
   ouvertures: [number, number][]; // degrés à t_ref
+  fenetres?: [number, number][]; // [centre, demi-largeur] en degrés à t_ref : on voit à travers, on ne passe pas
 }
 
 export interface RotorModel {
@@ -29,6 +30,15 @@ export function solidArcs(ring: RotorRing, t: number, tRef: number): [number, nu
     if (next > end) arcs.push([end, next]);
   }
   return arcs;
+}
+
+/** Intervalles d'angle (degrés) des fenêtres d'un anneau à l'instant de game t, tournées de omega x (t - t_ref). */
+export function windowArcs(ring: RotorRing, t: number, tRef: number): [number, number][] {
+  const shift = ring.omega * (t - tRef);
+  return (ring.fenetres ?? []).map(([centre, half]) => {
+    const c = (((centre + shift) % 360) + 360) % 360;
+    return [c - half, c + half] as [number, number];
+  });
 }
 
 /** Points (fractions de la minimap) d'un arc de cercle de l'anneau, au rayon moyen de sa bande, pour le tracer en ligne brisée. */

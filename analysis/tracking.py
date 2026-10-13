@@ -1435,6 +1435,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     if not frames:
         return []
     _TELEPORTS[:] = teleports or []
+    _ROTORS.clear()
+    _ROTORS.update(rotors or {})
     _STATIONS[:] = [(s["x"], s["y"], s["angle"]) for pair in stations or [] for s in (pair["a"], pair["b"]) if s.get("angle") is not None]
     _WALK.clear()
     _NEAR.clear()
@@ -1689,7 +1691,7 @@ def under_fire(states, step_s):
     return out
 
 
-def duel_bearings(rows, fire):
+def duel_bearings(rows, fire, partners=None):
     """{(image, joueur): direction (degrés, dans l'image de la minimap) vers l'ennemi le plus proche lui aussi sous le feu}. Un duel : les deux joueurs perdent des points de vie
     en même temps, à moins de DUEL_MAX_M l'un de l'autre, et se regardent (le tireur vise celui qu'il touche)."""
     by_frame = {}
@@ -1710,6 +1712,8 @@ def duel_bearings(rows, fire):
             if best:
                 b = best[1]
                 out[(k, a[2])] = math.degrees(math.atan2(b[5] - a[5], (b[4] - a[4]) * MINIMAP_ASPECT)) % 360
+                if partners is not None:
+                    partners[(k, a[2])] = b
     return out
 
 
@@ -1765,15 +1769,68 @@ def tp_gaze(rows, step_s, coherence_out=None):
     return changed
 
 
+SIGHT_DUEL = True  # la règle du mur s'applique au duel
+SIGHT_KILL = False  # pas au kill : mesuré sur les 220 corrections de la game 26, le tueur regarde sa victime même avec un mur entre eux (regard médian 38,0 puis 39,5 degrés, 74 puis 77 corrections à plus de 60 degrés avec la règle du mur) ; la libanaise se marque à la main
+SIGHT_RULE = True  # un mur entre deux joueurs : pas de règle du duel ni du kill (ils ne se voient pas)
+SIGHT_BLOCK_CELLS = 2  # cases non praticables sur la droite qui séparent deux joueurs
+SIGHT_MARGIN_CELLS = 1.5  # on ne compte pas les cases autour des deux joueurs (collés à un mur)
+_ROTORS = {}  # anneaux tournants de la carte en cours avec t0 (début de la game dans la vidéo), posés par solve
+
+
+def sight_blocked(a, b):
+    """Vrai si un mur sépare les deux lignes de positions a et b (tuples du suivi : image, temps, joueur, équipe, x, y, ...) : au moins SIGHT_BLOCK_CELLS cases non praticables de la carte
+    des passages sur la droite qui les joint (hors des cases collées à chaque joueur), ou, sur Engine, un arc plein d'anneau tournant sans fenêtre à cet instant. Sans carte des passages
+    ni anneaux, rien ne sépare personne."""
+    if not _WALK and not _ROTORS:
+        return False
+    p, q = (a[4], a[5]), (b[4], b[5])
+    n = max(2, int(math.hypot(q[0] - p[0], q[1] - p[1]) / (WALK_CELL * 0.5)))
+    blocked = 0
+    t_game = a[1] + FRAME_LAG_S - _ROTORS["t0"] if _ROTORS else None
+    for i in range(n + 1):
+        pt = (p[0] + (q[0] - p[0]) * i / n, p[1] + (q[1] - p[1]) * i / n)
+        if math.hypot(pt[0] - p[0], pt[1] - p[1]) < WALK_CELL * SIGHT_MARGIN_CELLS or math.hypot(pt[0] - q[0], pt[1] - q[1]) < WALK_CELL * SIGHT_MARGIN_CELLS:
+            continue
+        if _WALK and _cell(pt) not in _WALK:
+            blocked += 1
+        elif _ROTORS:
+            import rotors as model
+
+            if model.blocks_sight(_ROTORS, pt[0], pt[1], t_game):
+                blocked += SIGHT_BLOCK_CELLS
+        if blocked >= SIGHT_BLOCK_CELLS:
+            return True
+    return False
+
+
+def gazes_cross(a, b):
+    """Vrai si les deux regards (rayons issus des positions de a et de b, dans le repère de la minimap en pixels) se croisent devant chacun des deux joueurs ; vrai aussi quand l'un des
+    regards est inconnu (on ne peut pas dire qu'ils ne se croisent pas)."""
+    if a[6] is None or b[6] is None:
+        return True
+    pa, pb = (a[4] * MINIMAP_ASPECT, a[5]), (b[4] * MINIMAP_ASPECT, b[5])
+    da, db_ = (math.cos(math.radians(a[6])), math.sin(math.radians(a[6]))), (math.cos(math.radians(b[6])), math.sin(math.radians(b[6])))
+    det = da[0] * (-db_[1]) - da[1] * (-db_[0])
+    if abs(det) < 1e-9:
+        return False  # regards parallèles
+    dx, dy = pb[0] - pa[0], pb[1] - pa[1]
+    s = (dx * (-db_[1]) - dy * (-db_[0])) / det
+    t = (da[0] * dy - da[1] * dx) / det
+    return s > 0 and t > 0
+
+
 def duel_gaze(rows, states, step_s, coherence_out=None):
     """Règle du duel : un joueur qui perd des points de vie en même temps qu'un ennemi proche regarde cet ennemi. Le regard calculé est remplacé par la direction de l'ennemi
     quand il s'en écarte de plus de DUEL_TOLERANCE degrés (un regard déjà tourné vers lui est gardé). Les regards posés à la main ne sont jamais modifiés (appelé avant apply_marks)."""
     fire = under_fire(states, step_s)
     changed = 0
-    for key, bearing in duel_bearings(rows, fire).items():
+    partners = {}
+    for key, bearing in duel_bearings(rows, fire, partners).items():
         r = rows[key]
         if r[6] is not None and abs((r[6] - bearing + 180) % 360 - 180) <= DUEL_TOLERANCE:
             continue
+        if SIGHT_RULE and SIGHT_DUEL and sight_blocked(r, partners[key]) and not gazes_cross(r, partners[key]):
+            continue  # un mur sépare les deux joueurs et leurs regards ne se croisent pas : ils ne se voient pas, on garde les regards lus
         rows[key] = r[:6] + (round(bearing, 1),) + r[7:]
         if coherence_out is not None:
             coherence_out[key] = max(coherence_out.get(key) or 0.0, DUEL_COHERENCE)
@@ -1812,6 +1869,8 @@ def kill_gaze(rows, kills, times, step_s, coherence_out=None):
             bearing = math.degrees(math.atan2(b[5] - a[5], (b[4] - a[4]) * MINIMAP_ASPECT)) % 360
             if math.hypot((b[4] - a[4]) * ARENA_M[0], (b[5] - a[5]) * ARENA_M[1]) < 0.5 or (a[6] is not None and abs((a[6] - bearing + 180) % 360 - 180) <= DUEL_TOLERANCE):
                 continue
+            if SIGHT_RULE and SIGHT_KILL and sight_blocked(a, b):
+                continue  # un mur sépare le tueur et sa victime (la libanaise : arme décalée dans l'ouverture, tir à l'aveugle) : son regard ne vise pas la victime
             rows[(j, killer)] = a[:6] + (round(bearing, 1),) + a[7:]
             if coherence_out is not None:
                 coherence_out[(j, killer)] = max(coherence_out.get((j, killer)) or 0.0, DUEL_COHERENCE)
@@ -2254,7 +2313,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 44  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 45  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { arcPoints, solidArcs, type RotorModel } from '../../src/lib/rotors.ts';
+import { arcPoints, solidArcs, windowArcs, type RotorModel } from '../../src/lib/rotors.ts';
 
 const ring = { nom: 'x', r_min: 0.19, r_max: 0.21, omega: -3, ouvertures: [[100, 140], [280, 320]] as [number, number][] };
 
@@ -21,4 +21,11 @@ test('un arc se trace en points au rayon moyen de la bande, autour du centre', (
   assert.ok(Math.abs(points[0][0] - (0.5 + 0.2 / 2)) < 1e-9 && Math.abs(points[0][1] - 0.5) < 1e-9); // angle 0 : à droite du centre, largeur divisée par l'aspect
   const last = points[points.length - 1];
   assert.ok(Math.abs(last[0] - 0.5) < 1e-9 && Math.abs(last[1] - 0.7) < 1e-9); // angle 90 : sous le centre (y vers le bas)
+});
+
+test('les fenêtres tournent avec leur anneau', () => {
+  const withWindows = { ...ring, fenetres: [[200, 10]] as [number, number][] };
+  assert.deepEqual(windowArcs(withWindows, 15, 15), [[190, 210]]);
+  assert.deepEqual(windowArcs(withWindows, 25, 15), [[160, 180]]); // anti-horaire : 30 degrés de moins
+  assert.deepEqual(windowArcs(ring, 15, 15), []); // pas de fenêtre connue
 });

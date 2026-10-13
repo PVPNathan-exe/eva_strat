@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { loadTinted, readingOf, rotorsOf, type Rgb } from '../../lib/mapReading';
-import { arcPoints, solidArcs } from '../../lib/rotors';
+import { arcPoints, solidArcs, windowArcs } from '../../lib/rotors';
 import { defaultInset, isAligned, project } from '../../lib/planInsets';
 import { ReliabilityLayer } from './ReliabilityLayer';
 import { useGameFlags } from './useGameFlags';
@@ -95,6 +95,20 @@ export function CorridorMap({ map }: { map: string }) {
                 />
               )),
             )}
+          {rings &&
+            rotors?.anneaux.flatMap((ring) =>
+              windowArcs(ring, ringTime, rotors.t_ref).map((arc, i) => (
+                <polyline
+                  key={`win${ring.nom}${i}`}
+                  points={arcPoints(rotors, ring, arc, 1)
+                    .map(([x, y]) => `${at(x, y).x},${at(x, y).y}`)
+                    .join(' ')}
+                  className="corridor__ring-window"
+                  fill="none"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )),
+            )}
           {lines &&
             reading.openings.map((o, i) => {
               const a = at(o.from[0], o.from[1]);
@@ -132,7 +146,7 @@ export function CorridorMap({ map }: { map: string }) {
         <label><input type="checkbox" checked={under} onChange={(e) => setUnder(e.target.checked)} /> Passage en dessous (étages superposés, en bleu clair)</label>
         {rotors && (
           <>
-            <label><input type="checkbox" checked={rings} onChange={(e) => setRings(e.target.checked)} /> Anneaux tournants (arcs pleins ; extérieur horaire, intérieur anti-horaire)</label>
+            <label><input type="checkbox" checked={rings} onChange={(e) => setRings(e.target.checked)} /> Anneaux tournants (arcs pleins ; fenêtres en bleu ; extérieur horaire, intérieur anti-horaire)</label>
             <label className="corridor__time">
               Instant de game : {ringTime} s
               <input type="range" min={0} max={120} step={1} value={ringTime} disabled={!rings} onChange={(e) => setRingTime(Number(e.target.value))} />

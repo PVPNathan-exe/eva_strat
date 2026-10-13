@@ -449,3 +449,72 @@ def test_a_kill_marked_libanaise_keeps_the_gaze_that_was_read():
     assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE", False)], times, 0.1) > 0 and abs(rows[(30, 1)][6] - 0.0) < 1.0  # non marqué : règle du kill
     rows = world()
     assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE")], times, 0.1) > 0  # ancien format sans drapeau : règle du kill
+
+
+# --- un mur entre deux joueurs : la règle du duel et du kill ne s'applique pas ---
+
+def _wall_world():
+    """Carte des passages : deux couloirs séparés par un mur plein (colonne de cases non praticables) entre x = 0,45 et 0,55."""
+    cells = {tracking._cell((0.1 + 0.01 * i, 0.50 + 0.01 * j)) for i in range(80) for j in range(-30, 31)}
+    wall = {tracking._cell((x, 0.5 + 0.01 * j)) for x in (0.45, 0.47, 0.49, 0.51, 0.53, 0.55) for j in range(-30, 31)}
+    tracking._WALK.clear()
+    tracking._WALK.update(cells - wall)
+
+
+def _no_wall():
+    tracking._WALK.clear()
+    tracking._ROTORS.clear()
+
+
+def test_a_wall_between_two_players_is_seen_and_an_open_line_is_not():
+    a = row(0, 1, 0.30, 0.50)
+    b = row(0, 8, 0.70, 0.50)
+    try:
+        assert tracking.sight_blocked(a, b) is False  # sans carte des passages : rien ne sépare personne
+        _wall_world()
+        assert tracking.sight_blocked(a, b) is True
+        assert tracking.sight_blocked(a, row(0, 8, 0.40, 0.50)) is False  # du même côté du mur
+        assert tracking.sight_blocked(row(0, 1, 0.44, 0.50), row(0, 8, 0.56, 0.50)) is True  # collés au mur de chaque côté : le mur compte quand même
+    finally:
+        _no_wall()
+
+
+def test_two_gazes_cross_only_when_the_rays_meet_in_front_of_both_players():
+    a = row(0, 1, 0.30, 0.50, angle=0.0)  # regarde vers la droite
+    assert tracking.gazes_cross(a, row(0, 8, 0.70, 0.30, angle=90.0)) is True  # l'autre regarde vers le bas : les rayons se coupent en (0,70 ; 0,50)
+    assert tracking.gazes_cross(a, row(0, 8, 0.70, 0.30, angle=270.0)) is False  # l'autre regarde vers le haut : le croisement est derrière lui
+    assert tracking.gazes_cross(a, row(0, 8, 0.70, 0.50, angle=0.0)) is False  # parallèles
+    assert tracking.gazes_cross(a, row(0, 8, 0.70, 0.30, angle=None)) is True  # regard inconnu : on ne tranche pas
+
+
+def test_the_duel_rule_keeps_the_read_gazes_when_a_wall_separates_the_duelists_and_their_gazes_do_not_cross():
+    def world(angle_1, angle_8):
+        return table(*[row(k, 1, 0.30, 0.50, angle=angle_1) for k in range(40)], *[row(k, 8, 0.70, 0.50, angle=angle_8) for k in range(40)])
+    try:
+        _wall_world()
+        rows = world(100.0, 80.0)  # chacun regarde vers le bas : les rayons sont presque parallèles et ne se croisent pas
+        assert tracking.duel_gaze(rows, _duel_states(), 0.1) == 0 and rows[(12, 1)][6] == 100.0 and rows[(12, 8)][6] == 80.0
+        rows = world(45.0, 135.0)  # regards qui se croisent devant les deux joueurs (en bas, entre eux) : le mur n'y change rien, la règle s'applique
+        assert tracking.duel_gaze(rows, _duel_states(), 0.1) > 0
+        _no_wall()
+        rows = world(100.0, 80.0)
+        assert tracking.duel_gaze(rows, _duel_states(), 0.1) > 0  # sans mur : règle du duel
+    finally:
+        _no_wall()
+
+
+def test_the_kill_rule_applies_through_a_wall_unless_the_option_is_on():
+    times = {k: k * 0.1 for k in range(60)}
+    def world():
+        return table(*[row(k, 1, 0.30, 0.50, angle=100.0) for k in range(60)], *[row(k, 8, 0.70, 0.50, angle=100.0) for k in range(60)])
+    try:
+        _wall_world()
+        assert tracking.SIGHT_KILL is False  # par défaut : le tueur regarde sa victime même à travers un mur (mesuré)
+        rows = world()
+        assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE")], times, 0.1) > 0
+        tracking.SIGHT_KILL = True
+        rows = world()
+        assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE")], times, 0.1) == 0 and rows[(30, 1)][6] == 100.0  # option : pas de règle du kill à travers un mur
+    finally:
+        tracking.SIGHT_KILL = False
+        _no_wall()

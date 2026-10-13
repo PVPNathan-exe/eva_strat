@@ -99,3 +99,23 @@ def test_filling_steps_leave_the_holes_alone():
     holes[:, 100:140] = True  # un anneau : bande laissée en trou
     fill, _, _ = plan_mask.corrections(labels, map_annotations.CODES["sol"], plan, {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0}, holes)
     assert fill[50, 80] and fill[50, 150] and not fill[50, 120]  # le sol manquant est ajouté, sauf dans le trou
+
+
+def test_windows_let_the_sight_through_but_a_solid_arc_does_not():
+    ring = {**MODEL["anneaux"][0], "fenetres": [[200.0, 10.0]]}  # fenêtre au milieu de l'arc plein 140 à 280 (à t_ref)
+    model = {**MODEL, "anneaux": [ring, MODEL["anneaux"][1]]}
+    t = 15.0
+    assert rotors.blocks_sight(model, *point(0.20, 170.0), t) is True  # arc plein, hors fenêtre
+    assert rotors.blocks_sight(model, *point(0.20, 200.0), t) is False  # dans la fenêtre : on voit à travers
+    assert rotors.blocks_sight(model, *point(0.20, 120.0), t) is False  # dans une ouverture
+    assert rotors.blocks_sight(model, *point(0.26, 170.0), t) is False  # entre les anneaux
+    assert rotors.blocks_sight(model, *point(0.20, 200.0 + 3.0 * 10), 25.0) is True  # 10 s plus tard la fenêtre a tourné de -30 (anti-horaire) : 200 n'y est plus
+    assert rotors.blocks_sight(model, *point(0.20, 170.0), 25.0) is False  # et 170 y est
+
+
+def test_windows_are_read_from_the_lines_drawn_at_the_start_and_brought_back_to_t_ref():
+    lines = [{"from": point(0.335, 40.0), "to": point(0.335, 50.0)}]  # trait de fenêtre de l'anneau extérieur : 40 à 50 degrés, dessiné 10 s avant t_ref
+    got = rotors.windows_from_lines(MODEL, lines, 5.0)
+    assert got["interieur"] == [] and len(got["exterieur"]) == 1
+    centre, half = got["exterieur"][0]
+    assert abs(centre - (45.0 + 3.0 * 10)) < 0.5 and abs(half - 5.0) < 0.5  # tourné de 3 degrés par seconde dans le sens horaire pendant 10 s

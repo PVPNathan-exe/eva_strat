@@ -91,6 +91,12 @@
   stroke: var(--c-ok);
 }
 
+.corridor__ring-window {
+  stroke: var(--c-blue);
+  stroke-width: 7;
+  stroke-linecap: butt;
+}
+
 .corridor__time {
   display: inline-flex;
   align-items: center;

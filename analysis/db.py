@@ -264,7 +264,15 @@ def walk_mask_for(map_name):
     """Masque des zones praticables d'une carte (tableau booléen) ou None si la carte n'en a pas (voir map_mask.py)."""
     import map_mask
 
-    return map_mask.load(map_name)
+    mask = map_mask.load(map_name)
+    model = rotors_for(map_name, 0.0)
+    if mask is not None and model:
+        import rotors
+
+        # Engine : les anneaux tournent, leur bande est praticable à un moment ou un autre (union des positions de l'ouverture) : pour les trajets, c'est du sol. Le test à chaque instant
+        # (arc plein ou ouverture) est fait par tracking.rotor_snap.
+        mask = mask | rotors.hole_mask(model, mask.shape)
+    return mask
 
 
 def zone_for(conn, map_name, zone):

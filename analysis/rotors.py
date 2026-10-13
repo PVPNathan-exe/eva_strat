@@ -9,7 +9,7 @@ anneaux repartent de la même position à chaque game : mesuré à 3 degrés pr�
 
 Fichier map_rotors.json : { carte: { "aspect": largeur / hauteur de la minimap, "centre": [x, y] (fractions), "t_ref": instant de game de la mesure (secondes),
   "anneaux": [ { "nom", "r_min", "r_max" (bande d'arc plein), "trou_min", "trou_max" (bande graphique entière de l'anneau, laissée en trou du masque), fractions de la hauteur de la
-  minimap, "omega" (degrés par seconde), "ouvertures": [[debut, fin] (degrés à t_ref)] } ] } }"""
+  minimap, "omega" (degrés par seconde), "ouvertures": [[debut, fin] (degrés à t_ref)], "fenetres": [[centre, demi-largeur]] (degrés à t_ref, tracées à la main) } ] } }"""
 
 import argparse
 import glob
@@ -68,6 +68,38 @@ def nearest_outside(model, ring, x, y):
     target = ring["r_min"] * 0.95 if dist - ring["r_min"] <= ring["r_max"] - dist else ring["r_max"] * 1.05
     a = math.radians(angle)
     return model["centre"][0] + target * math.cos(a) / model["aspect"], model["centre"][1] + target * math.sin(a)
+
+
+def in_window(ring, phi):
+    """Vrai si l'angle phi (degrés, repère de l'anneau à t_ref) est dans une fenêtre de l'anneau : on voit à travers, on ne passe pas."""
+    return any(abs((phi - centre + 180) % 360 - 180) <= half for centre, half in ring.get("fenetres", []))
+
+
+def blocks_sight(model, x, y, t_game):
+    """Vrai si un arc plein de l'un des anneaux, hors fenêtre, occupe le point (x, y) à l'instant de game t_game : il coupe la vue (une ouverture ou une fenêtre la laisse passer)."""
+    angle, dist = angle_deg(model, x, y)
+    for ring in model["anneaux"]:
+        if ring["r_min"] <= dist <= ring["r_max"]:
+            phi = angle - ring["omega"] * (t_game - model["t_ref"])
+            if not in_gap(ring, phi) and not in_window(ring, phi):
+                return True
+    return False
+
+
+def windows_from_lines(model, lines, t_draw):
+    """Fenêtres de chaque anneau d'après les traits « fenêtre » tracés à la main sur la carte au départ (lines : [{from, to}] en fractions de la minimap), ramenées à t_ref :
+    centre et demi-largeur en degrés. `t_draw` : instant de game où ces traits ont été tracés (négatif : avant le début de la game ; les anneaux tournent déjà)."""
+    out = {ring["nom"]: [] for ring in model["anneaux"]}
+    for line in lines:
+        mid = ((line["from"][0] + line["to"][0]) / 2, (line["from"][1] + line["to"][1]) / 2)
+        angle, dist = angle_deg(model, *mid)
+        for ring in model["anneaux"]:
+            if ring["r_min"] - 0.03 <= dist <= ring["r_max"] + 0.03:
+                a1, _ = angle_deg(model, *line["from"])
+                a2, _ = angle_deg(model, *line["to"])
+                half = max(3.0, abs((a1 - a2 + 180) % 360 - 180) / 2)
+                out[ring["nom"]].append([round((angle + ring["omega"] * (model["t_ref"] - t_draw)) % 360, 1), round(half, 1)])
+    return out
 
 
 def hole_mask(model, shape):
@@ -226,6 +258,7 @@ def main(argv=None):
     parser.add_argument("--map", default="Engine")
     parser.add_argument("--game", type=int, action="append", required=True)
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--t-draw", type=float, help="instant de game (négatif : avant le début) où les traits « fenêtre » de la cartographie ont été tracés : les fenêtres du modèle en sont tirées")
     args = parser.parse_args(argv)
     import sqlite3
 
@@ -240,6 +273,13 @@ def main(argv=None):
         games.append((g["path"], g["start_s"]))
     zone = json.loads((HERE / "map_zones.json").read_text(encoding="utf-8"))[args.map]["minimap"]
     model, notes = measure(games, zone)
+    if args.t_draw is not None:
+        row = conn.execute("SELECT data FROM map_annotations WHERE map = ?", (args.map,)).fetchone()
+        lines = [d for d in json.loads(row["data"]).get("doors", []) if d.get("kind") == "fenetre"] if row else []
+        found = windows_from_lines(model, lines, args.t_draw)
+        for ring in model["anneaux"]:
+            ring["fenetres"] = found[ring["nom"]]
+        notes.append(f"fenêtres tirées de {len(lines)} traits de la cartographie (tracés à t = {args.t_draw} s) : " + str({k: len(v) for k, v in found.items()}))
     print("\n".join(notes))
     if args.write:
         known = json.loads(ROTORS.read_text(encoding="utf-8")) if ROTORS.exists() else {}
