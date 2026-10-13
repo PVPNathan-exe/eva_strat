@@ -37,6 +37,7 @@ import cv2
 import numpy as np
 
 import capture_points
+import mask_clean
 
 HERE = Path(__file__).parent
 MASK_DIR = HERE / "map_masks"
@@ -400,6 +401,21 @@ READS_SUPPORT = 0.02  # une lecture sûre n'ajoute du sol que si une autre lectu
 READS_MAX_ADD_SHARE = 0.15  # les lectures n'ajoutent pas plus que cette part du sol
 
 
+def _clean_mask(conn, map_name, mask, grid_shape, doors):
+    """Masque final sans taches ni trous minuscules (mask_clean.py) : une petite tache qui porte des lectures sûres reste, les traits de mur, fenêtres et tirs tracés restent des murs.
+    Renvoie (masque, nombre de pixels changés)."""
+    import map_mask
+
+    try:
+        points = np.array(map_mask.read_points(conn, map_name), float).reshape(-1, 2)
+    except sqlite3.OperationalError:
+        points = None
+    lines = cv2.resize(_line_layer(grid_shape, blocking_lines(doors)).astype(np.uint8), mask.shape[::-1], interpolation=cv2.INTER_NEAREST) > 0
+    old = mask > 127
+    new = mask_clean.clean(old, protect=lines, reads=points)
+    return new.astype(np.uint8) * 255, int((new != old).sum())
+
+
 def reads_step(conn, map_name, walk, doors, exclude=None):
     """Les positions lues avec certitude font foi : là où un joueur a été lu de façon sûre (et soutenue par une autre lecture voisine), le sol est praticable, quoi qu'en dise une
     couleur de classe (Atlantis : le joueur 2 de la game 31 est lu sûrement à 4,9 s sur un contour classé en mur). Sauf sous les fenêtres, murs et tirs par-dessus tracés à la main.
@@ -479,6 +495,7 @@ def apply(conn, map_name):
                 cv2.imwrite(str(MASK_DIR / f"{map_name}_plan_retraits.png"), (before_plan & ~walk).astype(np.uint8) * 255)
         walk &= ~(labels == CODES["hors"])  # « hors map » l'emporte sur tout le reste : rien n'y est praticable
         mask = cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST)
+        mask, summary["nettoyage_pixels"] = _clean_mask(conn, map_name, mask, walk.shape, data["doors"])
         summary["praticable"] = round(float(walk.mean()), 3)
         refused = refused_share(conn, map_name, mask)
         if refused is not None:
