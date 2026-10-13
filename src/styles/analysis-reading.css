@@ -2,17 +2,26 @@
 
 .reading {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.9rem;
-  padding: 0.75rem 1rem;
+  min-height: 0;
   min-width: 0;
+  padding: 0.75rem 1rem;
+  overflow-y: auto; /* la page défile dans sa zone : la barre d'onglets du haut reste en place */
 }
 
 .reading__bar {
+  position: sticky;
+  top: -0.75rem;
+  z-index: 4;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.6rem 1rem;
+  margin-top: -0.75rem;
+  padding-block: 0.6rem;
+  background: var(--c-bg);
 }
 
 .reading__split {
@@ -403,5 +412,5 @@
 /* Lecture des formes : la minimap reste à une taille qui laisse voir la barre de lecture et les corrections sans défiler */
 .shapes {
   width: 100%;
-  max-width: 1100px;
+  max-width: min(1100px, calc((100vh - 13rem) * 1.7)); /* la minimap garde sa hauteur dans la fenêtre : la barre de lecture reste proche */
 }
