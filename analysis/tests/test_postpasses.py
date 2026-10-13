@@ -638,3 +638,12 @@ def test_a_cross_is_not_the_death_of_a_player_whose_banner_has_been_grey_for_a_l
     assert tracking._fresh_death(5, 5, dead, times)  # il vient de mourir : sa croix
     assert tracking._fresh_death(190, 8, dead, times)  # pas de bandeau exploitable pour ce joueur : croix gardée
     assert tracking._fresh_death(250, 5, dead, times)  # son bandeau n'est plus grisé : il est revenu
+
+
+def test_banner_states_of_an_empty_minimap_are_ignored():
+    frames = [(0, 0.0, [{"alive": True}]), (1, 0.1, []), (2, 0.2, [{"alive": True}])]
+    states = {0: {1: {"alive": True}}, 1: {1: {"alive": False}}, 2: {1: {"alive": True}}}  # image 1 : minimap noire, bandeau lu « grisé »
+    assert sorted(tracking.drop_blank_states(frames, states)) == [0, 2]
+    assert tracking.drop_blank_states(frames, None) is None
+    full = [(0, 0.0, [{"alive": True}]), (1, 0.1, [{"alive": True}])]
+    assert tracking.drop_blank_states(full, states) is states  # aucune image vide : rien ne change

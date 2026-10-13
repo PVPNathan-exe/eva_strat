@@ -1429,6 +1429,15 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
+def drop_blank_states(frames, states):
+    """États des bandeaux sans les images où la minimap est vide (aucune pastille, aucune croix : écran noir de fin de game, transition). Les bandeaux n'y sont pas lisibles : ils paraissaient
+    grisés pour quatre joueurs sur huit, d'où des croix de mort sur des joueurs vivants (The Cliff, Polaris : 1,1 s avant la fin). Une minimap de huit joueurs n'est jamais vide en jeu."""
+    if not states:
+        return states
+    blank = {fi for fi, _, dets in frames if not dets}
+    return {fi: st for fi, st in states.items() if fi not in blank} if blank else states
+
+
 def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None, doors=None, see=None, dead_marks=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
@@ -1452,6 +1461,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     Renvoie les lignes (frame, t, slot, team, x, y, angle, alive, confiance)."""
     if not frames:
         return []
+    states = drop_blank_states(frames, states)  # écran noir de fin de game : les bandeaux n'y sont pas lisibles
     _TELEPORTS[:] = teleports or []
     _FLAGS["neutral_spawns"] = bool(spawns and _rects(spawns, "A") and _rects(spawns, "A") == _rects(spawns, "B"))
     _ROTORS.clear()
@@ -2427,7 +2437,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 50  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 51  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
