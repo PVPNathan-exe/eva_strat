@@ -53,6 +53,9 @@ interface AnalysisState {
   loadVideos: () => Promise<void>;
   selectVideo: (id: number | null) => Promise<void>;
   refreshGames: () => Promise<void>;
+  /** Version des données d'une game : change après un recalcul des positions, ce qui fait relire positions, contrôles et kills partout où la game est affichée. */
+  dataVersion: number;
+  bumpData: () => Promise<void>;
   selectGame: (id: number | null) => void;
   setCurrentTime: (t: number) => void;
   setPendingStart: (t: number | null) => void;
@@ -193,6 +196,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
       await get().refreshGames();
       void get().loadComments().catch(() => undefined);
     }
+  },
+
+  dataVersion: 0,
+  bumpData: async () => {
+    await get().refreshGames();
+    set((s) => ({ dataVersion: s.dataVersion + 1 }));
   },
 
   refreshGames: async () => {

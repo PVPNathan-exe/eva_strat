@@ -121,6 +121,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const [pickB, setPickB] = useState<number | null>(null);
   const [corrections, setCorrections] = useState<Correction[]>([]);
   const [reload, setReload] = useState(0);
+  const dataVersion = useAnalysisStore((s) => s.dataVersion);
   const [labels, setLabels] = useState(large); // pseudos affichés d'emblée dans la vue agrandie
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [inset, setInset] = useState<Inset>(() => loadInset(game.map ?? ''));
@@ -154,7 +155,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     return () => {
       cancelled = true;
     };
-  }, [game.id, game.samples, reload]);
+  }, [game.id, game.samples, reload, dataVersion]);
 
   useEffect(() => {
     analysisApi

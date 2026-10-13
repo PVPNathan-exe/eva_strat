@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { analysisApi } from '../../lib/analysisApi';
+import { useAnalysisStore } from '../../store/analysisStore';
 import type { GameFlags, Reliability } from '../../types/analysis';
 
 export function useGameFlags(gameId: number, map: string | null, samples: number) {
   const [flags, setFlags] = useState<GameFlags | null>(null);
   const [reliability, setReliability] = useState<Reliability | null>(null);
+  const dataVersion = useAnalysisStore((s) => s.dataVersion);
 
   useEffect(() => {
     let cancelled = false;
@@ -17,7 +19,7 @@ export function useGameFlags(gameId: number, map: string | null, samples: number
     return () => {
       cancelled = true;
     };
-  }, [gameId, samples]);
+  }, [gameId, samples, dataVersion]);
 
   useEffect(() => {
     let cancelled = false;

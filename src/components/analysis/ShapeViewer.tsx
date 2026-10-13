@@ -73,13 +73,14 @@ export function ShapeViewer({ game }: { game: Game }) {
   const [drag, setDrag] = useState<Drag | null>(null);
   const setCurrentTime = useAnalysisStore((s) => s.setCurrentTime);
   const startTime = useAnalysisStore((s) => s.currentTime);
+  const dataVersion = useAnalysisStore((s) => s.dataVersion);
 
   useEffect(() => {
     analysisApi.calibration(game.map ?? '').then((c) => setZone(c.zones.minimap)).catch(() => setZone(null));
     analysisApi.samples(game.id).then(setSamples).catch(() => setSamples([]));
     const url = game.map ? readingOf(game.map).maskUrl : null;
     if (url) loadTinted(url, RED, 110).then(setMask).catch(() => setMask(null));
-  }, [game.id, game.map]);
+  }, [game.id, game.map, dataVersion]);
 
   const frames = useMemo(() => groupFrames(samples), [samples]);
   const unconfirmed = useMemo(() => unconfirmedSet(flags as GameFlags | null), [flags]);

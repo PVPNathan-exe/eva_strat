@@ -38,6 +38,7 @@ function nearest(times: number[], t: number): number | null {
 export function VisionOverlay({ width, height, layers }: { width: number; height: number; layers: VisionLayers }) {
   const time = useAnalysisStore((s) => s.currentTime);
   const games = useAnalysisStore((s) => s.games);
+  const dataVersion = useAnalysisStore((s) => s.dataVersion);
   const selectedId = useAnalysisStore((s) => s.selectedGameId);
   const weapons = useAnalysisStore((s) => s.weapons);
   const game: Game | undefined = useMemo(
@@ -71,7 +72,7 @@ export function VisionOverlay({ width, height, layers }: { width: number; height
     return () => {
       cancelled = true;
     };
-  }, [gameId, hasSamples]);
+  }, [gameId, hasSamples, dataVersion]);
 
   const { flags, reliability } = useGameFlags(gameId ?? -1, game?.map ?? null, game?.samples ?? 0);
   const unconfirmed = useMemo(() => unconfirmedSet(flags), [flags]);

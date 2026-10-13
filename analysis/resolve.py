@@ -13,6 +13,7 @@ import sys
 import db
 import evaluate
 import observed_name
+import superpose
 import tracking
 import weapons
 
@@ -33,6 +34,10 @@ def resolve_game(conn, game_id):
     db.apply_corrections(conn, game_id)
     times = {fi: t for fi, t, _ in data["frames"]}
     db.replace_observed(conn, game_id, observed_name.observed_segments(data["states"], times))
+    try:  # replace_samples a effacé le contrôle à la vraie minimap (positions non confirmées) : on le refait, comme à l'analyse
+        superpose.store_flags(conn, g, g["path"], g["width"], g["height"], step_s, data["states"])
+    except Exception as error:  # noqa: BLE001 - vidéo absente ou illisible : les positions sont enregistrées, seul le contrôle manque
+        print(f"contrôle à la vraie minimap non refait : {error}", file=sys.stderr)
     return len(rows)
 
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { analysisApi } from '../../lib/analysisApi';
+import { useAnalysisStore } from '../../store/analysisStore';
 import { TWO_LEVEL_MAPS } from '../../lib/twoLevelMaps';
 import { formatTime } from '../../lib/timeline';
 import type { Game, UserMark } from '../../types/analysis';
@@ -40,13 +41,15 @@ export function MarkPanel({
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const bumpData = useAnalysisStore((s) => s.bumpData);
 
   const recompute = async () => {
     setBusy(true);
     setMessage(null);
     try {
       await analysisApi.resolveGame(game.id);
-      setMessage('Suivi recalculé avec tes corrections.');
+      await bumpData(); // positions, contrôles, kills et liste des games relus partout
+      setMessage('Suivi recalculé avec tes corrections : positions, contrôle à la minimap et page mis à jour.');
       onRecomputed();
     } catch (e) {
       setMessage((e as Error).message);
