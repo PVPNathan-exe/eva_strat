@@ -445,3 +445,25 @@ def test_a_line_or_zone_marked_passable_below_keeps_the_floor_walkable_but_keeps
     assert not final[round(0.3 * 59), 60]  # un trait sans « dessous » bloque toujours
     assert not final[round(0.85 * 59), 60]  # ce qui n'était pas du sol (le mur) le reste : la zone ne crée pas de sol
     assert map_annotations.validate({"doors": [{**line, "kind": "porte"}]})["doors"][0]["under"] is False  # une porte n'a pas de dessous
+
+
+def test_apply_writes_the_below_layer_only_when_something_passes_below(tmp_path, monkeypatch):
+    monkeypatch.setattr(map_annotations, "MASK_DIR", tmp_path)
+    for name in ("TELEPORTS", "SPAWNS", "INSETS", "DOORS", "STATIONS", "CAPTURE"):
+        monkeypatch.setattr(map_annotations, name, tmp_path / f"{name}.json")
+    img = np.zeros((50, 50, 3), np.uint8)
+    img[10:40, 10:40] = (90, 90, 90)
+    cv2.imwrite(str(tmp_path / "Test_mediane.png"), img)
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE map_annotations (map TEXT PRIMARY KEY, data TEXT NOT NULL, updated TEXT)")
+    line = {"from": [0.2, 0.5], "to": [0.8, 0.5], "kind": "tir", "glass": False, "side": 0, "under": True}
+    data = {"colors": [{"rgb": [90, 90, 90], "tol": 5, "cls": "sol"}], "doors": [line]}
+    conn.execute("INSERT INTO map_annotations VALUES ('Test', ?, NULL)", (json.dumps(data),))
+    map_annotations.apply(conn, "Test")
+    below = cv2.imread(str(tmp_path / "Test_dessous.png"), cv2.IMREAD_GRAYSCALE)
+    assert below is not None and below[round(0.5 * 49), 25] == 255 and below[5, 5] == 0  # le trait sur du sol : gardé ; hors du sol : rien
+    data["doors"] = [{**line, "under": False}]
+    conn.execute("UPDATE map_annotations SET data = ? WHERE map = 'Test'", (json.dumps(data),))
+    map_annotations.apply(conn, "Test")
+    assert not (tmp_path / "Test_dessous.png").exists()  # plus rien en dessous : l'ancien fichier est retiré

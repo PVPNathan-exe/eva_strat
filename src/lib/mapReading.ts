@@ -3,6 +3,8 @@
 
 import teleports from '../../analysis/map_teleports.json';
 import spawns from '../../analysis/map_spawns.json';
+import captureZones from '../../analysis/map_capture.json';
+import openingLines from '../../analysis/map_doors.json';
 
 const masks = import.meta.glob('../../analysis/map_masks/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 
@@ -13,6 +15,9 @@ export interface MapReading {
   linesUrl: string | null; // traits de murs
   planAddedUrl: string | null; // sol que le plan stratégique a ajouté au masque au dernier « Appliquer » (blanc sur noir, grille de la médiane)
   planCutUrl: string | null; // murs du plan retirés du masque
+  underUrl: string | null; // étages superposés : sol gardé praticable par un trait ou une zone « passage possible en dessous » (blanc sur noir)
+  capture: [number, number][][]; // zones des points de capture (polygones, fractions de la minimap)
+  openings: { from: [number, number]; to: [number, number]; kind: 'porte' | 'fenetre' | 'mur' | 'tir'; glass: boolean; under: boolean }[]; // portes, fenêtres, murs et tirs tracés
   medianUrl: string | null; // médiane de la minimap du jeu (fond des cartes dont le plan n'est pas aligné)
   stations: [number, number][][]; // paires [entrée, sortie] en fraction de la minimap
   spawns: { team: 'A' | 'B'; rect: [number, number, number, number] }[]; // x0, y0, x1, y1 (une équipe peut avoir plusieurs zones)
@@ -25,6 +30,9 @@ export function readingOf(map: string): MapReading {
     maskUrl: find(`${map}.png`),
     linesUrl: find(`${map}_lignes.png`),
     medianUrl: find(`${map}_mediane.png`),
+    underUrl: find(`${map}_dessous.png`),
+    capture: ((captureZones as Record<string, unknown>)[map] as [number, number][][] | undefined) ?? [],
+    openings: ((openingLines as Record<string, unknown>)[map] as MapReading['openings'] | undefined) ?? [],
     planAddedUrl: find(`${map}_plan_ajouts.png`),
     planCutUrl: find(`${map}_plan_retraits.png`),
     stations: Array.isArray(tp) ? (tp as [number, number][][]) : [],

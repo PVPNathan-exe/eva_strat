@@ -70,6 +70,37 @@
   stroke: var(--c-blue);
 }
 
+.corridor__capture {
+  fill: var(--c-ok);
+  fill-opacity: 0.12;
+  stroke: var(--c-ok);
+  stroke-width: 2;
+}
+
+.corridor__line {
+  stroke-width: 2.5;
+}
+
+.corridor__line--porte {
+  stroke: var(--c-yellow);
+}
+
+.corridor__line--fenetre {
+  stroke: var(--c-blue);
+}
+
+.corridor__line--mur {
+  stroke: var(--c-danger);
+}
+
+.corridor__line--tir {
+  stroke: var(--c-orange);
+}
+
+.corridor__line.is-under {
+  stroke-dasharray: 5 4;
+}
+
 .corridor__ride {
   stroke: var(--c-ok);
   stroke-width: 1.5;

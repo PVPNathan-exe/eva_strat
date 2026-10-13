@@ -10,6 +10,7 @@ import { useGameFlags } from './useGameFlags';
 
 const RED: Rgb = [255, 59, 59];
 const YELLOW: Rgb = [255, 214, 10];
+const CYAN: Rgb = [90, 220, 235]; // étages superposés : sol gardé par un passage en dessous
 
 /** Affiche une image en niveaux de gris comme une couche colorée. */
 function Tinted({ url, color, alpha }: { url: string; color: Rgb; alpha: number }) {
@@ -43,6 +44,9 @@ export function CorridorMap({ map }: { map: string }) {
   const [stations, setStations] = useState(true);
   const [spawns, setSpawns] = useState(true);
   const [zones, setZones] = useState(false);
+  const [capture, setCapture] = useState(true);
+  const [under, setUnder] = useState(true);
+  const [lines, setLines] = useState(false);
   const { reliability } = useGameFlags(-1, map, 0);
 
   // Cadre de la minimap sur le plan, en fractions du plan
@@ -58,12 +62,27 @@ export function CorridorMap({ map }: { map: string }) {
             <Tinted url={reading.maskUrl} color={RED} alpha={115} />
           </div>
         )}
+        {under && reading.underUrl && (
+          <div className="corridor__layer" style={frame}>
+            <Tinted url={reading.underUrl} color={CYAN} alpha={190} />
+          </div>
+        )}
         {walls && reading.linesUrl && (
           <div className="corridor__layer" style={frame}>
             <Tinted url={reading.linesUrl} color={YELLOW} alpha={200} />
           </div>
         )}
         <svg className="corridor__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          {capture &&
+            reading.capture.map((polygon, i) => (
+              <polygon key={`cap${i}`} points={polygon.map(([x, y]) => `${at(x, y).x},${at(x, y).y}`).join(' ')} className="corridor__capture" vectorEffect="non-scaling-stroke" />
+            ))}
+          {lines &&
+            reading.openings.map((o, i) => {
+              const a = at(o.from[0], o.from[1]);
+              const b = at(o.to[0], o.to[1]);
+              return <line key={`line${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`corridor__line corridor__line--${o.kind}${o.under ? ' is-under' : ''}`} vectorEffect="non-scaling-stroke" />;
+            })}
           {spawns &&
             reading.spawns.map((s) => {
               const a = at(s.rect[0], s.rect[1]);
@@ -91,6 +110,9 @@ export function CorridorMap({ map }: { map: string }) {
         <label><input type="checkbox" checked={stations} onChange={(e) => setStations(e.target.checked)} /> Tyroliennes</label>
         <label><input type="checkbox" checked={spawns} onChange={(e) => setSpawns(e.target.checked)} /> Zones de départ</label>
         <label><input type="checkbox" checked={zones} onChange={(e) => setZones(e.target.checked)} /> Zones peu fiables</label>
+        <label><input type="checkbox" checked={capture} onChange={(e) => setCapture(e.target.checked)} /> Points de capture (zones jouables)</label>
+        <label><input type="checkbox" checked={under} onChange={(e) => setUnder(e.target.checked)} /> Passage en dessous (étages superposés, en bleu clair)</label>
+        <label><input type="checkbox" checked={lines} onChange={(e) => setLines(e.target.checked)} /> Portes, fenêtres, murs et tirs tracés (trait pointillé : passage en dessous)</label>
       </div>
       <p className="corridor__note">
         Rouge : couloirs lus par le programme (construits à partir du fond de la minimap). Hors du rouge, une pastille est refusée (reflet, effet d'écran) et une position

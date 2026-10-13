@@ -19,7 +19,7 @@ les deux centres sur la minimap a souvent la couleur des murs : sous ce trait, l
 sans toucher aux vrais murs épais. Les zones de départ sont des rectangles (deux au plus par équipe), l'alignement sur le plan stratégique des paires de points (minimap, plan).
 Un trait ou une zone de classe « passage possible en dessous » (`under`) garde praticable le sol qu'il recouvre (un bord d'étage où l'on tire par-dessus se longe par le niveau du dessous) tout en gardant sa classe dans <Carte>_classes.png.
 Avec `usePlan`, le masque est ensuite recoupé avec le plan stratégique (plan_mask.py) puis avec les positions lues avec certitude (elles font foi : reads_step) ; aperçu : <Carte>_plan_ajouts.png et <Carte>_plan_retraits.png.
-Sorties : <Carte>.png (praticable : sol, portes, tracé des tyroliennes entouré de sol), <Carte>_lignes.png (murs), <Carte>_classes.png (toutes les classes), map_teleports.json
+Sorties : <Carte>_dessous.png (sol gardé par « passage possible en dessous »), <Carte>.png (praticable : sol, portes, tracé des tyroliennes entouré de sol), <Carte>_lignes.png (murs), <Carte>_classes.png (toutes les classes), map_teleports.json
 (centres des paires), map_stations.json (rayon et direction), map_doors.json (portes et fenêtres), map_capture.json, map_spawns.json et map_plan_insets.json. Une annotation l'emporte sur ce que les détections
 automatiques avaient trouvé."""
 
@@ -379,6 +379,11 @@ def apply(conn, map_name):
             summary["masque_non_ecrit"] = f"{refused:.1%} des lectures sûres de la carte seraient refusées (maximum {MAX_REFUSED:.0%}) : ajoute les couleurs de sol manquantes ou augmente leur tolérance" if walk.any() else "aucun pixel de sol"
         else:
             cv2.imwrite(str(MASK_DIR / f"{map_name}.png"), mask)
+            below = MASK_DIR / f"{map_name}_dessous.png"  # étages superposés : le sol que « passage possible en dessous » garde praticable (affiché dans l'onglet Lecture)
+            if under.any():
+                cv2.imwrite(str(below), under.astype(np.uint8) * 255)
+            elif below.exists():
+                below.unlink()
             walls = (labels == CODES["mur"]).astype(np.uint8)
             if walls.any():
                 cv2.imwrite(str(MASK_DIR / f"{map_name}_lignes.png"), cv2.dilate(walls, np.ones((3, 3), np.uint8)) * 255)
