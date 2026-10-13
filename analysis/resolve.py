@@ -27,7 +27,7 @@ def resolve_game(conn, game_id):
     marks = db.marks_of(conn, game_id)
     names = weapons.display_names()
     kills = db.kill_tuples(conn, game_id, names)
-    rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]), data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), coherence, marks, kills, db.stations_for(g["map"]), db.rotors_for(g["map"], g["start_s"]))
+    rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]), data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), coherence, marks, kills, db.stations_for(g["map"]), db.rotors_for(g["map"], g["start_s"]), db.button_doors_for(g["map"]))
     scanned = conn.execute("SELECT 1 FROM kills_meta WHERE game_id = ?", (game_id,)).fetchone() is not None
     db.replace_samples(conn, game_id, rows, tracking.PARAMS_VERSION, with_kills=scanned, coherence=coherence)
     db.apply_corrections(conn, game_id)

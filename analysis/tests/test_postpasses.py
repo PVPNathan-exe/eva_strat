@@ -464,6 +464,7 @@ def _wall_world():
 def _no_wall():
     tracking._WALK.clear()
     tracking._ROTORS.clear()
+    tracking._DOORS.clear()
 
 
 def test_a_wall_between_two_players_is_seen_and_an_open_line_is_not():
@@ -477,6 +478,28 @@ def test_a_wall_between_two_players_is_seen_and_an_open_line_is_not():
         assert tracking.sight_blocked(row(0, 1, 0.44, 0.50), row(0, 8, 0.56, 0.50)) is True  # collés au mur de chaque côté : le mur compte quand même
     finally:
         _no_wall()
+
+
+def test_a_button_door_between_two_players_separates_them_for_sight_but_not_for_walking():
+    a, b = row(0, 1, 0.30, 0.50), row(0, 8, 0.70, 0.50)
+    cells = {tracking._cell((0.1 + 0.01 * i, 0.50 + 0.01 * j)) for i in range(80) for j in range(-30, 31)}
+    try:
+        tracking._WALK.update(cells)  # la porte est praticable : aucune case n'est un mur
+        assert tracking.sight_blocked(a, b) is False
+        tracking._DOORS[:] = [((0.5, 0.4), (0.5, 0.6))]  # une porte à bouton sur la ligne
+        assert tracking.sight_blocked(a, b) is True
+        assert tracking.sight_blocked(a, row(0, 8, 0.40, 0.50)) is False  # du même côté de la porte
+        assert tracking._cell((0.5, 0.5)) in tracking._WALK  # et on la franchit
+    finally:
+        _no_wall()
+
+
+def test_only_the_maps_with_button_doors_get_them(tmp_path):
+    import db
+
+    assert db.button_doors_for("Polaris") == []
+    reef = db.button_doors_for("Reef Point")
+    assert reef and all(len(seg) == 2 for seg in reef)  # les portes opaques tracées par l'utilisateur (3 au dernier « Appliquer »)
 
 
 def test_two_gazes_cross_only_when_the_rays_meet_in_front_of_both_players():

@@ -196,6 +196,8 @@ def all_verified(conn, video_id):
 
 DEFAULT_ZONES_PATH = Path(__file__).with_name("default_zones.json")
 SPAWNS_PATH = Path(__file__).with_name("map_spawns.json")  # zones de départ par carte
+DOORS_PATH = Path(__file__).with_name("map_doors.json")  # portes et fenêtres tracées à la main
+BUTTON_DOOR_MAPS = ("Reef Point",)  # cartes où une porte s'actionne avec un bouton : praticable (ouverte) et mur (fermée), état inconnu : mur pour la vue entre deux joueurs, passage pour les trajets
 STATIONS_PATH = Path(__file__).with_name("map_stations.json")  # cercles des stations de tyrolienne tracés à la main (centre, rayon, direction de sortie)
 TELEPORTS_PATH = Path(__file__).with_name("map_teleports.json")  # stations de tyrolienne par carte (paires entrée/sortie)
 MAP_ZONES_PATH = Path(__file__).with_name("map_zones.json")  # zones propres à une carte (la minimap n'a pas la même taille partout)
@@ -218,6 +220,14 @@ def teleports_for(map_name):
         return []
     pairs = json.loads(TELEPORTS_PATH.read_text(encoding="utf-8")).get(map_name, [])
     return [(tuple(a), tuple(b)) for a, b in pairs]
+
+
+def button_doors_for(map_name):
+    """Portes opaques à bouton d'une carte : [((x0, y0), (x1, y1))] en fractions de la minimap ; vide pour les cartes dont les portes ne sont pas à bouton (BUTTON_DOOR_MAPS)."""
+    if map_name not in BUTTON_DOOR_MAPS or not DOORS_PATH.exists():
+        return []
+    lines = json.loads(DOORS_PATH.read_text(encoding="utf-8")).get(map_name, [])
+    return [(tuple(d["from"]), tuple(d["to"])) for d in lines if d.get("kind") == "porte" and not d.get("glass")]
 
 
 def stations_for(map_name):

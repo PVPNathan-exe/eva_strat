@@ -1414,7 +1414,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None, doors=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1428,6 +1428,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     spawns : {"A": (x0, y0, x1, y1), "B": ...} zones de départ de la carte (facultatif) : un disque blanc « qui attend » hors de la zone de départ de son équipe
     (la boîte de capture de Polaris) est un joueur en jeu, pas un mort.
     reliability : {"grid": n, "gaze": {(i, j)}} cases de la carte où la forme des disques a donné de mauvais regards (reliability.py) : la forme y pèse moins que le cap et le camp ennemi.
+    doors : [((x0, y0), (x1, y1))] portes opaques à bouton (db.button_doors_for) : passage pour les trajets, mur pour la vue entre deux joueurs (ouvertes ou fermées, on ne sait pas).
     kills : [(t, tueur, victime, arme)] du killfeed (arme : nom ou None) : le tueur regarde sa victime (kill_gaze).
     marks : [(t, joueur, x, y, regard ou None)] posés à la main : vérités qui ancrent le suivi (apply_marks).
     coherence_out : dict facultatif rempli de {(image, joueur): indice de cohérence du regard, 0 à 1} (voir gaze_coherence).
@@ -1438,6 +1439,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     _FLAGS["neutral_spawns"] = bool(spawns and _rects(spawns, "A") and _rects(spawns, "A") == _rects(spawns, "B"))
     _ROTORS.clear()
     _ROTORS.update(rotors or {})
+    _DOORS[:] = doors or []
     _STATIONS[:] = [(s["x"], s["y"], s["angle"]) for pair in stations or [] for s in (pair["a"], pair["b"]) if s.get("angle") is not None]
     _WALK.clear()
     _NEAR.clear()
@@ -1777,15 +1779,26 @@ SIGHT_RULE = True  # un mur entre deux joueurs : pas de règle du duel ni du kil
 SIGHT_BLOCK_CELLS = 2  # cases non praticables sur la droite qui séparent deux joueurs
 SIGHT_MARGIN_CELLS = 1.5  # on ne compte pas les cases autour des deux joueurs (collés à un mur)
 _ROTORS = {}  # anneaux tournants de la carte en cours avec t0 (début de la game dans la vidéo), posés par solve
+_DOORS = []  # portes opaques à bouton de la carte en cours (segments), posées par solve
+
+
+def _segments_cross(p, q, r, s):
+    """Vrai si le segment pq coupe le segment rs (points (x, y))."""
+    def side(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    return side(p, q, r) * side(p, q, s) < 0 and side(r, s, p) * side(r, s, q) < 0
 
 
 def sight_blocked(a, b):
     """Vrai si un mur sépare les deux lignes de positions a et b (tuples du suivi : image, temps, joueur, équipe, x, y, ...) : au moins SIGHT_BLOCK_CELLS cases non praticables de la carte
     des passages sur la droite qui les joint (hors des cases collées à chaque joueur), ou, sur Engine, un arc plein d'anneau tournant sans fenêtre à cet instant. Sans carte des passages
     ni anneaux, rien ne sépare personne."""
-    if not _WALK and not _ROTORS:
+    if not _WALK and not _ROTORS and not _DOORS:
         return False
     p, q = (a[4], a[5]), (b[4], b[5])
+    if any(_segments_cross(p, q, d0, d1) for d0, d1 in _DOORS):  # une porte à bouton entre les deux : fermée, elle les sépare ; ouverte, on ne peut pas le savoir (on garde alors les regards lus)
+        return True
     n = max(2, int(math.hypot(q[0] - p[0], q[1] - p[1]) / (WALK_CELL * 0.5)))
     blocked = 0
     t_game = a[1] + FRAME_LAG_S - _ROTORS["t0"] if _ROTORS else None
@@ -2315,7 +2328,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 45  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 46  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
