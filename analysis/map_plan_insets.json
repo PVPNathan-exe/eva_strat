@@ -47,5 +47,12 @@
     "r": -0.0645,
     "b": 0.0202,
     "correlation": null
+  },
+  "The Cliff": {
+    "l": -0.0058,
+    "t": 0.0051,
+    "r": 0.0094,
+    "b": 0.0941,
+    "correlation": null
   }
 }
