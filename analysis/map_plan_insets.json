@@ -12,5 +12,12 @@
     "r": 0.1294,
     "b": 0.2392,
     "correlation": null
+  },
+  "Atlantis": {
+    "l": 0.0078,
+    "t": 0.0158,
+    "r": -0.0074,
+    "b": 0.0042,
+    "correlation": null
   }
 }
