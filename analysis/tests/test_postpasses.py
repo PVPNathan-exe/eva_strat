@@ -667,3 +667,16 @@ def test_a_moving_observed_player_keeps_his_heading_gaze():
     tracking.observed_enemy_gaze(rows, {k: 4 for k in range(0, 30)})
     assert all(rows[(k, 4)][6] == 0.0 for k in range(5, 25))  # en marche : le regard reste son cap (les images des bords, sans vitesse mesurable, sont à l'arrêt)
     assert tracking.observed_enemy_gaze(rows, {}) == 0
+
+
+def test_a_nearly_grey_banner_while_the_numbered_disc_is_on_the_minimap_is_not_a_death():
+    frames = [(k, k * 0.1, [{"alive": True, "number": 4, "team": "A"}] if k < 40 else []) for k in range(60)]  # le 4 est lu vivant jusqu'à l'image 39
+    dead = {4: set(range(10, 50)), 1: set(range(5, 15)), 2: set(range(10, 50))}
+    states = {k: {4: {"fill": 0.02 if k % 3 == 0 else 0.0}, 1: {"fill": 0.0}, 2: {"fill": 0.0}} for k in range(60)}  # le 4 garde un filet de vie, le 1 et le 2 sont gris partout
+    out = tracking.drop_contradicted_dead(dead, frames, states)
+    assert out[4] == set()  # filet de vie et disque lu sur 30 images sur 40 : vivant à 1 ou 2 points de vie
+    assert out[1] == set(range(5, 15))  # jamais lu vivant : la mort reste
+    assert out[2] == set(range(10, 50))  # pas de filet de vie, même contredit par aucun disque : la mort reste
+    frames_2 = [(k, k * 0.1, [{"alive": True, "number": 2, "team": "A"}]) for k in range(60)]
+    assert tracking.drop_contradicted_dead({2: set(range(10, 50))}, frames_2, states)[2] == set(range(10, 50))  # un bandeau gris partout reste une mort même si un disque « 2 » est lu (joueur mort qui attend)
+    assert tracking.drop_contradicted_dead({}, frames, states) == {}

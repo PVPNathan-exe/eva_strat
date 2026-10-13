@@ -488,6 +488,39 @@ def _number_of(slot):
     return slot if slot <= 4 else slot + 1
 
 
+DEAD_CONTRADICTED_SHARE = 0.5  # une période « morte » du bandeau où la minimap montre le joueur vivant (son numéro lu) sur plus de cette part des images n'est pas une mort
+
+
+LOW_HP_FILL = 0.01  # remplissage du bandeau à partir duquel il reste un filet de vie : un bandeau de mort est entièrement gris (0,00 partout)
+
+
+def drop_contradicted_dead(dead, frames, states=None):
+    """Un joueur à 1 ou 2 points de vie a un bandeau presque entièrement grisé (remplissage de 0,00 à 0,03, de part et d'autre du seuil MIN_FILL) : lu « mort » par moments pendant plusieurs
+    secondes alors que sa pastille numérotée est bien sur la minimap (Reef Point, 0:11 : le 4, tout juste vivant, 5 s de « mort » puis reprise du suivi). Les périodes mortes du bandeau
+    pendant lesquelles la minimap montre le joueur vivant (disque avec son numéro) sur plus de DEAD_CONTRADICTED_SHARE des images ET où le bandeau garde par moments un filet de vie (remplissage
+    d'au moins LOW_HP_FILL : un bandeau de mort est gris partout) sont retirées de `dead`."""
+    if not dead:
+        return dead
+    seen = set()
+    for fi, _, dets in frames:
+        for d in dets:
+            if d.get("alive") and d.get("number") is not None and not d.get("waiting") and not d.get("spectated") and d.get("team") in SLOTS:
+                seen.update((fi, slot) for slot in SLOTS[d["team"]] if _number_of(slot) == d["number"])
+    out = {}
+    for slot, frames_dead in dead.items():
+        kept, run = set(), []
+        for k in sorted(frames_dead) + [None]:
+            if run and (k is None or k != run[-1] + 1):
+                thread = max((((states or {}).get(f, {}).get(slot) or {}).get("fill") or 0.0) for f in run) >= LOW_HP_FILL  # un filet de vie au moins une fois
+                if not thread or sum((f, slot) in seen for f in run) / len(run) <= DEAD_CONTRADICTED_SHARE:
+                    kept.update(run)
+                run = []
+            if k is not None:
+                run.append(k)
+        out[slot] = kept
+    return out
+
+
 MIN_STATE_S = 1.5  # un état du bandeau (vivant ou mort) plus court que cela, entre deux périodes de l'état opposé, est un parasite
 # (autour d'une mort le bandeau clignote : une mort réelle dure environ 17 s, et on a mesuré plus de mille « vies » de moins d'une seconde)
 
@@ -1474,7 +1507,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     _ROUTES.clear()
     _JUMPS.clear()
     frames = anchor_spectated(frames, states, spawns)
-    dead = dead_frames(states, step_s)
+    dead = drop_contradicted_dead(dead_frames(states, step_s), frames, states)
     frames = drop_static_spectated(drop_static_noise(frames), states)
     times = {fi: t for fi, t, _ in frames}
     for slot, frames_dead in user_dead_frames(dead_marks, marks, times).items():  # mort posée à la main : elle l'emporte sur le bandeau
@@ -2475,7 +2508,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 52  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 53  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
