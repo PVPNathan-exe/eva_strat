@@ -192,5 +192,5 @@
 }
 
 .analysis button.timeline__comment--equipe {
-  background: #3d8bff;
+  background: var(--c-blue);
 }

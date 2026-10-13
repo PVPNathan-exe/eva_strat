@@ -134,6 +134,10 @@ export interface Game {
   team_b: string | null;
   doubts: Doubt[];
   samples: number;
+  /** Le killfeed de la game a été lu (kills_meta), même s'il n'a donné aucun kill. */
+  killsRead: boolean;
+  /** Les scores de capture de la game ont été lus (capture_state, points score_A et score_B). */
+  captureRead: boolean;
   players: { slot: number; name: string; weapon1: string | null; weapon2: string | null; gadget: string | null }[];
   kills: Kill[];
 }

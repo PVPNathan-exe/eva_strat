@@ -217,6 +217,21 @@ test('une correction refuse deux joueurs d’équipes différentes, deux fois le
   assert.equal(handleApi(ctx, 'POST', '/api/corrections', q(), { game_id: 9999, slot_a: 1, slot_b: 2, t0: 100, t1: 200 }).status, 404);
 });
 
+test('GET /api/games dit si le killfeed et les scores de capture ont été lus', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  const id = Number(ctx.db.prepare("INSERT INTO games (video_id, start_s, end_s, status) VALUES (?, 100, 700, 'confirmed')").run(videoId).lastInsertRowid);
+  const state = () => {
+    const g = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { killsRead: boolean; captureRead: boolean }[])[0];
+    return [g.killsRead, g.captureRead];
+  };
+  assert.deepEqual(state(), [false, false]);
+  ctx.db.prepare("INSERT INTO capture_state (game_id, t, point, pct, team) VALUES (?, 101, 'score_A', 0, 'A')").run(id);
+  assert.deepEqual(state(), [false, true]);
+  ctx.db.prepare('INSERT INTO kills_meta (game_id, revision) VALUES (?, 4)').run(id); // killfeed lu, aucun kill
+  assert.deepEqual(state(), [true, true]);
+});
+
 test('les kills portent le nom de l’arme, et pour une grenade celle équipée par le tueur', () => {
   const ctx = testContext();
   ctx.weaponNames = () => ({ W2: 'GRENADE', W3: 'SPECTRE', G1: 'STICKY', G2: 'DX3' });

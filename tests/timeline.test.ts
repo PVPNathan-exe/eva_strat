@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clampBounds, formatTime, parseTime, pctToTime, timeToPct } from '../src/lib/timeline.ts';
+import { clampBounds, formatTime, parseTime, pctToSpan, pctToTime, spanToPct, timeToPct } from '../src/lib/timeline.ts';
 
 test('formatTime', () => {
   assert.equal(formatTime(0), '0:00');
@@ -14,6 +14,14 @@ test('timeToPct et pctToTime sont réciproques', () => {
   assert.equal(pctToTime(25, 600), 150);
   assert.equal(timeToPct(10, 0), 0);
   assert.equal(timeToPct(900, 600), 100);
+});
+
+test('spanToPct et pctToSpan : axe zoomé sur une game', () => {
+  assert.equal(spanToPct(150, 100, 300), 25);
+  assert.equal(pctToSpan(25, 100, 300), 150);
+  assert.equal(spanToPct(50, 100, 300), 0);
+  assert.equal(spanToPct(400, 100, 300), 100);
+  assert.equal(spanToPct(150, 300, 300), 0);
 });
 
 test('clampBounds garde 0 ≤ début < fin ≤ durée', () => {
