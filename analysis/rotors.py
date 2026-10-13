@@ -8,7 +8,8 @@ qui aligne les profils des images successives (balayage des vitesses candidates)
 anneaux repartent de la même position à chaque game : mesuré à 3 degrés près sur 3 games). Les angles sont ceux de l'image (atan2(y, x), y vers le bas) : croissant = sens horaire à l'écran.
 
 Fichier map_rotors.json : { carte: { "aspect": largeur / hauteur de la minimap, "centre": [x, y] (fractions), "t_ref": instant de game de la mesure (secondes),
-  "anneaux": [ { "nom", "r_min", "r_max" (fractions de la hauteur de la minimap), "omega" (degrés par seconde), "ouvertures": [[debut, fin] (degrés à t_ref)] } ] } }"""
+  "anneaux": [ { "nom", "r_min", "r_max" (bande d'arc plein), "trou_min", "trou_max" (bande graphique entière de l'anneau, laissée en trou du masque), fractions de la hauteur de la
+  minimap, "omega" (degrés par seconde), "ouvertures": [[debut, fin] (degrés à t_ref)] } ] } }"""
 
 import argparse
 import glob
@@ -67,6 +68,19 @@ def nearest_outside(model, ring, x, y):
     target = ring["r_min"] * 0.95 if dist - ring["r_min"] <= ring["r_max"] - dist else ring["r_max"] * 1.05
     a = math.radians(angle)
     return model["centre"][0] + target * math.cos(a) / model["aspect"], model["centre"][1] + target * math.sin(a)
+
+
+def hole_mask(model, shape):
+    """Image bool (hauteur, largeur) des anneaux entiers : toute la bande graphique de chaque anneau (fenêtre de mesure, plus large que la bande d'arc plein). Ces zones restent des
+    trous du masque quand il est construit : le plan et les lectures ne les remplissent pas (le sol y change à chaque instant, l'utilisateur les dessine à la main)."""
+    h, w = shape
+    fx = (np.arange(w) + 0.5) / w
+    fy = (np.arange(h) + 0.5) / h
+    dist = np.hypot((fx[None, :] - model["centre"][0]) * model["aspect"], fy[:, None] - model["centre"][1])
+    mask = np.zeros((h, w), bool)
+    for ring in model["anneaux"]:
+        mask |= (dist >= ring["trou_min"]) & (dist <= ring["trou_max"])
+    return mask
 
 
 def snap_point(model, x, y, t_game):
@@ -191,7 +205,15 @@ def measure(games, zone, spec=ENGINE, t_ref=15.0):
         "centre": [round(centre[0] / w_px, 4), round(centre[1] / h_px, 4)],
         "t_ref": t_ref,
         "anneaux": [
-            {"nom": name, "r_min": round(spec["bands"][name][0] / h_px, 4), "r_max": round(spec["bands"][name][1] / h_px, 4), "omega": omegas[name], "ouvertures": openings[name]}
+            {
+                "nom": name,
+                "r_min": round(spec["bands"][name][0] / h_px, 4),
+                "r_max": round(spec["bands"][name][1] / h_px, 4),
+                "trou_min": round(spec["windows"][name][0] / h_px, 4),
+                "trou_max": round(spec["windows"][name][1] / h_px, 4),
+                "omega": omegas[name],
+                "ouvertures": openings[name],
+            }
             for name in spec["windows"]
         ],
     }

@@ -59,9 +59,9 @@ def warp_to_grid(image, inset, width, height):
     return cv2.warpAffine(image, m, (width, height), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderValue=255)
 
 
-def corrections(labels, sol_code, plan, inset):
+def corrections(labels, sol_code, plan, inset, exclude=None):
     """(ajout, murs, hors_carte) : trois images bool de la taille de `labels`.
-    ajout : sol du plan à l'intérieur de l'arène, sans classe (label 0), en taches assez grandes ;
+    ajout : sol du plan à l'intérieur de l'arène, sans classe (label 0), en taches assez grandes, hors des zones `exclude` (bool, facultatif) ;
     murs : murs du plan (à retirer du masque praticable de la saisie) ;
     hors_carte : tout ce qui est hors de l'arène d'après le plan (au-delà du cadre blanc) : une couleur de sol saisie (le sol de l'étage, sombre) y recouvre aussi le fond de la
     minimap, qui n'est pas du terrain. Une composante qui touche le bord de l'image mais porte la moitié du sol saisi (cadre ouvert, cadre mal aligné) n'est pas hors carte."""
@@ -85,6 +85,8 @@ def corrections(labels, sol_code, plan, inset):
     for i in range(1, k):
         if stats[i, cv2.CC_STAT_AREA] >= FILL_MIN_SHARE * h * w:
             fill |= lab == i
+    if exclude is not None:
+        fill &= ~exclude  # zones laissées en trou à la main (anneaux tournants d'Engine)
     return fill, walls, exterior
 
 

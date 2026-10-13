@@ -75,3 +75,27 @@ def test_the_tracking_moves_only_unsure_positions_out_of_the_walls():
     assert rows[(0, 3)][4:6] == point(0.20, 120.0)  # une position dans une ouverture est gardée
     assert rows[(0, 1)][4:6] != wall
     assert tracking.rotor_snap({(0, 1): row(0, 1, *wall, 0.3, t)}, None) == 0  # sans anneaux (autre carte) : rien
+
+
+def test_the_ring_holes_cover_the_whole_graphic_band_of_each_ring():
+    model = {**MODEL, "anneaux": [{**r, "trou_min": r["r_min"] - 0.02, "trou_max": r["r_max"] + 0.02} for r in MODEL["anneaux"]]}
+    holes = rotors.hole_mask(model, (100, 200))
+    assert holes[50 + int(0.20 * 100), 100] and holes[50, 100 + int(0.33 * 200 / 2)]  # sous le centre à 0,20 de hauteur (anneau intérieur) ; à droite à 0,33 (extérieur, largeur / aspect)
+    assert not holes[50, 100] and not holes[50 + int(0.26 * 100), 100]  # centre et espace entre les anneaux : pas des trous
+    assert holes.mean() < 0.4
+
+
+def test_filling_steps_leave_the_holes_alone():
+    import map_annotations
+    plan = np.full((100, 200, 3), 40, np.uint8)
+    plan[0:8, :] = 255
+    plan[92:100, :] = 255
+    plan[:, 0:8] = 255
+    plan[:, 192:200] = 255
+    labels = np.zeros((100, 200), np.uint8)
+    labels[10:90, 10:60] = map_annotations.CODES["sol"]
+    import plan_mask
+    holes = np.zeros((100, 200), bool)
+    holes[:, 100:140] = True  # un anneau : bande laissée en trou
+    fill, _, _ = plan_mask.corrections(labels, map_annotations.CODES["sol"], plan, {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0}, holes)
+    assert fill[50, 80] and fill[50, 150] and not fill[50, 120]  # le sol manquant est ajouté, sauf dans le trou

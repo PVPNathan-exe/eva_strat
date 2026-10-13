@@ -303,7 +303,7 @@ def refused_share(conn, map_name, mask):
     return map_mask.share_outside(mask, points) if points else None
 
 
-def plan_step(conn, map_name, data, labels, walk, under=None):
+def plan_step(conn, map_name, data, labels, walk, under=None, holes=None):
     """Recoupe le masque praticable avec le plan stratégique de la carte (plan_mask.py) : ajoute le sol manquant, retire les murs du plan, sauf sous les portes tracées. Renvoie (masque
     praticable corrigé, résumé). `under` : sol que les traits et zones « passage possible en dessous » gardent praticable. Les classes du masque (labels) reçoivent le sol ajouté. Refusé si la correction ferait refuser plus de lectures sûres qu'avant."""
     import plan_mask
@@ -312,7 +312,7 @@ def plan_step(conn, map_name, data, labels, walk, under=None):
     inset = plan_mask.inset_of(map_name, data["inset"])
     if path is None or not inset:
         return walk, {"plan": "non appliqué : pas de plan de cette carte ou pas de cadre d'alignement (outil Alignement)"}
-    fill, walls, exterior = plan_mask.corrections(labels, CODES["sol"], cv2.imread(str(path)), inset)
+    fill, walls, exterior = plan_mask.corrections(labels, CODES["sol"], cv2.imread(str(path)), inset, holes)
     protect = _line_layer(walk.shape, [d for d in data["doors"] if d["kind"] == "porte"])
     fixed = plan_mask.apply_to_walk(walk, fill, walls, protect, exterior)
     fixed &= ~_line_layer(walk.shape, blocking_lines(data["doors"]))
@@ -342,7 +342,7 @@ READS_SUPPORT = 0.02  # une lecture sûre n'ajoute du sol que si une autre lectu
 READS_MAX_ADD_SHARE = 0.15  # les lectures n'ajoutent pas plus que cette part du sol
 
 
-def reads_step(conn, map_name, walk, doors):
+def reads_step(conn, map_name, walk, doors, exclude=None):
     """Les positions lues avec certitude font foi : là où un joueur a été lu de façon sûre (et soutenue par une autre lecture voisine), le sol est praticable, quoi qu'en dise une
     couleur de classe (Atlantis : le joueur 2 de la game 31 est lu sûrement à 4,9 s sur un contour classé en mur). Sauf sous les fenêtres, murs et tirs par-dessus tracés à la main.
     Renvoie (masque praticable, résumé) ; aucune lecture ou aucune table de lectures : rien ne change."""
@@ -365,6 +365,8 @@ def reads_step(conn, map_name, walk, doors):
             if sum(1 for q in around if abs(q[0] - x) <= READS_SUPPORT and abs(q[1] - y) <= READS_SUPPORT) >= 2:  # elle-même et une autre
                 cv2.circle(layer, (round(x * (w - 1)), round(y * (h - 1))), READS_DISK_PX, 255, -1)
     added = (layer > 0) & ~walk & ~_line_layer(walk.shape, blocking_lines(doors))
+    if exclude is not None:
+        added &= ~exclude  # trous laissés à la main (anneaux tournants d'Engine)
     if added.sum() > READS_MAX_ADD_SHARE * max(1, int(walk.sum())):
         return walk, {"lectures": f"non appliquées : elles ajouteraient {added.sum() / max(1, int(walk.sum())):.0%} du sol (maximum {READS_MAX_ADD_SHARE:.0%})"}
     return walk | added, {"lectures_ajout_pixels": int(added.sum())}
@@ -390,9 +392,15 @@ def apply(conn, map_name):
         walk |= under
         if data["use_plan"]:
             before_plan = walk
-            walk, plan_info = plan_step(conn, map_name, data, labels, walk, under)
+            import rotors
+
+            ring_model = rotors.load(map_name)  # Engine : les anneaux tournants restent des trous, ni le plan ni les lectures ne les remplissent
+            holes = rotors.hole_mask(ring_model, walk.shape) if ring_model else None
+            if holes is not None:
+                summary["trous_des_anneaux_pixels"] = int((holes & ~walk).sum())
+            walk, plan_info = plan_step(conn, map_name, data, labels, walk, under, holes)
             summary.update(plan_info)
-            walk, reads_info = reads_step(conn, map_name, walk, data["doors"])
+            walk, reads_info = reads_step(conn, map_name, walk, data["doors"], holes)
             summary.update(reads_info)
             if walk is not before_plan:  # aperçu : tout ce qui a changé, plan et lectures ensemble
                 labels[walk & ~before_plan] = CODES["sol"]
