@@ -27,7 +27,7 @@
 }
 
 .draw-toolbar button.is-active {
-  background: var(--c-danger);
+  background: var(--c-danger-strong);
   border-color: var(--c-danger);
 }
 

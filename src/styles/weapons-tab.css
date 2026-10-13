@@ -138,6 +138,7 @@
 }
 
 .weapon__report.is-reported {
+  background: var(--c-surface);
   border-color: var(--c-warn);
   color: var(--c-warn);
 }
