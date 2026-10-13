@@ -75,7 +75,7 @@
 }
 
 .weapon__sources {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--c-text-muted);
 }
 
@@ -124,7 +124,7 @@
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--c-text-muted);
 }
 
@@ -134,7 +134,7 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.15rem 0.45rem;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
 }
 
 .weapon__report.is-reported {
@@ -226,7 +226,7 @@
 }
 
 .report__grid figcaption {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--c-text-muted);
 }
 

@@ -46,7 +46,7 @@
   bottom: 0.3rem;
   margin: 0;
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--c-text-muted);
 }
 
@@ -100,7 +100,7 @@
 }
 
 .replay--large .replay__name {
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 
 .replay__dot b {
