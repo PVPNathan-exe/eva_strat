@@ -17,6 +17,7 @@ Chaque pixel prend la classe de la couleur choisie la plus proche, à moins de l
 Les tyroliennes sont des paires de cercles : une station chacun (centre, rayon, direction par laquelle on y entre ou on en sort, les deux directions d'une paire étant à 180 degrés l'une de l'autre : l'écart est réparti entre les deux), valables dans les deux sens. Le trait qui relie
 les deux centres sur la minimap a souvent la couleur des murs : sous ce trait, les pixels non praticables entourés de sol sont rendus praticables (le trait ne coupe pas le sol),
 sans toucher aux vrais murs épais. Les zones de départ sont des rectangles (deux au plus par équipe), l'alignement sur le plan stratégique des paires de points (minimap, plan).
+Avec `usePlan`, le masque est ensuite recoupé avec le plan stratégique (plan_mask.py ; aperçu : <Carte>_plan_ajouts.png et <Carte>_plan_retraits.png).
 Sorties : <Carte>.png (praticable : sol, portes, tracé des tyroliennes entouré de sol), <Carte>_lignes.png (murs), <Carte>_classes.png (toutes les classes), map_teleports.json
 (centres des paires), map_stations.json (rayon et direction), map_doors.json (portes et fenêtres), map_capture.json, map_spawns.json et map_plan_insets.json. Une annotation l'emporte sur ce que les détections
 automatiques avaient trouvé."""
@@ -225,7 +226,7 @@ def validate(data):
     capture = [_polygon(z, unit) for z in data.get("capture", [])]
     if len(capture) > MAX_CAPTURE_ZONES:
         raise ValueError(f"au plus {MAX_CAPTURE_ZONES} zones de capture")
-    return {"colors": colors, "tps": tps, "doors": doors, "capture": capture, "overrides": overrides, "spawns": spawns, "inset": inset, "pairs": data.get("pairs", [])}
+    return {"colors": colors, "tps": tps, "doors": doors, "capture": capture, "overrides": overrides, "spawns": spawns, "inset": inset, "pairs": data.get("pairs", []), "use_plan": data.get("usePlan") is True}
 
 
 def annotation_of(conn, map_name):
@@ -253,6 +254,38 @@ def refused_share(conn, map_name, mask):
     return map_mask.share_outside(mask, points) if points else None
 
 
+def plan_step(conn, map_name, data, labels, walk):
+    """Recoupe le masque praticable avec le plan stratégique de la carte (plan_mask.py) : ajoute le sol manquant, retire les murs du plan, sauf sous les portes tracées. Renvoie (masque
+    praticable corrigé, résumé). Les classes du masque (labels) reçoivent le sol ajouté. Refusé si la correction ferait refuser plus de lectures sûres qu'avant."""
+    import plan_mask
+
+    path = plan_mask.plan_file(map_name)
+    inset = plan_mask.inset_of(map_name, data["inset"])
+    if path is None or not inset:
+        return walk, {"plan": "non appliqué : pas de plan de cette carte ou pas de cadre d'alignement (outil Alignement)"}
+    fill, walls = plan_mask.corrections(labels, CODES["sol"], cv2.imread(str(path)), inset)
+    protect = _line_layer(walk.shape, [d for d in data["doors"] if d["kind"] == "porte"])
+    fixed = plan_mask.apply_to_walk(walk, fill, walls, protect)
+    fixed &= ~_line_layer(walk.shape, [d for d in data["doors"] if d["kind"] != "porte"])
+    added, removed = fixed & ~walk, walk & ~fixed
+    before = refused_share(conn, map_name, cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST))
+    after = refused_share(conn, map_name, cv2.resize(fixed.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST))
+    info = {"plan_ajout_pixels": int(added.sum()), "plan_retrait_pixels": int(removed.sum())}
+    base = max(1, int(walk.sum()))
+    if added.sum() > plan_mask.MAX_ADD_SHARE * base or removed.sum() > plan_mask.MAX_CUT_SHARE * base:
+        return walk, {"plan": f"refusé : il ajouterait {added.sum() / base:.0%} et retirerait {removed.sum() / base:.0%} du sol saisi (maximum {plan_mask.MAX_ADD_SHARE:.0%} et {plan_mask.MAX_CUT_SHARE:.0%}) : le sol de ce plan n'est pas celui de la minimap"}
+    if before is not None and after is not None:
+        info["plan_lectures_sures_refusees"] = f"{before:.4f} puis {after:.4f}"
+        if after > before + plan_mask.MAX_REFUSAL_RISE:
+            return walk, {"plan": f"refusé : il ferait refuser {after:.2%} des lectures sûres au lieu de {before:.2%}"}
+    else:
+        info["plan_non_verifie"] = "aucune lecture sûre sur cette carte : la correction n'est pas contrôlée par les lectures"
+    cv2.imwrite(str(MASK_DIR / f"{map_name}_plan_ajouts.png"), added.astype(np.uint8) * 255)
+    cv2.imwrite(str(MASK_DIR / f"{map_name}_plan_retraits.png"), removed.astype(np.uint8) * 255)
+    labels[added] = CODES["sol"]
+    return fixed, info
+
+
 def apply(conn, map_name):
     """Écrit les fichiers du programme d'après l'annotation de la carte. Renvoie un résumé (dict), ou None s'il n'y a pas d'annotation ou de médiane."""
     raw = annotation_of(conn, map_name)
@@ -268,6 +301,9 @@ def apply(conn, map_name):
         walk = walkable_from_classes(labels)
         open_tp_paths(walk, data["tps"])
         walk &= ~_line_layer(walk.shape, [d for d in data["doors"] if d["kind"] != "porte"])  # fenêtres et traits de mur ne se traversent pas, même sous une flèche de tyrolienne
+        if data["use_plan"]:
+            walk, plan_info = plan_step(conn, map_name, data, labels, walk)
+            summary.update(plan_info)
         mask = cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST)
         summary["praticable"] = round(float(walk.mean()), 3)
         refused = refused_share(conn, map_name, mask)

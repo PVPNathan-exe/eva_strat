@@ -3,7 +3,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CLASS_INFO, applyOverrides, classifyImage, type MapAnnotation, type Point } from '../../lib/mapAnnotation';
+import { loadTinted, type Rgb } from '../../lib/mapReading';
 import { MappingShapes, type Draft } from './MappingShapes';
+
+const GREEN: Rgb = [53, 224, 122];
+const RED: Rgb = [255, 59, 59];
 
 export interface Pixel {
   x: number; // pixel de la médiane
@@ -16,6 +20,7 @@ interface Props {
   annotation: MapAnnotation;
   zoom: number; // 0 : ajusté à la largeur disponible
   preview: boolean; // coloriser les pixels classés
+  planDiff: { added: string | null; cut: string | null } | null; // corrections du plan stratégique à montrer (sol ajouté en vert, murs retirés en rouge)
   conflicts: Uint8Array | null; // pixels ambigus à montrer (couleurs de deux classes qui se recouvrent), ou null
   draft: Draft; // tracé en cours
   onImage: (image: ImageData) => void;
@@ -48,10 +53,11 @@ function useImageData(url: string): ImageData | null {
   return data;
 }
 
-export function MappingCanvas({ url, annotation, zoom, preview, conflicts, draft, onImage, onHover, onDown, onMove, onUp }: Props) {
+export function MappingCanvas({ url, annotation, zoom, preview, conflicts, planDiff, draft, onImage, onHover, onDown, onMove, onUp }: Props) {
   const image = useImageData(url);
   const base = useRef<HTMLCanvasElement>(null);
   const layer = useRef<HTMLCanvasElement>(null);
+  const planLayer = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (!image) return;
@@ -92,6 +98,28 @@ export function MappingCanvas({ url, annotation, zoom, preview, conflicts, draft
     ctx.putImageData(out, 0, 0);
   }, [image, labels, preview, conflicts]);
 
+  // Corrections du plan stratégique du dernier « Appliquer » : sol ajouté (vert) et murs retirés (rouge), à la grille de la médiane.
+  useEffect(() => {
+    const cv = planLayer.current;
+    const ctx = cv?.getContext('2d');
+    if (!cv || !ctx || !image) return;
+    cv.width = image.width;
+    cv.height = image.height;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    let cancelled = false;
+    for (const [url, color] of [[planDiff?.added, GREEN], [planDiff?.cut, RED]] as const) {
+      if (!url) continue;
+      loadTinted(url, color, 190)
+        .then((src) => {
+          if (!cancelled) ctx.drawImage(src, 0, 0, cv.width, cv.height);
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [image, planDiff]);
+
   const pixelOf = (e: React.PointerEvent<HTMLDivElement>): Pixel | null => {
     if (!image) return null;
     const r = e.currentTarget.getBoundingClientRect();
@@ -121,6 +149,7 @@ export function MappingCanvas({ url, annotation, zoom, preview, conflicts, draft
       >
         <canvas ref={base} className="mapping__canvas" />
         <canvas ref={layer} className="mapping__canvas mapping__canvas--layer" />
+        <canvas ref={planLayer} className="mapping__canvas mapping__canvas--plan" />
         {image && <MappingShapes annotation={annotation} draft={draft} aspect={image.width / image.height} />}
       </div>
     </div>

@@ -178,3 +178,9 @@ test('les couleurs de classes différentes qui se recouvrent sont détectées et
   assert.equal(tight[2].tol, 10); // couleur isolée : inchangée
   assert.equal(findConflicts(rgba, tight).pairs.length, 0);
 });
+
+test('le recoupement avec le plan stratégique est une option choisie carte par carte (désactivée par défaut)', () => {
+  assert.equal(sanitize({}).usePlan, false);
+  assert.equal(sanitize({ usePlan: true }).usePlan, true);
+  assert.equal(sanitize({ usePlan: 'oui' }).usePlan, false);
+});

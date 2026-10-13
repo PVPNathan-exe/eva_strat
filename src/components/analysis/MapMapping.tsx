@@ -80,6 +80,7 @@ export function MapMapping({ map }: { map: string }) {
   };
   const [opening, setOpening] = useState<OpeningChoice>('porte');
   const [showConflicts, setShowConflicts] = useState(false);
+  const [showPlan, setShowPlan] = useState(true);
   const [overrideFrom, setOverrideFrom] = useState<ClassName | 'any'>('tir');
   const [overrideTo, setOverrideTo] = useState<ClassName>('vue');
   const [oneWay, setOneWay] = useState(false);
@@ -260,7 +261,7 @@ export function MapMapping({ map }: { map: string }) {
 
       <div className="mapping__body">
         <div className="mapping__left">
-          {loaded && <MappingCanvas url={reading.medianUrl} annotation={annotation} zoom={zoom} preview={preview} conflicts={showConflicts && conflicts ? conflicts.mask : null} draft={draft} onImage={setImage} onHover={setHover} onDown={onDown} onMove={onMove} onUp={onUp} />}
+          {loaded && <MappingCanvas url={reading.medianUrl} annotation={annotation} zoom={zoom} preview={preview} planDiff={showPlan && annotation.usePlan ? { added: reading.planAddedUrl, cut: reading.planCutUrl } : null} conflicts={showConflicts && conflicts ? conflicts.mask : null} draft={draft} onImage={setImage} onHover={setHover} onDown={onDown} onMove={onMove} onUp={onUp} />}
         </div>
         <div className="mapping__right">
           <Loupe image={image} pixel={hover} />
@@ -420,6 +421,18 @@ export function MapMapping({ map }: { map: string }) {
           Appliquer au programme
         </button>
         {dirty && <span className="mapping__dirty">Modifications non enregistrées</span>}
+      </div>
+      <div className="mapping__plan-option">
+        <label>
+          <input type="checkbox" checked={annotation.usePlan} onChange={(e) => update((a) => ({ ...a, usePlan: e.target.checked }))} /> Corriger le masque avec le plan stratégique à l'application (nécessite le cadre de l'outil Alignement)
+        </label>
+        <label>
+          <input type="checkbox" checked={showPlan} disabled={!annotation.usePlan} onChange={(e) => setShowPlan(e.target.checked)} /> Montrer les corrections du dernier « Appliquer » (vert : sol ajouté, rouge : mur du plan retiré)
+        </label>
+        <p className="mapping__hint">
+          Le plan ajoute le sol que la saisie a oublié à l'intérieur de l'arène et retire les murs du plan sur lesquels la saisie dit « praticable ». Il n'est utilisé que si son sol ressemble à celui de la
+          minimap (Atlantis : +9 % de sol) : sinon (Polaris, Artefact) le programme le refuse, comme il refuse toute correction qui ferait refuser plus de lectures sûres.
+        </p>
       </div>
       {note && <p className="mapping__message mapping__message--error">{note}</p>}
       {message && <p className={`mapping__message${message.error ? ' mapping__message--error' : ''}`}>{message.text}</p>}

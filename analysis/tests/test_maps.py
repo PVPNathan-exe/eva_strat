@@ -287,3 +287,88 @@ def test_shoot_over_lines_are_not_walkable_but_stay_shoot_over_in_the_classes():
     assert labels[round(0.5 * 39), 20] == map_annotations.CODES["tir"] and got[0]["kind"] == "tir"
     walk = map_annotations.walkable_from_classes(labels)
     assert not walk[round(0.5 * 39), 20] and walk[5, 20]
+
+
+# --- recoupement avec le plan stratégique (plan_mask.py) ---
+
+import plan_mask
+
+
+def _plan_image():
+    """Plan synthétique 200 x 100 : fond sombre (sol), cadre blanc, un mur blanc vertical épais au milieu, une lettre blanche (petit bloc)."""
+    plan = np.full((100, 200, 3), 40, np.uint8)
+    plan[0:6, :] = 255
+    plan[94:100, :] = 255
+    plan[:, 0:6] = 255
+    plan[:, 194:200] = 255
+    plan[6:94, 95:105] = 255  # mur épais au milieu
+    plan[40:55, 40:50] = 255  # lettre : petit bloc blanc, pas un mur
+    return plan
+
+
+def test_plan_walls_ignore_small_white_blocks_and_keep_the_frame_and_thick_walls():
+    walls = plan_mask.wall_mask(_plan_image())
+    assert walls[50, 100] and walls[2, 100] and not walls[45, 45]  # mur et cadre gardés, lettre écartée
+
+
+def test_the_plan_adds_missing_floor_inside_the_arena_and_removes_walkable_walls():
+    plan = _plan_image()
+    inset = {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0}
+    labels = np.zeros((100, 200), np.uint8)
+    labels[10:90, 10:90] = map_annotations.CODES["sol"]  # moitié gauche saisie, moitié droite oubliée
+    labels[20:30, 150:160] = map_annotations.CODES["mur"]  # un mur saisi à la main : jamais écrasé
+    fill, walls = plan_mask.corrections(labels, map_annotations.CODES["sol"], plan, inset)
+    assert fill[50, 150] and fill[50, 120]  # sol oublié à droite du mur : ajouté
+    assert not fill[25, 155]  # la classe explicite de l'utilisateur est respectée
+    assert not fill[50, 100]  # le mur du plan n'est pas du sol
+    assert not fill[3, 100]  # l'extérieur du cadre n'est pas ajouté (ici le cadre lui-même)
+    walk = map_annotations.walkable_from_classes(labels)
+    walk[48:52, 98:102] = True  # une saisie trop large qui mord sur le mur du plan
+    protect = np.zeros_like(walk)
+    protect[49, 99] = True  # une porte tracée dessus reste praticable
+    fixed = plan_mask.apply_to_walk(walk, fill, walls, protect)
+    assert not fixed[50, 100] and fixed[49, 99] and fixed[50, 150]
+
+
+def test_the_plan_step_is_refused_when_it_would_make_more_sure_reads_refused(tmp_path, monkeypatch):
+    monkeypatch.setattr(map_annotations, "MASK_DIR", tmp_path)
+    monkeypatch.setattr(plan_mask, "PLAN_DIR", tmp_path)
+    monkeypatch.setattr(plan_mask, "MAX_ADD_SHARE", 100.0)  # sur ce plan minuscule le sol ajouté dépasse largement le sol saisi : on teste ici les lectures
+    monkeypatch.setattr(plan_mask, "MAX_CUT_SHARE", 100.0)
+    plan = _plan_image()
+    plan[6:94, 70:130] = 255  # mur épais de 60 pixels : le sol est à plus de 2 cases de son centre
+    cv2.imwrite(str(tmp_path / "Plan.png"), plan)
+    labels = np.zeros((100, 200), np.uint8)
+    labels[10:90, 10:90] = map_annotations.CODES["sol"]
+    walk = map_annotations.walkable_from_classes(labels)
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE games (id INTEGER PRIMARY KEY, map TEXT)")
+    conn.execute("CREATE TABLE samples (game_id INTEGER, alive INTEGER, confidence REAL, x REAL, y REAL)")
+    conn.execute("INSERT INTO games VALUES (1, 'Plan')")
+    data = {"inset": {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0}, "doors": []}
+    # sans lecture : correction appliquée mais non vérifiée, aperçus écrits
+    fixed, info = map_annotations.plan_step(conn, "Plan", data, labels.copy(), walk)
+    assert info["plan_ajout_pixels"] > 0 and "plan_non_verifie" in info and (tmp_path / "Plan_plan_ajouts.png").exists()
+    assert fixed[50, 150] and labels[50, 150] == 0
+    # lectures sûres posées sur le mur du plan : les retirer du masque les ferait refuser, la correction est refusée
+    conn.executemany("INSERT INTO samples VALUES (1, 1, 0.9, ?, ?)", [(0.5, 0.5)] * 50 + [(0.25, 0.5)] * 50)
+    walk_wall = walk.copy()
+    walk_wall[10:90, 70:130] = True  # la saisie rend le mur praticable, des joueurs y sont lus
+    kept, info = map_annotations.plan_step(conn, "Plan", data, labels.copy(), walk_wall)
+    assert "plan" in info and info["plan"].startswith("refusé") and kept is walk_wall
+    # sans plan ou sans cadre : non appliqué
+    assert "non appliqué" in map_annotations.plan_step(conn, "Inconnue", data, labels.copy(), walk)[1]["plan"]
+
+
+def test_the_plan_step_is_refused_when_the_plan_floor_is_not_the_minimap_floor(tmp_path, monkeypatch):
+    monkeypatch.setattr(map_annotations, "MASK_DIR", tmp_path)
+    monkeypatch.setattr(plan_mask, "PLAN_DIR", tmp_path)
+    cv2.imwrite(str(tmp_path / "Plan.png"), _plan_image())
+    labels = np.zeros((100, 200), np.uint8)
+    labels[10:90, 10:90] = map_annotations.CODES["sol"]  # le plan voudrait ajouter tout le côté droit : plus de 25 % du sol saisi
+    walk = map_annotations.walkable_from_classes(labels)
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    kept, info = map_annotations.plan_step(conn, "Plan", {"inset": {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0}, "doors": []}, labels.copy(), walk)
+    assert info["plan"].startswith("refusé") and "ajouterait" in info["plan"] and kept is walk

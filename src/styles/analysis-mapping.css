@@ -105,6 +105,17 @@
   stroke-dasharray: 6 3;
 }
 
+.mapping__canvas--plan {
+  mix-blend-mode: normal;
+}
+
+.mapping__plan-option {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+  color: var(--c-text-soft);
+}
+
 .mapping__conflicts {
   margin-bottom: 0.6rem;
 }

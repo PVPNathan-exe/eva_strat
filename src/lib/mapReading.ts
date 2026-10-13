@@ -11,6 +11,8 @@ const find = (name: string) => Object.entries(masks).find(([path]) => path.endsW
 export interface MapReading {
   maskUrl: string | null; // couloirs : pixels blancs = praticable
   linesUrl: string | null; // traits de murs
+  planAddedUrl: string | null; // sol que le plan stratégique a ajouté au masque au dernier « Appliquer » (blanc sur noir, grille de la médiane)
+  planCutUrl: string | null; // murs du plan retirés du masque
   medianUrl: string | null; // médiane de la minimap du jeu (fond des cartes dont le plan n'est pas aligné)
   stations: [number, number][][]; // paires [entrée, sortie] en fraction de la minimap
   spawns: { team: 'A' | 'B'; rect: [number, number, number, number] }[]; // x0, y0, x1, y1 (une équipe peut avoir plusieurs zones)
@@ -23,6 +25,8 @@ export function readingOf(map: string): MapReading {
     maskUrl: find(`${map}.png`),
     linesUrl: find(`${map}_lignes.png`),
     medianUrl: find(`${map}_mediane.png`),
+    planAddedUrl: find(`${map}_plan_ajouts.png`),
+    planCutUrl: find(`${map}_plan_retraits.png`),
     stations: Array.isArray(tp) ? (tp as [number, number][][]) : [],
     spawns: sp
       ? (['A', 'B'] as const).flatMap((t) => {

@@ -57,6 +57,7 @@ export interface MapAnnotation {
   doors: Opening[];
   spawns: Record<Team, Rect[]>;
   overrides: ClassOverride[];
+  usePlan: boolean; // recouper le masque avec le plan stratégique à l'application (analysis/plan_mask.py)
   capture: Point[][]; // zones des points de capture (forme libre, au moins 3 points) : zones jouables
   pairs: LandmarkPair[];
   inset: Inset | null;
@@ -85,7 +86,7 @@ export const CLASS_INFO: { name: ClassName; label: string; help: string; preview
 
 export const classCode = (name: ClassName) => CLASS_INFO.findIndex((c) => c.name === name) + 1; // 0 : aucune classe
 
-export const emptyAnnotation = (): MapAnnotation => ({ colors: [], tps: [], doors: [], spawns: { A: [], B: [] }, capture: [], overrides: [], pairs: [], inset: null });
+export const emptyAnnotation = (): MapAnnotation => ({ colors: [], tps: [], doors: [], spawns: { A: [], B: [] }, capture: [], overrides: [], usePlan: false, pairs: [], inset: null });
 
 const isPoint = (p: unknown): p is Point => Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === 'number' && v >= 0 && v <= 1);
 const isRect = (r: unknown): r is Rect => Array.isArray(r) && r.length === 4 && r.every((v) => typeof v === 'number' && v >= 0 && v <= 1) && r[0] < r[2] && r[1] < r[3];
@@ -153,6 +154,7 @@ export function sanitize(raw: unknown): MapAnnotation {
     const polygon = readPolygon(o?.polygon);
     if (polygon && (o.from === 'any' || names.has(o.from)) && names.has(o.to) && out.overrides.length < MAX_OVERRIDES) out.overrides.push({ polygon, from: o.from, to: o.to });
   }
+  out.usePlan = r.usePlan === true;
   for (const p of Array.isArray(r.pairs) ? r.pairs : []) if (isPoint(p?.minimap) && isPoint(p?.plan)) out.pairs.push({ minimap: p.minimap, plan: p.plan });
   const i = r.inset as Inset | null | undefined;
   if (i && ['l', 't', 'r', 'b'].every((k) => typeof (i as unknown as Record<string, unknown>)[k] === 'number')) out.inset = { l: i.l, t: i.t, r: i.r, b: i.b };
