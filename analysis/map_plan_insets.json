@@ -26,5 +26,12 @@
     "r": 0.0131,
     "b": 0.051,
     "correlation": null
+  },
+  "Engine": {
+    "l": 0.0355,
+    "t": 0.0619,
+    "r": -0.0013,
+    "b": 0.0602,
+    "correlation": null
   }
 }
