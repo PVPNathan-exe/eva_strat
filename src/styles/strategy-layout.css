@@ -1,0 +1,19 @@
+/* Onglet Stratégie : les quatre barres (cartes, étages, dessin, armes) se rangent sur le moins de lignes possible, sur un même fond. */
+
+.strat-bars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.strat-bars > * {
+  padding-block: 0.3rem;
+  background: transparent;
+  border-bottom: 0;
+}
+
+.strat-bars > .weapon-panel {
+  flex: 1 1 auto;
+}

@@ -12,7 +12,7 @@
 .map-canvas {
   position: relative;
   border: 1px solid var(--c-border);
-  background: #11151d;
+  background: var(--c-bg);
 }
 
 .map-canvas.is-drawing {

@@ -57,10 +57,12 @@ export default function App() {
       </nav>
       {view === 'strategie' ? (
         <>
-          <Toolbar />
-          <FloorSelector />
-          <DrawToolbar />
-          <WeaponPanel />
+          <div className="strat-bars">
+            <Toolbar />
+            <FloorSelector />
+            <DrawToolbar />
+            <WeaponPanel />
+          </div>
           <main className="app__main">
             <MapCanvas />
           </main>
