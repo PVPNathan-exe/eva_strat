@@ -1,15 +1,13 @@
 # EVA Strat
 
-Planificateur tactique pour le jeu **EVA**.
+Planificateur tactique et analyse de rediffusions pour le jeu **EVA**. Quatre onglets :
 
-En tant qu'admin tu peux :
+- **Stratégie** : importer le **plan** d'une carte, le dessiner (lignes, rectangles, cercles, crayon, couleur et épaisseur), gérer jusqu'à 3 **étages**, poser des **armes** avec leur portée (échelle à calibrer), **sauvegarder** par carte (automatique dans le navigateur, export et import JSON).
+- **Analyse** : lire une vidéo de partie (.mp4) : repérage des games par le chrono, pseudos, équipement, kills, score de capture et **positions et regards des joueurs** sur la minimap, replay sur le plan, commentaires liés à un instant.
+- **Lecture** : ce que le programme sait d'une carte (couloirs, tyroliennes, zones de départ, points de capture), la forme des joueurs lue sur la minimap, et la **cartographie à la main** qui construit les masques des cartes.
+- **Armes** : nommer les icônes d'armes vues par l'analyse.
 
-- importer une **image de plan** d'une carte (sert de fond) ;
-- **dessiner des murs** par-dessus *(à venir)* ;
-- gérer plusieurs **étages** (jusqu'à 3 niveaux, reliés par ascenseurs) ;
-- afficher une **vision joueur en cône** qui bute sur les murs *(à venir)* ;
-- déplacer les **joueurs** entre les étages *(à venir)* ;
-- **sauvegarder** la config (murs + étages) par carte (auto dans le navigateur + export/import JSON) pour ne pas tout refaire.
+L'analyse fonctionne sous **Windows** (la reconnaissance de texte des pseudos et du killfeed utilise celle de Windows) : un conteneur Docker ne convient donc pas, `npm start` fait l'installation.
 
 ## Stack
 
@@ -37,24 +35,19 @@ npm run preview  # prévisualiser le build
 
 ## Structure
 
+La carte complète du projet (fichiers, routes de l'API, flux de données) est dans [`ARCHITECTURE.md`](ARCHITECTURE.md), à lire avant de chercher ou de créer un fichier. En bref :
+
 ```
-src/
-  types/map.ts          Modèle de données (cartes, étages, murs, joueurs)
-  store/mapStore.ts      État global + auto-save localStorage (clé "eva_strat:maps")
-  lib/storage.ts         Export/import JSON + lecture d'image en data URL
-  components/
-    MapCanvas.tsx        Rendu du fond de carte + murs (Konva)
-    Toolbar.tsx          Gestion cartes, import image, export/import JSON
-    FloorSelector.tsx    Sélecteur d'étage
-  App.tsx
+src/            site (React, Konva, Zustand) : onglets Stratégie, Analyse, Lecture, Armes
+server/         API d'analyse (plugin du serveur Vite, SQLite) et lancement des analyses
+analysis/       lecture des vidéos (Python, OpenCV, ffmpeg) et cartes (masques, tyroliennes, zones de départ)
+tests/          tests du site et du serveur (npm run test:js)
+docs/           reprise sur un autre PC, plan de ce qui reste, pistes de vitesse
 ```
 
-## Roadmap
+## Suite
 
-- [ ] Outil de dessin de murs (polyligne) + édition/suppression
-- [ ] Zones d'ascenseur reliant les étages
-- [ ] Vision joueur en cône (raycasting contre les murs)
-- [ ] Placement et déplacement des joueurs entre étages
+Ce qui reste à faire dans l'onglet Analyse est dans [`docs/PLAN_RESTANT.md`](docs/PLAN_RESTANT.md). Côté Stratégie : vision joueur en cône qui bute sur les murs, placement et déplacement des joueurs entre étages (non faits).
 
 ## Onglet Analyse
 
@@ -98,10 +91,20 @@ On charge un .mp4 (bouton « Parcourir… » ou chemin collé) ou une URL YouTub
 
 **Analyse longue** : l'analyse tourne sur le serveur de développement, pas dans la page : changer d'onglet ou recharger la page ne l'interrompt pas, et la page se reconnecte toute seule à l'analyse en cours (progression, pause, arrêt). Elle s'arrête si `npm run dev` est fermé ; les games déjà terminées sont conservées et ne sont pas relues.
 
-**Utilisation** : `npm run dev`, onglet « Analyse », charger la vidéo, « Analyser » : détecte les games (sans rien relire si elles sont déjà vérifiées) puis, une fois le chantier 2 livré, extrait les positions des joueurs. « Détecter les games » ne fait que la partie games. Le champ « Positions : toutes les N frames » règle la cadence de lecture de la minimap (6 par défaut, soit 5 lectures par seconde à 30 i/s) : plus N est petit, plus c'est précis et fluide, au prix d'une analyse plus longue ; changer N relit les positions des games déjà lues. Les positions (minimap : équipe, numéro, position normalisée, direction, vivant) sont lues chaque seconde et stockées dans la table `samples` ; elles ne sont relues que pour les games qui n'en ont pas (déplacer une borne les efface). Les chiffres de la minimap se lisent par modèles (`analysis/minimap_digits.npz`) et, pour l'équipe bleue, par comptage de trous (6, 8, 9).
+**Utilisation** : `npm run dev`, onglet « Analyse », charger la vidéo, « Analyser » : détecte les games (sans rien relire si elles sont déjà vérifiées) puis lit, game par game, les pseudos, l'équipement, les kills, le score et les positions des joueurs. « Détecter les games » ne fait que la partie games. Le champ « Positions : toutes les N frames » règle la cadence de lecture de la minimap (6 par défaut, soit 5 lectures par seconde à 30 i/s) : plus N est petit, plus c'est précis et fluide, au prix d'une analyse plus longue ; changer N relit les positions des games déjà lues. Les positions (minimap : équipe, numéro, position normalisée, direction, vivant) sont lues chaque seconde et stockées dans la table `samples` ; elles ne sont relues que pour les games qui n'en ont pas (déplacer une borne les efface). Les chiffres de la minimap se lisent par modèles (`analysis/minimap_digits.npz`) et, pour l'équipe bleue, par comptage de trous (6, 8, 9).
 Les données sont dans `data/eva.db` (SQLite, ignoré par git) ; les vidéos YouTube téléchargées sont dans `data/cache/`.
 Les vidéos locales ne sont jamais copiées.
 
 **Réglages** : variable d'environnement `EVA_PYTHON` pour utiliser un autre exécutable Python que `python`.
 
 **Tests** : `npm test` (Node et Python).
+
+## Onglet Lecture et cartes
+
+Trois sous-onglets : **Couloirs lus** (la carte telle que le programme la lit, avec une légende et un menu « Calques »), **Joueurs sur la minimap** (formes, regards et corrections posées à la main sur une game) et **Cartographie à la main**.
+
+**Cartographie à la main** : on range les couleurs de la minimap en classes (sol, mur, tir par-dessus, vue seulement, porte, porte vitrée), on trace les tyroliennes, les portes et fenêtres, les points de capture, les zones de départ (deux par équipe, quatre zones neutres pour Outlaw) et des zones de classe (dont « Hors map »), et on aligne la minimap sur le plan avec des repères. « Appliquer au programme » écrit le masque de la carte (`analysis/map_masks/`) et les fichiers `analysis/map_*.json`, nettoie les petites taches et refuse un masque qui rejetterait plus de 1 % des positions lues avec certitude. Les positions déjà enregistrées ne changent qu'à la prochaine analyse.
+
+**Règles propres aux cartes** : anneaux tournants d'Engine, point de capture unique d'Outlaw (un seul actif à la fois, calendrier des changements affiché dans l'onglet Lecture), portes à bouton de Reef Point (murs pour la vue, passages pour les trajets). Le détail et les mesures sont dans `CLAUDE.md`.
+
+**Suivi** : en plus du lissage décrit plus haut, le suivi applique des règles mesurées : les regards des tyroliennes, des duels et des kills, le mur entre deux joueurs, et le départ (aucun joueur hors de sa zone de départ avant le début de la game). L'algorithme est versionné (`ALGO_REVISION` dans `analysis/tracking.py`) : changer de version relit les positions au prochain « Analyser ».
