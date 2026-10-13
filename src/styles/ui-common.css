@@ -118,3 +118,15 @@
     max-width: none;
   }
 }
+
+button:not(:disabled),
+summary,
+select,
+label:has(> input),
+[role='button'] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
