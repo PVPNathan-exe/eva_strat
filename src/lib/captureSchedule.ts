@@ -14,7 +14,7 @@ export function seenAt(boxes: CaptureBox[], t: number): CaptureBox | undefined {
 export interface CaptureCalendar {
   durationS: number;
   schedule: { restant: string; t: number; source: 'indique' | 'deduit' }[];
-  points: Record<string, { x: number; y: number; vu: boolean }>; // vu : position lue sur la minimap ; sinon seulement indiquée à la main
+  points: Record<string, { x: number; y: number; vu: boolean; plan?: boolean }>; // vu : position lue sur la minimap ; plan : lue sur le plan stratégique ; sinon seulement indiquée à la main
 }
 
 export function captureCalendarOf(map: string): CaptureCalendar | null {

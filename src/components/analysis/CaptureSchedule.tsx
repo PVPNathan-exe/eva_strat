@@ -25,7 +25,8 @@ export function CaptureSchedule({ map, gameId }: { map: string; gameId?: number 
 
   if (!calendar) return null;
   const shown = gameId === undefined ? [] : boxes;
-  const unseen = Object.entries(calendar.points).filter(([, p]) => !p.vu).map(([k]) => k);
+  const fromPlan = Object.entries(calendar.points).filter(([, p]) => !p.vu && p.plan).map(([k]) => k);
+  const unseen = Object.entries(calendar.points).filter(([, p]) => !p.vu && !p.plan).map(([k]) => k);
   return (
     <div className="capschedule">
       <h4>Changements de point de capture ({formatTime(calendar.durationS)} de jeu)</h4>
@@ -60,7 +61,7 @@ export function CaptureSchedule({ map, gameId }: { map: string; gameId?: number 
       </table>
       <p className="marks__help">
         Un seul point est actif à la fois et il change toutes les 1 min 30. Le premier est toujours C ; la suite varie d'une game à l'autre. Les zones de capture tracées à la main ne sont que
-        des indications : le programme cherche le point actif sur la minimap{unseen.length > 0 ? ` (point ${unseen.join(', ')} jamais vu sur les games lues : position seulement indiquée)` : ''}.
+        des indications : le programme cherche le point actif sur la minimap{fromPlan.length > 0 ? ` (point ${fromPlan.join(', ')} jamais vu sur les games lues : position lue sur le plan stratégique)` : ''}{unseen.length > 0 ? ` (point ${unseen.join(', ')} : position seulement indiquée)` : ''}.
       </p>
     </div>
   );

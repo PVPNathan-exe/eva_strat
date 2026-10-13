@@ -47,9 +47,12 @@
         ]
       },
       "E": {
-        "x": 0.178,
-        "y": 0.659,
+        "x": 0.1748,
+        "y": 0.6709,
+        "w": 0.1066,
+        "h": 0.1068,
         "vu": false,
+        "plan": true,
         "indication": [
           0.178,
           0.659
@@ -98,6 +101,6 @@
         "source": "indique"
       }
     ],
-    "remarque": "Un seul point est actif à la fois et change toutes les 1 min 30 (chrono restant : 11:25, 9:55, 8:25, 6:55, 5:25, 3:55, 2:25, 0:55). Le premier est toujours C ; la suite change d'une game à l'autre (C, B, A, B, D, B sur la game 32 ; C, D, A, D sur la game 19) : le programme la lit sur la minimap de chaque game. 2:25 : instant déduit du rythme, absent de la liste donnée. E n'a été vu sur aucune des deux games (trop courtes)."
+    "remarque": "Un seul point est actif à la fois et change toutes les 1 min 30 (chrono restant : 11:25, 9:55, 8:25, 6:55, 5:25, 3:55, 2:25, 0:55). Le premier est toujours C ; la suite change d'une game à l'autre (C, B, A, B, D, B sur la game 32 ; C, D, A, D sur la game 19) : le programme la lit sur la minimap de chaque game. 2:25 : instant déduit du rythme, absent de la liste donnée. E n'a été vu sur aucune des deux games (trop courtes) : sa position est lue sur le plan stratégique (capture_points.py --map Outlaw --from-plan : les boîtes A, B et C du plan tombent à 0,002 à 0,007 du centre de celles vues sur la minimap), sa taille est estimée."
   }
 }

@@ -1,6 +1,7 @@
 """Points de capture actifs d'une game (Outlaw : un seul point à la fois sur la minimap, qui change toutes les 1 min 30 environ).
 
   python analysis/capture_points.py --game 32            cherche les boîtes de capture sur la minimap de la game et affiche la suite des points actifs
+  python analysis/capture_points.py --map Outlaw --from-plan [--write]   lit les boîtes grises dessinées sur le plan stratégique : position des points jamais vus sur une minimap
 
 Sur la minimap, seule la boîte du point actif est dessinée : un carré plein d'une quarantaine de pixels, gris tant que personne ne l'a pris, orange ou bleu une fois pris. La médiane de
 la minimap (`map_masks/<Carte>_mediane.png`) n'en contient aucune (elles sont rarement au même endroit) : une boîte est une tache uniforme de la bonne taille qui diffère de la médiane. Les
@@ -101,7 +102,7 @@ def segments(samples):
 def name_point(map_name, x, y, hints=None):
     """Lettre du point de la carte le plus proche de (x, y) (positions indiquées ou vues dans map_capture_points.json), ou None (moins de 0,12 de la minimap)."""
     if hints is None:
-        hints = {k: (v.get("indication") or (v["x"], v["y"])) for k, v in (load(map_name) or {}).get("points", {}).items()}
+        hints = {k: (v["x"], v["y"]) for k, v in (load(map_name) or {}).get("points", {}).items()}  # position vue ou lue sur le plan, sinon indiquée
     best = min(hints.items(), key=lambda kv: (kv[1][0] - x) ** 2 + (kv[1][1] - y) ** 2, default=None)
     return best[0] if best and ((best[1][0] - x) ** 2 + (best[1][1] - y) ** 2) ** 0.5 <= 0.12 else None
 
@@ -120,11 +121,48 @@ def build_points(map_name, segs, hints, previous=None):
             ss = seen[letter]
             out[letter] = {"x": round(float(np.median([s["x"] for s in ss])), 4), "y": round(float(np.median([s["y"] for s in ss])), 4),
                            "w": round(float(np.median([s["w"] for s in ss])), 4), "h": round(float(np.median([s["h"] for s in ss])), 4), "vu": True}
-        elif previous and previous.get(letter, {}).get("vu"):
+        elif previous and (previous.get(letter, {}).get("vu") or previous.get(letter, {}).get("plan")):
             out[letter] = previous[letter]
         else:
             out[letter] = {"x": round(hx, 4), "y": round(hy, 4), "vu": False}
     return out
+
+
+def plan_boxes(map_name, inset):
+    """Boîtes de capture dessinées sur le plan stratégique (rectangles gris unis) : [{"x", "y", "w", "h"}] en fractions de la minimap (cadre `inset` du plan). Seules les boîtes grises
+    claires sont trouvées : une boîte traversée d'un obstacle sombre (D d'Outlaw) est coupée en morceaux et n'est pas reconnue."""
+    import plan_mask
+
+    path = plan_mask.plan_file(map_name)
+    if path is None:
+        return []
+    plan = cv2.imread(str(path))
+    ph, pw = plan.shape[:2]
+    g = plan.astype(np.int16)
+    grey = ((abs(g[:, :, 0] - g[:, :, 1]) < 14) & (abs(g[:, :, 1] - g[:, :, 2]) < 14) & (g[:, :, 1] > 85) & (g[:, :, 1] < 150)).astype(np.uint8)
+    grey = cv2.morphologyEx(grey, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8))
+    n, _, stats, _ = cv2.connectedComponentsWithStats(grey)
+    fw, fh = 1 - inset["l"] - inset["r"], 1 - inset["t"] - inset["b"]
+    out = []
+    for k in range(1, n):
+        x, y, w, h, area = stats[k]
+        if area >= 0.004 * pw * ph and 0.6 <= area / (w * h) and 0.5 <= w / h <= 2.2:  # un rectangle plein, pas une tache de décor
+            out.append({"x": ((x + w / 2) / pw - inset["l"]) / fw, "y": ((y + h / 2) / ph - inset["t"]) / fh, "w": w / pw / fw, "h": h / ph / fh})
+    return out
+
+
+def points_from_plan(boxes, hints, seen):
+    """Points jamais vus sur une minimap, placés d'après le plan : {lettre: {"x", "y", "w", "h", "vu": False, "plan": True}}. Chaque boîte du plan va au point indiqué le plus proche (à moins de 0,12).
+    La taille d'une boîte de minimap est celle du plan multipliée par le rapport médian mesuré sur les points vus des deux côtés (`seen` : {lettre: point vu})."""
+    taken = {}
+    for box in boxes:
+        letter = min(hints, key=lambda k: (hints[k][0] - box["x"]) ** 2 + (hints[k][1] - box["y"]) ** 2)
+        if ((hints[letter][0] - box["x"]) ** 2 + (hints[letter][1] - box["y"]) ** 2) ** 0.5 <= 0.12:
+            taken[letter] = box
+    ratios = [(seen[k]["w"] / taken[k]["w"], seen[k]["h"] / taken[k]["h"]) for k in taken if k in seen and seen[k].get("w")]
+    rw = float(np.median([r[0] for r in ratios])) if ratios else 1.0
+    rh = float(np.median([r[1] for r in ratios])) if ratios else 1.0
+    return {k: {"x": round(float(b["x"]), 4), "y": round(float(b["y"]), 4), "w": round(float(b["w"] * rw), 4), "h": round(float(b["h"] * rh), 4), "vu": False, "plan": True} for k, b in taken.items() if k not in seen}
 
 
 def sequence(map_name, segs, hints):
@@ -166,15 +204,52 @@ def scan_and_store(conn, game, path):
     return segs
 
 
+def _from_plan(args):
+    """--from-plan : compare les boîtes du plan aux points vus (écart de centre) et, avec --write, place les points jamais vus d'après le plan."""
+    import plan_mask
+
+    known = load(args.map) or {}
+    inset = plan_mask.inset_of(args.map)
+    hints = {k: tuple(v["indication"]) for k, v in known.get("points", {}).items() if "indication" in v}
+    if not known or inset is None or not hints:
+        print("carte sans points ou sans cadre de plan")
+        return 1
+    boxes = plan_boxes(args.map, inset)
+    seen = {k: v for k, v in known["points"].items() if v.get("vu")}
+    for box in boxes:
+        letter = min(hints, key=lambda k: (hints[k][0] - box["x"]) ** 2 + (hints[k][1] - box["y"]) ** 2)
+        if letter in seen:
+            gap = ((seen[letter]["x"] - box["x"]) ** 2 + (seen[letter]["y"] - box["y"]) ** 2) ** 0.5
+            print(f"  point {letter} : plan ({box['x']:.4f}, {box['y']:.4f}), minimap ({seen[letter]['x']:.4f}, {seen[letter]['y']:.4f}), écart de centre {gap:.4f}")
+        else:
+            print(f"  point {letter} : plan ({box['x']:.4f}, {box['y']:.4f}), jamais vu sur une minimap")
+    new = points_from_plan(boxes, hints, seen)
+    print("points placés d'après le plan :", {k: v for k, v in new.items()})
+    if args.write and new:
+        all_ = json.loads(POINTS.read_text(encoding="utf-8"))
+        for k, v in new.items():
+            v["indication"] = list(hints[k])
+            all_[args.map]["points"][k] = v
+        POINTS.write_text(json.dumps(all_, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print("écrit dans", POINTS.name)
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Cherche les points de capture actifs d'une game sur la minimap de la vidéo.")
     parser.add_argument("--db", default="data/eva.db")
-    parser.add_argument("--game", type=int, required=True)
+    parser.add_argument("--game", type=int)
+    parser.add_argument("--map", help="avec --from-plan : la carte")
+    parser.add_argument("--from-plan", action="store_true", help="lit les boîtes de capture du plan stratégique (points jamais vus sur une minimap)")
     parser.add_argument("--store", action="store_true", help="enregistre les points vus dans la base (table capture_boxes)")
     parser.add_argument("--write", action="store_true", help="écrit les positions des points vus dans map_capture_points.json (garde celles déjà vues sur d'autres games)")
     args = parser.parse_args(argv)
     import sqlite3
 
+    if args.from_plan:
+        return _from_plan(args)
+    if args.game is None:
+        parser.error("--game est obligatoire sans --from-plan")
     if args.store:
         import db
 

@@ -70,6 +70,26 @@ def test_points_are_named_from_the_indications_and_unseen_ones_stay_indications(
     assert again["B"]["vu"]  # un point vu sur une autre game reste vu
 
 
+def test_boxes_drawn_on_the_plan_place_the_points_never_seen(tmp_path, monkeypatch):
+    import plan_mask
+
+    plan = np.full((400, 400, 3), 40, np.uint8)
+    plan[100:160, 60:140] = (120, 120, 120)  # boîte du point A (grise, unie)
+    plan[300:350, 250:340] = (120, 120, 120)  # boîte du point E
+    plan[200:210, 20:380] = (120, 120, 120)  # un trait gris long et fin : pas une boîte
+    cv2.imwrite(str(tmp_path / "Test.png"), plan)
+    monkeypatch.setattr(plan_mask, "plan_file", lambda name: tmp_path / "Test.png")
+    inset = {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0}
+    boxes = capture_points.plan_boxes("Test", inset)
+    assert len(boxes) == 2
+    hints = {"A": (0.25, 0.32), "E": (0.74, 0.81)}
+    seen = {"A": {"x": 0.25, "y": 0.32, "w": 0.24, "h": 0.18}}  # vu sur la minimap : la boîte y est 20 % plus large que sur le plan (0,20)
+    points = capture_points.points_from_plan(boxes, hints, seen)
+    assert list(points) == ["E"] and points["E"]["plan"] and not points["E"]["vu"]
+    assert abs(points["E"]["x"] - 0.7375) < 0.01 and abs(points["E"]["y"] - 0.8125) < 0.01
+    assert abs(points["E"]["w"] - 0.225 * 1.2) < 0.02  # taille du plan multipliée par le rapport mesuré sur A
+
+
 def test_boxes_are_stored_and_read_back_per_game(tmp_path):
     conn = db.connect(tmp_path / "t.db")
     conn.execute("PRAGMA foreign_keys=OFF")

@@ -445,9 +445,10 @@ def apply(conn, map_name):
         capture_polygons = data["capture"]
         found = capture_points.load(map_name)
         if found:  # Outlaw : les polygones tracés sont des indications, le sol des boîtes est celui des boîtes vues sur la minimap (un seul point actif à la fois, toutes les games n'en montrent pas autant)
-            seen = {k: p for k, p in found["points"].items() if p.get("vu") and "w" in p}
+            seen = {k: p for k, p in found["points"].items() if (p.get("vu") or p.get("plan")) and "w" in p}  # vus sur une minimap, ou lus sur le plan stratégique
             capture_polygons = [[[p["x"] - p["w"] / 2, p["y"] - p["h"] / 2], [p["x"] + p["w"] / 2, p["y"] - p["h"] / 2], [p["x"] + p["w"] / 2, p["y"] + p["h"] / 2], [p["x"] - p["w"] / 2, p["y"] + p["h"] / 2]] for p in seen.values()]
-            summary["points_de_capture_vus"] = sorted(seen)
+            summary["points_de_capture_vus"] = sorted(k for k, p in seen.items() if p.get("vu"))
+            summary["points_de_capture_du_plan"] = sorted(k for k, p in seen.items() if not p.get("vu"))
             summary["points_de_capture_indiques_seulement"] = sorted(k for k in found["points"] if k not in seen)
         burn_shapes(labels, data["doors"], capture_polygons, data["spawns"], [s for t in data["tps"] for s in (t["a"], t["b"])])
         walk = walkable_from_classes(labels)
