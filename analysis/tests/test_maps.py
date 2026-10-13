@@ -197,7 +197,7 @@ def test_capture_squares_are_playable_ground_but_walls_inside_stay_walls():
     walk = map_annotations.walkable_from_classes(labels)
     assert walk[35, 15] and walk[15, 15] and walk[35, 35] and not walk[15, 40]
     got = map_annotations.validate({"doors": [{"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "fenetre", "glass": True, "side": 5}]})
-    assert got["doors"][0] == {"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "fenetre", "glass": False, "side": 0}
+    assert got["doors"][0] == {"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "fenetre", "glass": False, "side": 0, "under": False}
     one_way = map_annotations.validate({"doors": [
         {"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "porte", "glass": True, "side": 1},
         {"from": [0.1, 0.1], "to": [0.2, 0.1], "kind": "porte", "glass": False, "side": 1},
@@ -317,7 +317,7 @@ def test_the_plan_adds_missing_floor_inside_the_arena_and_removes_walkable_walls
     labels = np.zeros((100, 200), np.uint8)
     labels[10:90, 10:90] = map_annotations.CODES["sol"]  # moitié gauche saisie, moitié droite oubliée
     labels[20:30, 150:160] = map_annotations.CODES["mur"]  # un mur saisi à la main : jamais écrasé
-    fill, walls = plan_mask.corrections(labels, map_annotations.CODES["sol"], plan, inset)
+    fill, walls, exterior = plan_mask.corrections(labels, map_annotations.CODES["sol"], plan, inset)
     assert fill[50, 150] and fill[50, 120]  # sol oublié à droite du mur : ajouté
     assert not fill[25, 155]  # la classe explicite de l'utilisateur est respectée
     assert not fill[50, 100]  # le mur du plan n'est pas du sol
@@ -326,7 +326,7 @@ def test_the_plan_adds_missing_floor_inside_the_arena_and_removes_walkable_walls
     walk[48:52, 98:102] = True  # une saisie trop large qui mord sur le mur du plan
     protect = np.zeros_like(walk)
     protect[49, 99] = True  # une porte tracée dessus reste praticable
-    fixed = plan_mask.apply_to_walk(walk, fill, walls, protect)
+    fixed = plan_mask.apply_to_walk(walk, fill, walls, protect, exterior)
     assert not fixed[50, 100] and fixed[49, 99] and fixed[50, 150]
 
 
@@ -372,3 +372,76 @@ def test_the_plan_step_is_refused_when_the_plan_floor_is_not_the_minimap_floor(t
     conn.row_factory = sqlite3.Row
     kept, info = map_annotations.plan_step(conn, "Plan", {"inset": {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0}, "doors": []}, labels.copy(), walk)
     assert info["plan"].startswith("refusé") and "ajouterait" in info["plan"] and kept is walk
+
+
+def test_the_plan_removes_what_is_outside_the_arena_but_keeps_both_levels():
+    """Plan 200 x 100 avec un cadre blanc à 20 pixels du bord : au-delà, c'est le fond de la minimap (hors carte). Une couleur de sol saisie qui recouvre aussi le fond y ajoute des pixels."""
+    plan = np.full((100, 200, 3), 40, np.uint8)
+    plan[20:28, 20:180] = 255  # cadre (assez épais pour compter comme mur : au moins WALL_MIN_AREA pixels)
+    plan[72:80, 20:180] = 255
+    plan[20:80, 20:28] = 255
+    plan[20:80, 172:180] = 255
+    plan[35:65, 50:150] = 255  # un bloc de mur intérieur (3 000 pixels : compte comme mur)
+    labels = np.zeros((100, 200), np.uint8)
+    labels[30:70, 30:170] = map_annotations.CODES["sol"]  # l'arène
+    labels[0:15, :] = map_annotations.CODES["sol"]  # fond de la minimap pris pour du sol : hors carte
+    labels[66:70, 80:120] = map_annotations.CODES["sol"]  # un deuxième niveau, dans l'arène, sous le bloc
+    walk = map_annotations.walkable_from_classes(labels)
+    fill, walls, exterior = plan_mask.corrections(labels, map_annotations.CODES["sol"], plan, {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0})
+    fixed = plan_mask.apply_to_walk(walk, fill, walls, np.zeros_like(walk), exterior)
+    assert walk[5, 100] and not fixed[5, 100]  # le fond au-dessus du cadre n'est plus praticable
+    assert fixed[33, 40] and fixed[68, 100]  # l'arène et son deuxième niveau le restent
+    assert not fixed[45, 100]  # le mur du plan est retiré
+    # cadre ouvert ou sol saisi qui déborde : une composante qui porte l'essentiel du sol n'est jamais retirée comme extérieur
+    all_floor = np.full((100, 200), map_annotations.CODES["sol"], np.uint8)
+    _, _, ext2 = plan_mask.corrections(all_floor, map_annotations.CODES["sol"], np.full((100, 200, 3), 40, np.uint8), {"l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0})
+    assert not ext2.any()
+
+
+def _reads_db(points, map_name="Lu"):
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE games (id INTEGER PRIMARY KEY, map TEXT)")
+    conn.execute("CREATE TABLE samples (game_id INTEGER, alive INTEGER, confidence REAL, x REAL, y REAL)")
+    conn.execute("INSERT INTO games VALUES (1, ?)", (map_name,))
+    conn.executemany("INSERT INTO samples VALUES (1, 1, ?, ?, ?)", points)
+    return conn
+
+
+def test_sure_reads_make_the_ground_walkable_but_an_isolated_read_is_noise():
+    walk = np.zeros((100, 200), bool)
+    walk[10:90, 10:90] = True  # le sol saisi : à gauche ; le joueur a été lu à droite, sur un contour classé en mur
+    path = [(0.60 + 0.004 * k, 0.50, 0.9, 0.0) for k in range(5)]  # lecture soutenue : 5 lectures voisines
+    points = [(c, x, y) for x, y, c, _ in path] + [(0.9, 0.95, 0.10)] + [(0.3, 0.60, 0.80)]  # une lecture isolée, une lecture peu sûre
+    walk_in, info = map_annotations.reads_step(_reads_db(points), "Lu", walk, [])
+    assert walk_in[50, 120] and walk_in[50, 124]  # le joueur lu en x = 0,60 (colonne 120) : sol ajouté
+    assert not walk_in[10, 190] and not walk_in[80, 120] and info["lectures_ajout_pixels"] > 0  # lecture isolée ou peu sûre : rien
+    line = {"from": [0.55, 0.5], "to": [0.65, 0.5], "kind": "fenetre", "glass": False, "side": 0}
+    blocked, _ = map_annotations.reads_step(_reads_db(points), "Lu", walk, [line])
+    assert not blocked[50, 120]  # sous une fenêtre tracée à la main, une lecture ne rend rien praticable
+    assert map_annotations.reads_step(_reads_db([]), "Lu", walk, []) == (walk, {})  # aucune lecture : rien ne change
+    assert map_annotations.reads_step(sqlite3.connect(":memory:"), "Lu", walk, []) == (walk, {})  # pas de table de lectures
+
+
+def test_a_line_or_zone_marked_passable_below_keeps_the_floor_walkable_but_keeps_its_class():
+    """Atlantis : le bord d'un étage où l'on tire par-dessus bloque l'étage, pas le niveau du dessous (le joueur 2 de la game 31 le longe à 0:05)."""
+    floor = np.zeros((60, 120), bool)
+    floor[10:50, 10:110] = True
+    labels = np.zeros((60, 120), np.uint8)
+    labels[floor] = map_annotations.CODES["sol"]
+    line = {"from": [0.2, 0.5], "to": [0.8, 0.5], "kind": "tir", "glass": False, "side": 0, "under": True}
+    blocked = {**line, "under": False, "from": [0.2, 0.3], "to": [0.8, 0.3]}
+    got = map_annotations.validate({"doors": [line, blocked], "overrides": [{"polygon": [[0.1, 0.8], [0.9, 0.8], [0.9, 0.9], [0.1, 0.9]], "from": "any", "to": "mur", "under": True}]})
+    assert got["doors"][0]["under"] is True and got["doors"][1]["under"] is False and got["overrides"][0]["under"] is True
+    walk = map_annotations.walkable_from_classes(labels)
+    map_annotations.burn_shapes(labels, got["doors"], [])
+    map_annotations.apply_overrides(labels, got["overrides"])
+    assert labels[round(0.5 * 59), 60] == map_annotations.CODES["tir"]  # la classe reste « tir par-dessus » dans l'aperçu des classes
+    cut = map_annotations.walkable_from_classes(labels)
+    cut &= ~map_annotations._line_layer(cut.shape, map_annotations.blocking_lines(got["doors"]))
+    keep = map_annotations.under_layer(cut.shape, got["doors"], got["overrides"], walk)
+    final = cut | keep
+    assert not cut[round(0.5 * 59), 60] and final[round(0.5 * 59), 60]  # passage possible en dessous : le sol reste praticable
+    assert not final[round(0.3 * 59), 60]  # un trait sans « dessous » bloque toujours
+    assert not final[round(0.85 * 59), 60]  # ce qui n'était pas du sol (le mur) le reste : la zone ne crée pas de sol
+    assert map_annotations.validate({"doors": [{**line, "kind": "porte"}]})["doors"][0]["under"] is False  # une porte n'a pas de dessous

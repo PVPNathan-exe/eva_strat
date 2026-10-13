@@ -5,7 +5,9 @@
 Le plan (src/assets/maps/<Carte>.png) est un dessin net : les murs sont des traits et des blocs blancs, le sol est sombre. Posé sur la minimap avec le cadre d'alignement de la
 carte (celui de la cartographie, ou map_plan_insets.json), il dit deux choses que la saisie à la main peut manquer :
   - un grand morceau de sol à l'intérieur de l'arène que la saisie n'a pas rendu praticable (une couleur oubliée : les pièces du dessous d'Atlantis) : il est ajouté ;
-  - un mur du plan (trait ou bloc blanc) sur lequel la saisie dit « praticable » (un carré de capture dessiné trop large, la bordure d'une zone) : il est retiré.
+  - un mur du plan (trait ou bloc blanc) sur lequel la saisie dit « praticable » (un carré de capture dessiné trop large, la bordure d'une zone) : il est retiré ;
+  - tout ce qui est hors de l'arène d'après le plan (au-delà du cadre blanc) : retiré aussi, car une couleur de sol saisie (le sol de l'étage, sombre) recouvre le fond de la minimap.
+Les deux niveaux d'Atlantis et de The Cliff restent praticables : le plan ne retire que les murs et l'extérieur, jamais un niveau.
 Règles de prudence : les classes que l'utilisateur a données explicitement (mur, tir par-dessus, vue seulement, porte) ne sont jamais écrasées par un ajout ; les petits blocs blancs
 (lettres A B C, icônes des stations) ne sont pas des murs ; les petites taches de sol (décors) ne sont pas ajoutées ; les portes tracées restent praticables. Si la carte a des lectures sûres,
 la correction est refusée quand elle ferait refuser plus de lectures qu'avant (`MAX_REFUSAL_RISE`). Le plan ne vaut que si son sol est dessiné sombre dans les couloirs et ses obstacles en blanc (cas d'Atlantis : +9 % de sol, 0,19 % puis 0,01 % de lectures sûres refusées) : une correction qui ajoute plus de `MAX_ADD_SHARE` du sol saisi, ou retire plus de `MAX_CUT_SHARE`, est refusée (les plans de Polaris et d'Artefact ajouteraient 190 % et 170 % : leurs blocs sombres ne sont pas du sol)."""
@@ -58,9 +60,11 @@ def warp_to_grid(image, inset, width, height):
 
 
 def corrections(labels, sol_code, plan, inset):
-    """(ajout, retrait) : deux images bool de la taille de `labels`.
+    """(ajout, murs, hors_carte) : trois images bool de la taille de `labels`.
     ajout : sol du plan à l'intérieur de l'arène, sans classe (label 0), en taches assez grandes ;
-    retrait : mur du plan (praticable d'après la saisie : à retirer du masque praticable avec la saisie)."""
+    murs : murs du plan (à retirer du masque praticable de la saisie) ;
+    hors_carte : tout ce qui est hors de l'arène d'après le plan (au-delà du cadre blanc) : une couleur de sol saisie (le sol de l'étage, sombre) y recouvre aussi le fond de la
+    minimap, qui n'est pas du terrain. Une composante qui touche le bord de l'image mais porte la moitié du sol saisi (cadre ouvert, cadre mal aligné) n'est pas hors carte."""
     h, w = labels.shape
     walls = warp_to_grid((wall_mask(plan) * 255).astype(np.uint8), inset, w, h) > 127
     sealed = cv2.dilate(walls.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0  # referme les fuites d'un pixel du cadre
@@ -72,19 +76,24 @@ def corrections(labels, sol_code, plan, inset):
     inside_ids = np.setdiff1d(np.arange(1, n), outside)  # tout ce qui est enfermé par les murs du plan : l'arène (pièces du dessous comprises)
     with_sol = np.nonzero(counts >= max(1, 0.05 * sol.sum()))[0]  # et les composantes qui portent l'essentiel du sol saisi, même si elles touchent le bord
     interior = np.isin(comp, np.union1d(inside_ids, with_sol)) & ~walls
+    leak = np.nonzero(counts >= 0.5 * sol.sum())[0]  # une composante qui touche le bord mais porte la moitié du sol saisi : cadre ouvert ou mal aligné, pas l'extérieur
+    outside_ids = np.setdiff1d(outside, np.union1d([0], leak))
+    exterior = np.isin(comp, outside_ids) & ~walls
     fill = np.zeros((h, w), bool)
     candidate = interior & (labels == 0)
     k, lab, stats, _ = cv2.connectedComponentsWithStats(candidate.astype(np.uint8), connectivity=8)
     for i in range(1, k):
         if stats[i, cv2.CC_STAT_AREA] >= FILL_MIN_SHARE * h * w:
             fill |= lab == i
-    return fill, walls
+    return fill, walls, exterior
 
 
-def apply_to_walk(walk, fill, walls, protect):
-    """Masque praticable corrigé : ajout du sol manquant, retrait des murs du plan, sauf sous les tracés `protect` (portes, bool)."""
+def apply_to_walk(walk, fill, walls, protect, exterior=None):
+    """Masque praticable corrigé : ajout du sol manquant, retrait des murs du plan (sauf sous les tracés `protect` : portes) et de tout ce qui est hors de l'arène."""
     out = walk | fill
     out &= ~walls | protect
+    if exterior is not None:
+        out &= ~exterior
     return out
 
 
@@ -120,9 +129,9 @@ def main(argv=None):
         return 1
     labels = ma.classify(median, data["colors"])
     ma.apply_overrides(labels, data["overrides"])
-    fill, walls = corrections(labels, ma.CODES["sol"], cv2.imread(str(path)), inset)
+    fill, walls, exterior = corrections(labels, ma.CODES["sol"], cv2.imread(str(path)), inset)
     walk = ma.walkable_from_classes(labels)
-    print(json.dumps({"map": args.map, "ajout_pixels": int((fill & ~walk).sum()), "retrait_pixels": int((walk & walls).sum()), "praticable_avant": round(float(walk.mean()), 3)}, ensure_ascii=False))
+    print(json.dumps({"map": args.map, "ajout_pixels": int((fill & ~walk).sum()), "retrait_pixels": int((walk & walls).sum()), "hors_carte_pixels": int((walk & exterior).sum()), "praticable_avant": round(float(walk.mean()), 3)}, ensure_ascii=False))
     return 0
 
 

@@ -17,7 +17,8 @@ Chaque pixel prend la classe de la couleur choisie la plus proche, à moins de l
 Les tyroliennes sont des paires de cercles : une station chacun (centre, rayon, direction par laquelle on y entre ou on en sort, les deux directions d'une paire étant à 180 degrés l'une de l'autre : l'écart est réparti entre les deux), valables dans les deux sens. Le trait qui relie
 les deux centres sur la minimap a souvent la couleur des murs : sous ce trait, les pixels non praticables entourés de sol sont rendus praticables (le trait ne coupe pas le sol),
 sans toucher aux vrais murs épais. Les zones de départ sont des rectangles (deux au plus par équipe), l'alignement sur le plan stratégique des paires de points (minimap, plan).
-Avec `usePlan`, le masque est ensuite recoupé avec le plan stratégique (plan_mask.py ; aperçu : <Carte>_plan_ajouts.png et <Carte>_plan_retraits.png).
+Un trait ou une zone de classe « passage possible en dessous » (`under`) garde praticable le sol qu'il recouvre (un bord d'étage où l'on tire par-dessus se longe par le niveau du dessous) tout en gardant sa classe dans <Carte>_classes.png.
+Avec `usePlan`, le masque est ensuite recoupé avec le plan stratégique (plan_mask.py) puis avec les positions lues avec certitude (elles font foi : reads_step) ; aperçu : <Carte>_plan_ajouts.png et <Carte>_plan_retraits.png.
 Sorties : <Carte>.png (praticable : sol, portes, tracé des tyroliennes entouré de sol), <Carte>_lignes.png (murs), <Carte>_classes.png (toutes les classes), map_teleports.json
 (centres des paires), map_stations.json (rayon et direction), map_doors.json (portes et fenêtres), map_capture.json, map_spawns.json et map_plan_insets.json. Une annotation l'emporte sur ce que les détections
 automatiques avaient trouvé."""
@@ -174,17 +175,37 @@ def _override(o, unit):
     """Zone de remplacement de classe : polygone, classe remplacée (ou « any » : tout pixel de la zone) et classe d'arrivée."""
     if not (isinstance(o, dict) and o.get("to") in CODES and (o.get("from") == "any" or o.get("from") in CODES)):
         raise ValueError(f"zone de classe invalide : {o}")
-    return {"polygon": _polygon(o.get("polygon"), unit), "from": o["from"], "to": o["to"]}
+    return {"polygon": _polygon(o.get("polygon"), unit), "from": o["from"], "to": o["to"], "under": o.get("under") is True}
+
+
+def _polygon_mask(polygon, h, w):
+    """Image bool du polygone (sommets en fractions) à l'échelle w x h : le centre du pixel décide."""
+    shape = np.zeros((h, w), np.uint8)
+    cv2.fillPoly(shape, [np.array([[round(x * w - 0.5), round(y * h - 0.5)] for x, y in polygon], np.int32)], 255)
+    return shape > 0
+
+
+def blocking_lines(doors):
+    """Traits tracés qui bloquent le passage : fenêtres, murs et tirs par-dessus, sauf ceux qu'on peut passer par en dessous (l'autre niveau d'Atlantis ou de The Cliff)."""
+    return [d for d in doors if d["kind"] != "porte" and not d.get("under")]
+
+
+def under_layer(shape, doors, overrides, floor):
+    """Sol que les traits et zones « passage possible en dessous » ne bloquent pas : un bord d'étage où l'on tire par-dessus se longe en dessous. Ne rend praticable que ce qui l'était
+    avant ces traits et ces zones (`floor`) : le mur qui n'était pas du sol le reste."""
+    h, w = shape
+    keep = _line_layer(shape, [d for d in doors if d["kind"] != "porte" and d.get("under")])
+    for o in overrides:
+        if o.get("under"):
+            keep |= _polygon_mask(o["polygon"], h, w)
+    return keep & floor
 
 
 def apply_overrides(labels, overrides):
     """Remplace dans chaque zone la classe `from` (ou toute classe, y compris aucune, pour « any ») par `to`. Même règle que applyOverrides du site : le centre du pixel décide."""
     h, w = labels.shape
     for o in overrides:
-        shape = np.zeros((h, w), np.uint8)
-        # les pixels ont leur centre à (x + 0,5) / w : on remplit le polygone à l'échelle w x h, sans le décalage de burn_shapes (sommets à (w - 1))
-        cv2.fillPoly(shape, [np.array([[round(x * w - 0.5), round(y * h - 0.5)] for x, y in o["polygon"]], np.int32)], 255)
-        inside = shape > 0
+        inside = _polygon_mask(o["polygon"], h, w)  # sans le décalage de burn_shapes (sommets à (w - 1))
         labels[inside & (True if o["from"] == "any" else labels == CODES[o["from"]])] = CODES[o["to"]]
 
 
@@ -207,7 +228,7 @@ def validate(data):
         if not (unit(d.get("from")) and unit(d.get("to"))):
             raise ValueError(f"porte invalide : {d}")
         kind = d.get("kind") if d.get("kind") in ("fenetre", "mur", "tir") else "porte"
-        doors.append({"from": d["from"], "to": d["to"], "kind": kind, "glass": kind == "porte" and bool(d.get("glass")), "side": d["side"] if (kind == "fenetre" or (kind == "porte" and d.get("glass"))) and d.get("side") in (-1, 1) else 0})
+        doors.append({"from": d["from"], "to": d["to"], "kind": kind, "glass": kind == "porte" and bool(d.get("glass")), "side": d["side"] if (kind == "fenetre" or (kind == "porte" and d.get("glass"))) and d.get("side") in (-1, 1) else 0, "under": kind != "porte" and d.get("under") is True})
     spawns = {}
     for team in ("A", "B"):
         rects = data.get("spawns", {}).get(team, [])
@@ -254,23 +275,25 @@ def refused_share(conn, map_name, mask):
     return map_mask.share_outside(mask, points) if points else None
 
 
-def plan_step(conn, map_name, data, labels, walk):
+def plan_step(conn, map_name, data, labels, walk, under=None):
     """Recoupe le masque praticable avec le plan stratégique de la carte (plan_mask.py) : ajoute le sol manquant, retire les murs du plan, sauf sous les portes tracées. Renvoie (masque
-    praticable corrigé, résumé). Les classes du masque (labels) reçoivent le sol ajouté. Refusé si la correction ferait refuser plus de lectures sûres qu'avant."""
+    praticable corrigé, résumé). `under` : sol que les traits et zones « passage possible en dessous » gardent praticable. Les classes du masque (labels) reçoivent le sol ajouté. Refusé si la correction ferait refuser plus de lectures sûres qu'avant."""
     import plan_mask
 
     path = plan_mask.plan_file(map_name)
     inset = plan_mask.inset_of(map_name, data["inset"])
     if path is None or not inset:
         return walk, {"plan": "non appliqué : pas de plan de cette carte ou pas de cadre d'alignement (outil Alignement)"}
-    fill, walls = plan_mask.corrections(labels, CODES["sol"], cv2.imread(str(path)), inset)
+    fill, walls, exterior = plan_mask.corrections(labels, CODES["sol"], cv2.imread(str(path)), inset)
     protect = _line_layer(walk.shape, [d for d in data["doors"] if d["kind"] == "porte"])
-    fixed = plan_mask.apply_to_walk(walk, fill, walls, protect)
-    fixed &= ~_line_layer(walk.shape, [d for d in data["doors"] if d["kind"] != "porte"])
+    fixed = plan_mask.apply_to_walk(walk, fill, walls, protect, exterior)
+    fixed &= ~_line_layer(walk.shape, blocking_lines(data["doors"]))
+    if under is not None:
+        fixed |= under  # le passage possible en dessous reste praticable, plan ou pas
     added, removed = fixed & ~walk, walk & ~fixed
     before = refused_share(conn, map_name, cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST))
     after = refused_share(conn, map_name, cv2.resize(fixed.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST))
-    info = {"plan_ajout_pixels": int(added.sum()), "plan_retrait_pixels": int(removed.sum())}
+    info = {"plan_ajout_pixels": int(added.sum()), "plan_retrait_pixels": int(removed.sum()), "plan_hors_carte_pixels": int((walk & exterior).sum())}
     base = max(1, int(walk.sum()))
     if added.sum() > plan_mask.MAX_ADD_SHARE * base or removed.sum() > plan_mask.MAX_CUT_SHARE * base:
         return walk, {"plan": f"refusé : il ajouterait {added.sum() / base:.0%} et retirerait {removed.sum() / base:.0%} du sol saisi (maximum {plan_mask.MAX_ADD_SHARE:.0%} et {plan_mask.MAX_CUT_SHARE:.0%}) : le sol de ce plan n'est pas celui de la minimap"}
@@ -286,6 +309,39 @@ def plan_step(conn, map_name, data, labels, walk):
     return fixed, info
 
 
+READS_DISK_PX = 2  # rayon (pixels de la médiane) du sol ajouté autour d'une lecture sûre
+READS_SUPPORT = 0.02  # une lecture sûre n'ajoute du sol que si une autre lecture sûre est à moins de cette distance (fraction de la largeur) : une lecture isolée est du bruit
+READS_MAX_ADD_SHARE = 0.15  # les lectures n'ajoutent pas plus que cette part du sol
+
+
+def reads_step(conn, map_name, walk, doors):
+    """Les positions lues avec certitude font foi : là où un joueur a été lu de façon sûre (et soutenue par une autre lecture voisine), le sol est praticable, quoi qu'en dise une
+    couleur de classe (Atlantis : le joueur 2 de la game 31 est lu sûrement à 4,9 s sur un contour classé en mur). Sauf sous les fenêtres, murs et tirs par-dessus tracés à la main.
+    Renvoie (masque praticable, résumé) ; aucune lecture ou aucune table de lectures : rien ne change."""
+    import map_mask
+
+    try:
+        points = map_mask.read_points(conn, map_name)
+    except sqlite3.OperationalError:
+        return walk, {}
+    if not points:
+        return walk, {}
+    h, w = walk.shape
+    cells = {}
+    for x, y in points:
+        cells.setdefault((int(x / READS_SUPPORT), int(y / READS_SUPPORT)), []).append((x, y))
+    layer = np.zeros((h, w), np.uint8)
+    for (i, j), here in cells.items():
+        around = [q for di in (-1, 0, 1) for dj in (-1, 0, 1) for q in cells.get((i + di, j + dj), ())]
+        for x, y in here:
+            if sum(1 for q in around if abs(q[0] - x) <= READS_SUPPORT and abs(q[1] - y) <= READS_SUPPORT) >= 2:  # elle-même et une autre
+                cv2.circle(layer, (round(x * (w - 1)), round(y * (h - 1))), READS_DISK_PX, 255, -1)
+    added = (layer > 0) & ~walk & ~_line_layer(walk.shape, blocking_lines(doors))
+    if added.sum() > READS_MAX_ADD_SHARE * max(1, int(walk.sum())):
+        return walk, {"lectures": f"non appliquées : elles ajouteraient {added.sum() / max(1, int(walk.sum())):.0%} du sol (maximum {READS_MAX_ADD_SHARE:.0%})"}
+    return walk | added, {"lectures_ajout_pixels": int(added.sum())}
+
+
 def apply(conn, map_name):
     """Écrit les fichiers du programme d'après l'annotation de la carte. Renvoie un résumé (dict), ou None s'il n'y a pas d'annotation ou de médiane."""
     raw = annotation_of(conn, map_name)
@@ -296,14 +352,24 @@ def apply(conn, map_name):
     summary = {"map": map_name}
     if data["colors"] or data["capture"] or data["doors"] or data["overrides"]:
         labels = classify(median, data["colors"])
+        floor_before = walkable_from_classes(labels)  # le sol avant zones de classe et tracés : base du « passage possible en dessous »
         apply_overrides(labels, data["overrides"])
         burn_shapes(labels, data["doors"], data["capture"], data["spawns"], [s for t in data["tps"] for s in (t["a"], t["b"])])
         walk = walkable_from_classes(labels)
         open_tp_paths(walk, data["tps"])
-        walk &= ~_line_layer(walk.shape, [d for d in data["doors"] if d["kind"] != "porte"])  # fenêtres et traits de mur ne se traversent pas, même sous une flèche de tyrolienne
+        walk &= ~_line_layer(walk.shape, blocking_lines(data["doors"]))  # fenêtres, murs et tirs ne se traversent pas, même sous une flèche de tyrolienne
+        under = under_layer(walk.shape, data["doors"], data["overrides"], floor_before)
+        walk |= under
         if data["use_plan"]:
-            walk, plan_info = plan_step(conn, map_name, data, labels, walk)
+            before_plan = walk
+            walk, plan_info = plan_step(conn, map_name, data, labels, walk, under)
             summary.update(plan_info)
+            walk, reads_info = reads_step(conn, map_name, walk, data["doors"])
+            summary.update(reads_info)
+            if walk is not before_plan:  # aperçu : tout ce qui a changé, plan et lectures ensemble
+                labels[walk & ~before_plan] = CODES["sol"]
+                cv2.imwrite(str(MASK_DIR / f"{map_name}_plan_ajouts.png"), (walk & ~before_plan).astype(np.uint8) * 255)
+                cv2.imwrite(str(MASK_DIR / f"{map_name}_plan_retraits.png"), (before_plan & ~walk).astype(np.uint8) * 255)
         mask = cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST)
         summary["praticable"] = round(float(walk.mean()), 3)
         refused = refused_share(conn, map_name, mask)

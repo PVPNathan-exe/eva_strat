@@ -84,6 +84,7 @@ export function MapMapping({ map }: { map: string }) {
   const [overrideFrom, setOverrideFrom] = useState<ClassName | 'any'>('tir');
   const [overrideTo, setOverrideTo] = useState<ClassName>('vue');
   const [oneWay, setOneWay] = useState(false);
+  const [underNew, setUnderNew] = useState(false); // les prochains traits ou zones laissent passer par en dessous
   const [team, setTeam] = useState<Team>('A');
   const [note, setNote] = useState<string | null>(null);
 
@@ -123,7 +124,7 @@ export function MapMapping({ map }: { map: string }) {
   };
 
   const addOpening = (from: Point, to: Point, side: Opening['side']) =>
-    update((a) => ({ ...a, doors: [...a.doors, { from, to, kind: opening === 'fenetre' || opening === 'mur' || opening === 'tir' ? opening : 'porte', glass: opening === 'porte_vitre', side }] }));
+    update((a) => ({ ...a, doors: [...a.doors, { from, to, kind: opening === 'fenetre' || opening === 'mur' || opening === 'tir' ? opening : 'porte', glass: opening === 'porte_vitre', side, under: underNew && opening !== 'porte' && opening !== 'porte_vitre' }] }));
 
   const onDown = (p: Pixel) => {
     const d = draftRef.current;
@@ -199,7 +200,7 @@ export function MapMapping({ map }: { map: string }) {
 
   // Forme terminée : zone de capture (jouable) ou zone de classe (remplace une classe par une autre).
   const addPolygon = (points: Point[]) => {
-    if (tool === 'zones') update((a) => ({ ...a, overrides: [...a.overrides, { polygon: points, from: overrideFrom, to: overrideTo }] }));
+    if (tool === 'zones') update((a) => ({ ...a, overrides: [...a.overrides, { polygon: points, from: overrideFrom, to: overrideTo, under: underNew }] }));
     else update((a) => ({ ...a, capture: [...a.capture, points] }));
     setDraft(NO_DRAFT);
   };
@@ -217,6 +218,8 @@ export function MapMapping({ map }: { map: string }) {
     setDraft(NO_DRAFT);
   };
 
+  const toggleUnder = (key: 'doors' | 'overrides', i: number) =>
+    update((a) => ({ ...a, [key]: a[key].map((item, j) => (j === i ? { ...item, under: !item.under } : item)) }) as MapAnnotation);
   const without = <K extends 'tps' | 'doors' | 'capture' | 'overrides'>(key: K, i: number) => update((a) => ({ ...a, [key]: a[key].filter((_, j) => j !== i) }) as MapAnnotation);
   const removePair = (i: number) =>
     update((a) => {
@@ -290,6 +293,9 @@ export function MapMapping({ map }: { map: string }) {
                 libre au clic) : dans cette zone, les pixels de la première classe prennent la seconde.
               </p>
               <label>
+                <input type="checkbox" checked={underNew} onChange={(e) => setUnderNew(e.target.checked)} /> Passage possible en dessous (le sol de la zone reste praticable : bord d'étage où l'on tire par-dessus mais où l'on passe par le niveau du dessous)
+              </label>
+              <label>
                 Remplacer{' '}
                 <select value={overrideFrom} onChange={(e) => setOverrideFrom(e.target.value as ClassName | 'any')}>
                   <option value="any">tout pixel</option>
@@ -312,6 +318,9 @@ export function MapMapping({ map }: { map: string }) {
                 {annotation.overrides.map((o, i) => (
                   <li key={i}>
                     Zone {i + 1} : {o.from === 'any' ? 'tout pixel' : CLASS_INFO.find((k) => k.name === o.from)?.label} devient {CLASS_INFO.find((k) => k.name === o.to)?.label} ({o.polygon.length} points)
+                    <label>
+                      <input type="checkbox" checked={o.under} onChange={() => toggleUnder('overrides', i)} /> passage en dessous
+                    </label>
                     <button onClick={() => without('overrides', i)}>Retirer</button>
                   </li>
                 ))}
@@ -344,6 +353,9 @@ export function MapMapping({ map }: { map: string }) {
                 ))}
               </div>
               <label>
+                <input type="checkbox" checked={underNew} disabled={opening === 'porte' || opening === 'porte_vitre'} onChange={(e) => setUnderNew(e.target.checked)} /> Passage possible en dessous (le trait bloque l'étage, pas le niveau du dessous)
+              </label>
+              <label>
                 <input type="checkbox" checked={oneWay} disabled={!canOneWay} onChange={(e) => setOneWay(e.target.checked)} /> Sens unique (fenêtre ou porte vitrée visible d'un seul côté)
               </label>
               <ul className="mapping__list">
@@ -351,6 +363,11 @@ export function MapMapping({ map }: { map: string }) {
                   <li key={i}>
                     {d.kind === 'fenetre' ? 'Fenêtre' : d.kind === 'mur' ? 'Mur' : d.kind === 'tir' ? 'Tir par-dessus' : d.glass ? 'Porte vitrée' : 'Porte'} {i + 1}
                     {d.side !== 0 ? ' à sens unique' : ''}
+                    {d.kind !== 'porte' && (
+                      <label>
+                        <input type="checkbox" checked={d.under} onChange={() => toggleUnder('doors', i)} /> passage en dessous
+                      </label>
+                    )}
                     <button onClick={() => without('doors', i)}>Retirer</button>
                   </li>
                 ))}
@@ -424,13 +441,13 @@ export function MapMapping({ map }: { map: string }) {
       </div>
       <div className="mapping__plan-option">
         <label>
-          <input type="checkbox" checked={annotation.usePlan} onChange={(e) => update((a) => ({ ...a, usePlan: e.target.checked }))} /> Corriger le masque avec le plan stratégique à l'application (nécessite le cadre de l'outil Alignement)
+          <input type="checkbox" checked={annotation.usePlan} onChange={(e) => update((a) => ({ ...a, usePlan: e.target.checked }))} /> Corriger le masque avec le plan stratégique et les positions lues à l'application (le plan nécessite le cadre de l'outil Alignement)
         </label>
         <label>
           <input type="checkbox" checked={showPlan} disabled={!annotation.usePlan} onChange={(e) => setShowPlan(e.target.checked)} /> Montrer les corrections du dernier « Appliquer » (blanc : sol ajouté, magenta : mur du plan retiré)
         </label>
         <p className="mapping__hint">
-          Le plan ajoute le sol que la saisie a oublié à l'intérieur de l'arène et retire les murs du plan sur lesquels la saisie dit « praticable ». Il n'est utilisé que si son sol ressemble à celui de la
+          Le plan ajoute le sol que la saisie a oublié à l'intérieur de l'arène, retire les murs du plan sur lesquels la saisie dit « praticable » et tout ce qui est hors de l'arène. Les positions lues avec certitude (soutenues par une autre lecture voisine) rendent ensuite praticable l'endroit où un joueur a été lu, même sur un contour classé en mur (les joueurs peuvent passer en dessous d'un étage). Il n'est utilisé que si son sol ressemble à celui de la
           minimap (Atlantis : +9 % de sol) : sinon (Polaris, Artefact) le programme le refuse, comme il refuse toute correction qui ferait refuser plus de lectures sûres.
         </p>
       </div>

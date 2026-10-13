@@ -146,11 +146,11 @@ test('une zone de remplacement change la classe des seuls pixels voulus, dans la
   const labels = new Uint8Array(100).fill(3);
   for (let x = 0; x < 10; x++) labels[x] = 2;
   const zone: [number, number][] = [[0, 0], [0.5, 0], [0.5, 1], [0, 1]]; // moitié gauche
-  applyOverrides(labels, 10, 10, [{ polygon: zone, from: 'tir', to: 'vue' }]);
+  applyOverrides(labels, 10, 10, [{ polygon: zone, from: 'tir', to: 'vue', under: false }]);
   assert.equal(labels[5 * 10 + 2], 4); // tir dans la zone devient vue seulement (code 4)
   assert.equal(labels[5 * 10 + 7], 3); // hors de la zone : inchangé
   assert.equal(labels[2], 2); // un mur dans la zone n'est pas un tir : inchangé
-  applyOverrides(labels, 10, 10, [{ polygon: zone, from: 'any', to: 'sol' }]);
+  applyOverrides(labels, 10, 10, [{ polygon: zone, from: 'any', to: 'sol', under: false }]);
   assert.equal(labels[2], 1); // « toutes les classes » : le mur aussi
   assert.equal(labels[5 * 10 + 7], 3);
 });
@@ -183,4 +183,17 @@ test('le recoupement avec le plan stratégique est une option choisie carte par 
   assert.equal(sanitize({}).usePlan, false);
   assert.equal(sanitize({ usePlan: true }).usePlan, true);
   assert.equal(sanitize({ usePlan: 'oui' }).usePlan, false);
+});
+
+test('un trait ou une zone « passage possible en dessous » est lu tel quel, sauf pour une porte', () => {
+  const a = sanitize({
+    doors: [
+      { from: [0.1, 0.1], to: [0.2, 0.1], kind: 'tir', under: true },
+      { from: [0.1, 0.2], to: [0.2, 0.2], kind: 'tir' },
+      { from: [0.1, 0.3], to: [0.2, 0.3], kind: 'porte', under: true },
+    ],
+    overrides: [{ polygon: [[0.1, 0.1], [0.2, 0.1], [0.2, 0.3]], from: 'any', to: 'tir', under: true }, { polygon: [[0.1, 0.1], [0.2, 0.1], [0.2, 0.3]], from: 'any', to: 'tir' }],
+  });
+  assert.deepEqual(a.doors.map((d) => d.under), [true, false, false]);
+  assert.deepEqual(a.overrides.map((o) => o.under), [true, false]);
 });

@@ -40,6 +40,7 @@ export interface Opening extends Segment {
   kind: OpeningKind;
   glass: boolean;
   side: -1 | 0 | 1;
+  under: boolean; // passage possible en dessous : le trait bloque l'étage mais pas le niveau du dessous (Atlantis, The Cliff) : le sol qu'il recouvre reste praticable dans le masque
 }
 export interface LandmarkPair {
   minimap: Point;
@@ -50,6 +51,7 @@ export interface ClassOverride {
   polygon: Point[];
   from: ClassName | 'any';
   to: ClassName;
+  under: boolean; // passage possible en dessous : le sol de la zone reste praticable dans le masque, malgré la classe d'arrivée (mur, tir par-dessus, vue seulement)
 }
 export interface MapAnnotation {
   colors: PickedColor[];
@@ -142,7 +144,7 @@ export function sanitize(raw: unknown): MapAnnotation {
   for (const d of Array.isArray(r.doors) ? r.doors : []) {
     if (!isPoint(d?.from) || !isPoint(d?.to)) continue;
     const kind: OpeningKind = d.kind === 'fenetre' || d.kind === 'mur' || d.kind === 'tir' ? d.kind : 'porte';
-    out.doors.push({ from: d.from, to: d.to, kind, glass: kind === 'porte' && Boolean(d.glass), side: (kind === 'fenetre' || (kind === 'porte' && d.glass)) && (d.side === 1 || d.side === -1) ? d.side : 0 });
+    out.doors.push({ from: d.from, to: d.to, kind, glass: kind === 'porte' && Boolean(d.glass), side: (kind === 'fenetre' || (kind === 'porte' && d.glass)) && (d.side === 1 || d.side === -1) ? d.side : 0, under: kind !== 'porte' && d.under === true });
   }
   const sp = (r.spawns ?? {}) as Record<string, unknown>;
   for (const team of ['A', 'B'] as const) out.spawns[team] = (Array.isArray(sp[team]) ? (sp[team] as unknown[]) : []).filter(isRect).slice(0, MAX_SPAWNS_PER_TEAM);
@@ -152,7 +154,7 @@ export function sanitize(raw: unknown): MapAnnotation {
   }
   for (const o of Array.isArray(r.overrides) ? (r.overrides as ClassOverride[]) : []) {
     const polygon = readPolygon(o?.polygon);
-    if (polygon && (o.from === 'any' || names.has(o.from)) && names.has(o.to) && out.overrides.length < MAX_OVERRIDES) out.overrides.push({ polygon, from: o.from, to: o.to });
+    if (polygon && (o.from === 'any' || names.has(o.from)) && names.has(o.to) && out.overrides.length < MAX_OVERRIDES) out.overrides.push({ polygon, from: o.from, to: o.to, under: o.under === true });
   }
   out.usePlan = r.usePlan === true;
   for (const p of Array.isArray(r.pairs) ? r.pairs : []) if (isPoint(p?.minimap) && isPoint(p?.plan)) out.pairs.push({ minimap: p.minimap, plan: p.plan });
