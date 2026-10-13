@@ -1,0 +1,120 @@
+/* Éléments communs de l'interface : aide repliable, sous-onglets, menu déroulant de calques. */
+
+.help {
+  margin: 0.3rem 0;
+  color: var(--c-text-muted);
+  font-size: 0.85rem;
+}
+
+.help > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--c-text-soft);
+}
+
+.help > summary:hover {
+  color: var(--c-text);
+}
+
+.help__body {
+  max-width: 75ch;
+  margin: 0.4rem 0 0;
+  line-height: 1.45;
+}
+
+.subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.subtabs button {
+  padding: 0.35rem 0.9rem;
+  background: transparent;
+  color: var(--c-text-muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.subtabs button.is-active {
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  border-color: var(--c-border-strong);
+}
+
+.menu {
+  position: relative;
+}
+
+.menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  list-style: none;
+  background: var(--c-border);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu[open] > summary {
+  border-color: var(--c-accent);
+}
+
+.menu__panel {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 10;
+  display: grid;
+  gap: 0.4rem;
+  min-width: 15rem;
+  max-width: min(26rem, 90vw);
+  padding: 0.6rem 0.75rem;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px var(--c-shadow);
+}
+
+.menu__panel label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  color: var(--c-text-soft);
+}
+
+.fold {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.fold > summary {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .menu__panel {
+    position: fixed;
+    top: 6rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    max-width: none;
+  }
+}

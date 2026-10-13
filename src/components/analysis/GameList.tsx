@@ -1,8 +1,8 @@
-// Panneau latéral : une ligne par game. Carte, bornes (position courante du lecteur),
-// suppression, et pose des marqueurs début puis fin d'une nouvelle game.
+// Panneau latéral : une ligne par game (numéro, carte, bornes, état des positions). La game choisie se déplie : noms des équipes, carte, bornes (position courante du lecteur),
+// suppression. Pose aussi les marqueurs début puis fin d'une nouvelle game.
 
 import { useState } from 'react';
-import { ArrowLeftToLine, ArrowRight, ArrowRightToLine, Play, Square } from 'lucide-react';
+import { AlertTriangle, ArrowLeftToLine, ArrowRight, ArrowRightToLine, Play, Square } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { formatTime } from '../../lib/timeline';
@@ -51,54 +51,64 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
     if (ok) setPendingStart(null);
   };
 
-  const row = (g: Game, index: number) => (
-    <li key={g.id} className={`game${g.id === selectedGameId ? ' is-selected' : ''}`}>
-      <div className="game__head" onClick={() => { selectGame(g.id); requestSeek(g.start_s); }}>
-        <strong>Game {index + 1}</strong>
-        <span className="game__time">
-          {formatTime(g.start_s)} <ArrowRight className="ic" /> {formatTime(g.end_s)}
-        </span>
-      </div>
-      {(g.status === 'detected' || g.doubts.length > 0) && (
-        <div className="game__check">
-          <span>
-            {g.status === 'detected' ? 'Détectée automatiquement' : 'Écart avec la détection automatique'}
-            {g.doubts.length ? ' (à vérifier) :' : ''}
+  const row = (g: Game, index: number) => {
+    const open = g.id === selectedGameId;
+    const toCheck = g.status === 'detected' || g.doubts.length > 0;
+    return (
+      <li key={g.id} className={`game${open ? ' is-selected' : ''}`}>
+        <div className="game__head" onClick={() => { selectGame(g.id); requestSeek(g.start_s); }}>
+          <span className={`game__dot${g.samples > 0 ? ' is-read' : ''}`} title={g.samples > 0 ? `Positions lues (${g.samples} points)` : 'Positions pas encore lues'} />
+          <strong>Game {index + 1}</strong>
+          <span className="game__map">{g.map ?? 'carte ?'}</span>
+          {toCheck && <AlertTriangle className="ic game__warn" aria-label="À vérifier" />}
+          <span className="game__time">
+            {formatTime(g.start_s)} <ArrowRight className="ic" /> {formatTime(g.end_s)}
           </span>
-          {g.doubts.map((d, i) => (
-            <button key={i} className="game__doubt" onClick={() => requestSeek(d.start_s)}>
-              {formatTime(d.start_s)} · {d.label}
-            </button>
-          ))}
-          {g.status === 'detected' && (
-            <button onClick={() => void act(() => analysisApi.patchGame(g.id, { status: 'confirmed' }))}>Confirmer</button>
-          )}
         </div>
-      )}
-      {g.samples > 0 && <div className="game__positions">Positions lues ({g.samples} points)</div>}
-      <GameTeams game={g} />
-      <div className="game__actions">
-        <select value={g.map ?? ''} onChange={(e) => void act(() => analysisApi.patchGame(g.id, { map: e.target.value || null }))}>
-          <option value="">Carte ?</option>
-          {builtinMaps.map((m) => (
-            <option key={m.id} value={m.name}>{m.name}</option>
-          ))}
-        </select>
-        <button title="Début = position actuelle" onClick={() => void act(() => analysisApi.patchGame(g.id, { start_s: currentTime }))}>
-          <ArrowLeftToLine className="ic" /> début ici
-        </button>
-        <button title="Fin = position actuelle" onClick={() => void act(() => analysisApi.patchGame(g.id, { end_s: currentTime }))}>
-          fin ici <ArrowRightToLine className="ic" />
-        </button>
-        <button
-          className="game__delete"
-          onClick={() => window.confirm('Supprimer cette game ?') && void act(() => analysisApi.deleteGame(g.id))}
-        >
-          Supprimer
-        </button>
-      </div>
-    </li>
-  );
+        {open && (
+          <div className="game__body">
+            {toCheck && (
+              <div className="game__check">
+                <span>
+                  {g.status === 'detected' ? 'Détectée automatiquement' : 'Écart avec la détection automatique'}
+                  {g.doubts.length ? ' (à vérifier) :' : ''}
+                </span>
+                {g.doubts.map((d, i) => (
+                  <button key={i} className="game__doubt" onClick={() => requestSeek(d.start_s)}>
+                    {formatTime(d.start_s)} · {d.label}
+                  </button>
+                ))}
+                {g.status === 'detected' && (
+                  <button onClick={() => void act(() => analysisApi.patchGame(g.id, { status: 'confirmed' }))}>Confirmer</button>
+                )}
+              </div>
+            )}
+            <GameTeams game={g} />
+            <div className="game__actions">
+              <select value={g.map ?? ''} onChange={(e) => void act(() => analysisApi.patchGame(g.id, { map: e.target.value || null }))}>
+                <option value="">Carte ?</option>
+                {builtinMaps.map((m) => (
+                  <option key={m.id} value={m.name}>{m.name}</option>
+                ))}
+              </select>
+              <button title="Début = position actuelle" onClick={() => void act(() => analysisApi.patchGame(g.id, { start_s: currentTime }))}>
+                <ArrowLeftToLine className="ic" /> début ici
+              </button>
+              <button title="Fin = position actuelle" onClick={() => void act(() => analysisApi.patchGame(g.id, { end_s: currentTime }))}>
+                fin ici <ArrowRightToLine className="ic" />
+              </button>
+              <button
+                className="game__delete"
+                onClick={() => window.confirm('Supprimer cette game ?') && void act(() => analysisApi.deleteGame(g.id))}
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div className="games">

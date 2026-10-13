@@ -71,7 +71,7 @@
 }
 
 .vision-bar {
-  background: #151a24;
+  background: var(--c-surface-vision);
   border-radius: 8px 8px 0 0;
   padding: 0.3rem 0.6rem;
   font-size: 0.85rem;
@@ -91,20 +91,12 @@
 }
 
 .vision-bar__toggle.is-on {
-  background: #1f6f43;
+  background: var(--c-ok-strong);
   border-color: var(--c-ok);
 }
 
-.vision-bar__layers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-}
-
-.vision-bar__layers label {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
+.vision-bar .menu > summary {
+  padding: 0.25rem 0.6rem;
 }
 
 /* Contrôle à la vraie minimap : une position sans pastille de son équipe autour est cerclée de rouge ; le joueur observé a un anneau blanc. */

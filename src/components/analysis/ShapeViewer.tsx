@@ -224,10 +224,13 @@ export function ShapeViewer({ game }: { game: Game }) {
       </div>
       <MarkPanel game={game} marks={marks} error={markError} correcting={correcting} onCorrecting={setCorrecting} pick={pick} onPick={setPick} onRemove={(id) => void removeMark(id)} onRecomputed={reloadSamples} level={level} onLevel={setLevel} />
       <KillFlagsPanel game={game} />
-      <p className="shapes__note">
+      <details className="help">
+        <summary>Comment lire les contours</summary>
+        <p className="help__body">
         Contour vert : disque et pointe tels que le programme les a lus (pointillé : lecture peu sûre). Contour magenta : position et regard posés à la main. Contour rouge : position que la vraie minimap ne confirme pas. Contour orange pointillé : regard incertain (les directions lues se contredisent, indice sous 40). Le nombre à côté du numéro est l'indice de cohérence du regard : mesuré, le regard lu est dans le cap pour 47 % des lignes sous 20, 66 % de 40 à 60 et 96 % au-dessus de 80.
         Croix rouge : joueur mort. Le contour doit recouvrir la pastille réelle et sa pointe doit viser dans le même sens que le triangle de la pastille.
-      </p>
+        </p>
+      </details>
     </div>
   );
 }

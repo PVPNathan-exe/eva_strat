@@ -93,17 +93,20 @@ export function VideoPlayer({ videoId, duration }: { videoId: number; duration: 
           onClick={toggleVision}
           title="Afficher ou masquer sur la vidéo ce que le programme lit"
         >
-          {visionOn ? <Eye className="ic" /> : <EyeOff className="ic" />} Ce que voit le programme : {visionOn ? 'activé' : 'désactivé'}
+          {visionOn ? <Eye className="ic" /> : <EyeOff className="ic" />} Ce que voit le programme
         </button>
         {visionOn && (
-          <div className="vision-bar__layers">
-            {(Object.keys(VISION_LAYER_LABELS) as (keyof VisionLayers)[]).map((key) => (
-              <label key={key}>
-                <input type="checkbox" checked={layers[key]} onChange={() => toggleLayer(key)} />
-                {VISION_LAYER_LABELS[key]}
-              </label>
-            ))}
-          </div>
+          <details className="menu vision-menu">
+            <summary>Calques ({Object.values(layers).filter(Boolean).length}/{Object.keys(layers).length})</summary>
+            <div className="menu__panel">
+              {(Object.keys(VISION_LAYER_LABELS) as (keyof VisionLayers)[]).map((key) => (
+                <label key={key}>
+                  <input type="checkbox" checked={layers[key]} onChange={() => toggleLayer(key)} />
+                  {VISION_LAYER_LABELS[key]}
+                </label>
+              ))}
+            </div>
+          </details>
         )}
       </div>
       <div className="player-stage" ref={stage}>

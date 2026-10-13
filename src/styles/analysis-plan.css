@@ -78,6 +78,6 @@
 }
 
 .plan .plan__run {
-  background: #1f6f43;
+  background: var(--c-ok-strong);
   border-color: var(--c-ok);
 }

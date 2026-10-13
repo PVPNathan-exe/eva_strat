@@ -30,16 +30,13 @@ export function AnalysisTab() {
     <div className="analysis">
       <div className="analysis__body">
         <section className="analysis__main">
-          <IngestBar />
+          <IngestBar onCalibrate={() => setCalibrating(true)} />
           {videoId !== null && video ? (
             <>
               <VideoPlayer key={videoId} videoId={videoId} duration={video.duration_s} />
               <SegmentTimeline duration={video.duration_s} />
               <AnalysisPlan />
               <CommentsPanel videoName={video.path.split(/[\\/]/).pop() ?? ''} />
-              <button className="analysis__calibrate" onClick={() => setCalibrating(true)}>
-                Calibrer les zones du HUD
-              </button>
             </>
           ) : (
             <p className="analysis__empty">Colle un chemin de vidéo ou une URL pour commencer.</p>

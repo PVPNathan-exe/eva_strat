@@ -113,20 +113,26 @@ export function WeaponsTab() {
           Seulement celles sans nom
         </label>
       </header>
-      <p className="weapons__intro">
+      <details className="help">
+        <summary>À quoi servent ces noms ?</summary>
+        <p className="help__body">
         Ces noms servent au programme (liste des kills, équipement des joueurs). L'arme d'un kill n'est plus lue sur le killfeed : c'est
         l'arme tenue (en noir) sur le bandeau du tueur juste avant le kill, et le gadget du tueur pour une grenade. Il ne reste ici
         que les icônes des bandeaux, et d'anciennes icônes de killfeed tant que des kills les utilisent encore. Les propositions viennent de l'onglet Stratégie, tu peux aussi écrire un autre nom. Plusieurs icônes peuvent porter le même
         nom (une même arme est parfois vue sous des aspects différents).
-      </p>
+        </p>
+      </details>
       {rebuildable.length > 0 && (
         <div className="weapons__batch">
           <Layers className="ic" />
-          <span>
+          <details className="help weapons__batch-help">
+            <summary>Recalcul et verrouillage : mode d'emploi</summary>
+            <p className="help__body">
             <b>Recalcul :</b> un clic mesure la netteté de chaque icône, garde celles qui sont nettes et refait les floues et les signalées, une par une (tu peux continuer à utiliser l'application). Si une icône reste floue, le programme élargit tout seul sa marge de lecture (plus d'images, d'autres games, d'autres joueurs). Puis le programme nomme tout seul celles qui
             ressemblent à un modèle verrouillé. Une forme qu'il ne connaît pas reste à nommer par toi (une arme peut venir d'un autre practice). <b>Cases à cocher :</b> coche les icônes bien nommées et bien lues pour en faire des modèles verrouillés : elles ne sont plus
             recalculées et servent de référence pour deviner les autres.
-          </span>
+            </p>
+          </details>
           <button type="button" className="weapons__batch-go" onClick={() => void startBatch()} disabled={toRebuild.length === 0 || running}>
             {running ? <Loader2 className="ic ic--spin" /> : null} Recalculer les floues et signalées ({toRebuild.length})
           </button>

@@ -470,18 +470,24 @@ export function MapMapping({ map }: { map: string }) {
         <label>
           <input type="checkbox" checked={showPlan} disabled={!annotation.usePlan} onChange={(e) => setShowPlan(e.target.checked)} /> Montrer les corrections du dernier « Appliquer » (blanc : sol ajouté, magenta : mur du plan retiré)
         </label>
-        <p className="mapping__hint">
+        <details className="help">
+          <summary>Ce que fait la correction par le plan</summary>
+          <p className="help__body">
           Le plan ajoute le sol que la saisie a oublié à l'intérieur de l'arène, retire les murs du plan sur lesquels la saisie dit « praticable » et tout ce qui est hors de l'arène. Les positions lues avec certitude (soutenues par une autre lecture voisine) rendent ensuite praticable l'endroit où un joueur a été lu, même sur un contour classé en mur (les joueurs peuvent passer en dessous d'un étage). Il n'est utilisé que si son sol ressemble à celui de la
           minimap (Atlantis : +9 % de sol) : sinon (Polaris, Artefact) le programme le refuse, comme il refuse toute correction qui ferait refuser plus de lectures sûres.
-        </p>
+          </p>
+        </details>
       </div>
       {note && <p className="mapping__message mapping__message--error">{note}</p>}
       {message && <p className={`mapping__message${message.error ? ' mapping__message--error' : ''}`}>{message.text}</p>}
-      <p className="corridor__note">
+      <details className="help">
+        <summary>Ce que fait « Appliquer au programme »</summary>
+        <p className="help__body">
         Atlantis et The Cliff ont un étage et un dessous où l'on peut se trouver : mets en « Sol » les couleurs des deux niveaux, le masque est l'union des deux. « Appliquer » remplace le
         masque, les tyroliennes, les départs et le cadre de cette carte par ce que tu as saisi, pour ce qui est renseigné (les détections automatiques sont écrasées) ; un masque qui
         refuserait plus de 1 % des positions sûres de la carte n'est pas écrit. Les positions déjà enregistrées d'une game ne changent qu'au prochain recalcul.
-      </p>
+        </p>
+      </details>
     </div>
   );
 }

@@ -2,17 +2,12 @@
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
-}
-
-.toolbar__brand {
-  margin-right: 0.5rem;
-  color: var(--c-danger);
-  letter-spacing: 0.5px;
 }
 
 .toolbar button,

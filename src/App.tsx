@@ -41,6 +41,7 @@ export default function App() {
   return (
     <div className="app">
       <nav className="tabs">
+        <strong className="tabs__brand">EVA Strat</strong>
         <button className={view === 'strategie' ? 'is-active' : ''} onClick={() => setView('strategie')}>
           Stratégie
         </button>

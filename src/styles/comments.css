@@ -1,13 +1,19 @@
 /* Commentaires sous la vidéo */
 
 .comments {
+  padding: 0 0.75rem;
+}
+
+.comments > summary {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.comments[open] {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
+  padding-bottom: 0.6rem;
 }
 
 .comments__head {
@@ -17,8 +23,11 @@
   flex-wrap: wrap;
 }
 
-.comments__head h3 {
-  margin: 0;
+.comments__head {
+  justify-content: flex-end;
+}
+
+.comments__live {
   margin-right: auto;
 }
 

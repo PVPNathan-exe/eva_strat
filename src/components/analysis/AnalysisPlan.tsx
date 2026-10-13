@@ -68,10 +68,13 @@ export function AnalysisPlan() {
           {withDoubts > 0 ? `, ${withDoubts} avec des zones à vérifier` : ''}
         </span>
       </summary>
-      <p className="plan__hint">
+      <details className="help">
+        <summary>Comment ça marche</summary>
+        <p className="help__body">
         Vérifie les bornes de chaque game (clique une ligne pour voir la vidéo, corrige dans la liste des games), puis choisis quoi analyser et dans quel
         ordre. Lancer l'analyse confirme les bornes des games cochées. Ce qui est déjà lu et à jour est sauté.
-      </p>
+        </p>
+      </details>
       <div className="plan__tools">
         <button type="button" onClick={() => setChecked(new Set(order))} disabled={job.running}>Tout cocher</button>
         <button type="button" onClick={() => setChecked(new Set())} disabled={job.running}>Tout décocher</button>

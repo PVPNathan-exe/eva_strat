@@ -4,11 +4,21 @@
   display: flex;
   gap: 0.25rem;
   padding: 0.4rem 1rem 0;
-  background: #141822;
+  background: var(--c-surface-deep);
+  overflow-x: auto;
   border-bottom: 1px solid var(--c-border);
 }
 
+.tabs__brand {
+  align-self: center;
+  margin-right: 1rem;
+  color: var(--c-danger);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
 .tabs button {
+  white-space: nowrap;
   padding: 0.4rem 1rem;
   background: transparent;
   color: var(--c-text-muted);

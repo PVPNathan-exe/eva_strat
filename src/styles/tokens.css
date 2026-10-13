@@ -23,4 +23,13 @@
   --c-blue: #3d8bff;
   --c-yellow: #ffd60a;
   --c-cyan: #5adceb;
+
+  /* Accents et variantes sombres des états */
+  --c-accent: #6c8cff;
+  --c-ok-text: #5ad18b;
+  --c-ok-strong: #1f6f43;
+  --c-danger-strong: #7a2630;
+  --c-surface-deep: #141822;
+  --c-surface-vision: #151a24;
+  --c-shadow: rgba(0, 0, 0, 0.45);
 }

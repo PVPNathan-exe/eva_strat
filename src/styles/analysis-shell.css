@@ -16,6 +16,18 @@
   padding: 0.75rem;
 }
 
+@media (max-width: 1000px) {
+  .analysis__body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .analysis__main,
+  .analysis__side {
+    overflow: visible;
+  }
+}
+
 .analysis__empty {
   align-self: center;
   margin: auto;

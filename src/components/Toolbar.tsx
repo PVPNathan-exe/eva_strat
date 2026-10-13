@@ -66,8 +66,6 @@ export function Toolbar() {
 
   return (
     <header className="toolbar">
-      <strong className="toolbar__brand">EVA Strat</strong>
-
       <select
         value={activeMapId ?? ''}
         onChange={(e) => handleSelectMap(e.target.value)}
@@ -87,7 +85,7 @@ export function Toolbar() {
           onChange={(e) => handlePickBuiltin(e.target.value)}
         >
           <option value="" disabled>
-            Choisir une carte…
+            Nouvelle carte depuis un plan…
           </option>
           {builtinMaps.map((b) => (
             <option key={b.id} value={b.id}>

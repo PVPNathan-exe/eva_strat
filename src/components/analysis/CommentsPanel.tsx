@@ -74,9 +74,9 @@ export function CommentsPanel({ videoName }: { videoName: string }) {
   const toggleSlot = (slot: number) => setSlots((s) => (s.includes(slot) ? s.filter((x) => x !== slot) : [...s, slot].sort((a, b) => a - b)));
 
   return (
-    <section className="comments">
+    <details className="comments fold">
+      <summary>Commentaires ({comments.length})</summary>
       <header className="comments__head">
-        <h3>Commentaires</h3>
         <span className="comments__live" title="Position actuelle de la vidéo">
           <Clock className="ic" /> {formatTime(currentTime)}
         </span>
@@ -176,6 +176,6 @@ export function CommentsPanel({ videoName }: { videoName: string }) {
           })}
         </ul>
       )}
-    </section>
+    </details>
   );
 }

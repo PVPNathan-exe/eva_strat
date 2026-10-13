@@ -1,25 +1,37 @@
 /* Onglet Lecture : couloirs lus par le programme et forme des joueurs sur la minimap (voir ReadingTab). */
 
 .reading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.75rem 1rem;
+  min-width: 0;
+}
+
+.reading__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+
+.reading__split {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr));
-  gap: 1.2rem;
-  padding: 1rem;
+  grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  gap: 1rem;
   align-items: start;
 }
 
-.reading__section--wide {
-  grid-column: 1 / -1;
-}
-
-.reading__section h3 {
-  margin: 0 0 0.6rem;
-  color: var(--c-text);
+@media (max-width: 900px) {
+  .reading__split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .reading__pick {
-  display: block;
-  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--c-text-soft);
 }
 
@@ -280,4 +292,116 @@
 
 .marks__message {
   color: var(--c-ok);
+}
+
+.reading__side {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.legend {
+  padding: 0.6rem 0.8rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.legend h4 {
+  margin: 0 0 0.4rem;
+}
+
+.legend ul {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--c-text-soft);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend__swatch {
+  flex: none;
+  width: 1.4rem;
+  height: 0.7rem;
+  border: 2px solid transparent;
+  border-radius: 2px;
+}
+
+.legend__swatch--corridor {
+  background: var(--c-danger-soft);
+  opacity: 0.6;
+}
+
+.legend__swatch--ride {
+  height: 0;
+  border-color: var(--c-ok);
+  border-top-style: dotted;
+  border-width: 3px 0 0;
+}
+
+.legend__swatch--capture {
+  background: color-mix(in srgb, var(--c-ok) 15%, transparent);
+  border-color: var(--c-ok);
+}
+
+.legend__swatch--spawn-a {
+  border: 2px dashed var(--c-orange);
+}
+
+.legend__swatch--spawn-b {
+  border: 2px dashed var(--c-blue);
+}
+
+.legend__swatch--spawn-n {
+  border: 2px dashed var(--c-ok);
+}
+
+.legend__swatch--under {
+  background: var(--c-cyan);
+  opacity: 0.7;
+}
+
+.legend__swatch--porte,
+.legend__swatch--fenetre,
+.legend__swatch--mur,
+.legend__swatch--tir {
+  height: 0;
+  border-width: 3px 0 0;
+}
+
+.legend__swatch--porte {
+  border-color: var(--c-yellow);
+}
+
+.legend__swatch--fenetre {
+  border-color: var(--c-blue);
+}
+
+.legend__swatch--mur {
+  border-color: var(--c-danger);
+}
+
+.legend__swatch--tir {
+  border-color: var(--c-orange);
+}
+
+.legend__hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--c-text-muted);
+}
+
+/* Lecture des formes : la minimap reste à une taille qui laisse voir la barre de lecture et les corrections sans défiler */
+.shapes {
+  width: 100%;
+  max-width: 1100px;
 }

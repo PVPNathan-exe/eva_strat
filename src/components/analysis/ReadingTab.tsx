@@ -1,12 +1,21 @@
-// Onglet « Lecture » : ce que le programme sait de la carte (couloirs) et la forme des joueurs qu'il a lue sur la minimap.
+// Onglet « Lecture » : ce que le programme sait de la carte (couloirs), la forme des joueurs qu'il a lue sur la minimap, et la cartographie à la main.
+// Trois sous-onglets : une seule chose à la fois à l'écran.
 
 import { useEffect, useState } from 'react';
 import { mapsWithReading } from '../../lib/mapReading';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { CaptureSchedule } from './CaptureSchedule';
+import { CorridorLegend } from './CorridorLegend';
 import { CorridorMap } from './CorridorMap';
 import { MapMapping } from './MapMapping';
 import { ShapeViewer } from './ShapeViewer';
+
+type Sub = 'couloirs' | 'joueurs' | 'cartographie';
+const SUBS: { id: Sub; label: string }[] = [
+  { id: 'couloirs', label: 'Couloirs lus' },
+  { id: 'joueurs', label: 'Joueurs sur la minimap' },
+  { id: 'cartographie', label: 'Cartographie à la main' },
+];
 
 export function ReadingTab() {
   const loadVideos = useAnalysisStore((s) => s.loadVideos);
@@ -17,61 +26,69 @@ export function ReadingTab() {
   const game = analysed.find((g) => g.id === selectedId) ?? analysed[0];
   const maps = mapsWithReading();
   const [chosenMap, setChosenMap] = useState('Polaris');
+  const [sub, setSub] = useState<Sub>('couloirs');
   const map = maps.includes(chosenMap) ? chosenMap : maps[0];
 
   useEffect(() => {
     void loadVideos();
   }, [loadVideos]);
 
+  const mapPicker = (
+    <label className="reading__pick">
+      Carte
+      <select value={map} onChange={(e) => setChosenMap(e.target.value)}>
+        {maps.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
   return (
     <div className="reading">
-      <section className="reading__section">
-        <h3>Couloirs lus par le programme</h3>
-        {maps.length === 0 ? (
+      <div className="reading__bar">
+        <nav className="subtabs" aria-label="Sections de l'onglet Lecture">
+          {SUBS.map((s) => (
+            <button key={s.id} className={sub === s.id ? 'is-active' : ''} onClick={() => setSub(s.id)}>
+              {s.label}
+            </button>
+          ))}
+        </nav>
+        {sub !== 'joueurs' && maps.length > 0 && mapPicker}
+        {sub === 'joueurs' && analysed.length > 0 && (
+          <label className="reading__pick">
+            Game
+            <select value={game?.id} onChange={(e) => selectGame(Number(e.target.value))}>
+              {analysed.map((g) => (
+                <option key={g.id} value={g.id}>
+                  Game {games.indexOf(g) + 1}
+                  {g.map ? ` · ${g.map}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      {sub === 'couloirs' &&
+        (maps.length === 0 ? (
           <p className="games__empty">Aucune carte n'a de masque de couloirs (analysis/map_mask.py).</p>
         ) : (
-          <>
-            <label className="reading__pick">
-              Carte :{' '}
-              <select value={map} onChange={(e) => setChosenMap(e.target.value)}>
-                {maps.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="reading__split">
             <CorridorMap key={map} map={map} />
-            <CaptureSchedule key={`${map}-${game?.map === map ? game.id : 'none'}`} map={map} gameId={game?.map === map ? game.id : undefined} />
-          </>
-        )}
-      </section>
-      <section className="reading__section">
-        <h3>Forme des joueurs sur la minimap</h3>
-        {analysed.length === 0 ? (
-          <p className="games__empty">Aucune game analysée : lance l'analyse dans l'onglet Analyse.</p>
-        ) : (
-          <>
-            <label className="reading__pick">
-              Game :{' '}
-              <select value={game?.id} onChange={(e) => selectGame(Number(e.target.value))}>
-                {analysed.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    Game {games.indexOf(g) + 1}{g.map ? ` · ${g.map}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {game && <ShapeViewer key={game.id} game={game} />}
-          </>
-        )}
-      </section>
-      {maps.length > 0 && (
-        <section className="reading__section reading__section--wide">
-          <h3>Cartographie à la main : {map}</h3>
-          <MapMapping key={map} map={map} />
-        </section>
-      )}
+            <aside className="reading__side">
+              <CorridorLegend />
+              <CaptureSchedule key={`${map}-${game?.map === map ? game.id : 'none'}`} map={map} gameId={game?.map === map ? game.id : undefined} />
+            </aside>
+          </div>
+        ))}
+
+      {sub === 'joueurs' &&
+        (analysed.length === 0 ? <p className="games__empty">Aucune game analysée : lance l'analyse dans l'onglet Analyse.</p> : game && <ShapeViewer key={game.id} game={game} />)}
+
+      {sub === 'cartographie' && maps.length > 0 && <MapMapping key={map} map={map} />}
     </div>
   );
 }

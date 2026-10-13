@@ -2,13 +2,13 @@
 // progression, et choix de la vidéo déjà chargée. L'analyse détaillée se lance ensuite depuis le panneau « Analyse détaillée » (AnalysisPlan).
 
 import { useState } from 'react';
-import { Pause, Play, Square } from 'lucide-react';
+import { Pause, Play, Settings2, Square } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { useAnalysisStore } from '../../store/analysisStore';
 
 const STAGE_LABEL = { download: 'Téléchargement', detect: 'Détection des games', maps: 'Lecture des cartes', names: 'Lecture des pseudos', loadout: 'Lecture des équipements', capture: 'Lecture des scores', kills: 'Lecture du killfeed', positions: 'Positions des joueurs' } as const;
 
-export function IngestBar() {
+export function IngestBar({ onCalibrate }: { onCalibrate: () => void }) {
   const [source, setSource] = useState('');
   const [picking, setPicking] = useState(false);
   const { preRoll, postRoll, posEvery } = useAnalysisStore((st) => st.options);
@@ -69,68 +69,50 @@ export function IngestBar() {
       </form>
 
       <div className="ingest__row">
-          <label className="ingest__single" title="Secondes gardées avant le départ du chrono (compte à rebours)">
-            Avant
-            <input
-              className="ingest__preroll"
-              type="number"
-              min={0}
-              max={60}
-              step={0.5}
-              value={preRoll}
-              onChange={(e) => setPreRoll(Math.min(60, Math.max(0, Number(e.target.value) || 0)))}
-              disabled={job.running}
-            />
-            s
-          </label>
-          <label className="ingest__single" title="Secondes gardées après la fin du chrono (écran de victoire)">
-            Après
-            <input
-              className="ingest__preroll"
-              type="number"
-              min={0}
-              max={120}
-              step={0.5}
-              value={postRoll}
-              onChange={(e) => setPostRoll(Math.min(120, Math.max(0, Number(e.target.value) || 0)))}
-              disabled={job.running}
-            />
-            s
-          </label>
-          <label className="ingest__single" title="Une lecture de la minimap toutes les N images de la vidéo : 6 = 5 par seconde à 30 i/s. Moins = plus précis (replay plus fluide, analyse plus longue).">
-            Positions : toutes les
-            <input
-              className="ingest__preroll"
-              type="number"
-              min={1}
-              max={60}
-              step={1}
-              value={posEvery}
-              onChange={(e) => setPosEvery(Math.min(60, Math.max(1, Math.round(Number(e.target.value)) || 1)))}
-              disabled={job.running}
-            />
-            frames
-          </label>
-
-      {videoId !== null && currentVideo && (
-        <button
-          title="Refait la détection de cette vidéo avec les réglages Avant / Après ci-contre. Les games dont les bornes ne changent pas gardent leur analyse ; tes games confirmées ne sont jamais modifiées."
-          disabled={job.running}
-          onClick={() => void startIngest(currentVideo.path, { preRoll, postRoll, skipIfOk: true, detectOnly: true, redetect: true })}
-        >
-          Refaire la détection
-        </button>
-      )}
-
-      {videos.length > 0 && (
-        <select value={videoId ?? ''} onChange={(e) => void selectVideo(Number(e.target.value))}>
-          {videos.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.path.split(/[\\/]/).pop()}
-            </option>
-          ))}
-        </select>
-      )}
+        {videos.length > 0 && (
+          <select value={videoId ?? ''} onChange={(e) => void selectVideo(Number(e.target.value))} aria-label="Vidéo">
+            {videos.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.path.split(/[\\/]/).pop()}
+              </option>
+            ))}
+          </select>
+        )}
+        <details className="menu ingest__options">
+          <summary>
+            <Settings2 className="ic" /> Options
+          </summary>
+          <div className="menu__panel">
+            <label title="Secondes gardées avant le départ du chrono (compte à rebours)">
+              Avant
+              <input className="ingest__preroll" type="number" min={0} max={60} step={0.5} value={preRoll} onChange={(e) => setPreRoll(Math.min(60, Math.max(0, Number(e.target.value) || 0)))} disabled={job.running} />
+              s
+            </label>
+            <label title="Secondes gardées après la fin du chrono (écran de victoire)">
+              Après
+              <input className="ingest__preroll" type="number" min={0} max={120} step={0.5} value={postRoll} onChange={(e) => setPostRoll(Math.min(120, Math.max(0, Number(e.target.value) || 0)))} disabled={job.running} />
+              s
+            </label>
+            <label title="Une lecture de la minimap toutes les N images de la vidéo : 6 = 5 par seconde à 30 i/s. Moins = plus précis (replay plus fluide, analyse plus longue).">
+              Positions : toutes les
+              <input className="ingest__preroll" type="number" min={1} max={60} step={1} value={posEvery} onChange={(e) => setPosEvery(Math.min(60, Math.max(1, Math.round(Number(e.target.value)) || 1)))} disabled={job.running} />
+              images
+            </label>
+            {videoId !== null && currentVideo && (
+              <button
+                type="button"
+                title="Refait la détection de cette vidéo avec les réglages Avant / Après. Les games dont les bornes ne changent pas gardent leur analyse ; tes games confirmées ne sont jamais modifiées."
+                disabled={job.running}
+                onClick={() => void startIngest(currentVideo.path, { preRoll, postRoll, skipIfOk: true, detectOnly: true, redetect: true })}
+              >
+                Refaire la détection
+              </button>
+            )}
+            <button type="button" onClick={onCalibrate}>
+              Calibrer les zones du HUD
+            </button>
+          </div>
+        </details>
       </div>
 
       {job.running && (

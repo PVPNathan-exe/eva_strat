@@ -2,6 +2,7 @@
 // de la carte (cadre aligné sur ses murs, voir planInsets.ts). Tout ce qui n'est pas en rouge est « hors limites » pour le programme.
 
 import { useEffect, useRef, useState } from 'react';
+import { Layers } from 'lucide-react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { loadTinted, readingOf, rotorsOf, type Rgb } from '../../lib/mapReading';
 import { arcPoints, solidArcs, windowArcs } from '../../lib/rotors';
@@ -59,6 +60,28 @@ export function CorridorMap({ map }: { map: string }) {
 
   return (
     <div className="corridor">
+      <details className="menu corridor__layers">
+        <summary><Layers className="ic" /> Calques ({[corridors, walls, stations, spawns, zones, capture, under, lines, ...(rotors ? [rings] : [])].filter(Boolean).length})</summary>
+        <div className="menu__panel corridor__opts">
+        <label><input type="checkbox" checked={corridors} onChange={(e) => setCorridors(e.target.checked)} /> Couloirs (le joueur peut s'y trouver)</label>
+        <label><input type="checkbox" checked={walls} onChange={(e) => setWalls(e.target.checked)} /> Traits de murs lus</label>
+        <label><input type="checkbox" checked={stations} onChange={(e) => setStations(e.target.checked)} /> Tyroliennes</label>
+        <label><input type="checkbox" checked={spawns} onChange={(e) => setSpawns(e.target.checked)} /> Zones de départ</label>
+        <label><input type="checkbox" checked={zones} onChange={(e) => setZones(e.target.checked)} /> Zones peu fiables</label>
+        <label><input type="checkbox" checked={capture} onChange={(e) => setCapture(e.target.checked)} /> Points de capture (zones jouables)</label>
+        <label><input type="checkbox" checked={under} onChange={(e) => setUnder(e.target.checked)} /> Passage en dessous (étages superposés, en bleu clair)</label>
+        {rotors && (
+          <>
+            <label><input type="checkbox" checked={rings} onChange={(e) => setRings(e.target.checked)} /> Anneaux tournants (arcs pleins ; fenêtres en bleu ; extérieur horaire, intérieur anti-horaire)</label>
+            <label className="corridor__time">
+              Instant de game : {ringTime} s
+              <input type="range" min={0} max={120} step={1} value={ringTime} disabled={!rings} onChange={(e) => setRingTime(Number(e.target.value))} />
+            </label>
+          </>
+        )}
+        <label><input type="checkbox" checked={lines} onChange={(e) => setLines(e.target.checked)} /> Portes, fenêtres, murs et tirs tracés (trait pointillé : passage en dessous)</label>
+        </div>
+      </details>
       <div className="corridor__stage">
         {background && <img src={background} alt={aligned ? `Plan ${map}` : `Minimap de ${map}`} draggable={false} />}
         {corridors && reading.maskUrl && (
@@ -136,30 +159,14 @@ export function CorridorMap({ map }: { map: string }) {
         </svg>
         {zones && <ReliabilityLayer reliability={reliability} project={at} showPos showGaze />}
       </div>
-      <div className="corridor__opts">
-        <label><input type="checkbox" checked={corridors} onChange={(e) => setCorridors(e.target.checked)} /> Couloirs (le joueur peut s'y trouver)</label>
-        <label><input type="checkbox" checked={walls} onChange={(e) => setWalls(e.target.checked)} /> Traits de murs lus</label>
-        <label><input type="checkbox" checked={stations} onChange={(e) => setStations(e.target.checked)} /> Tyroliennes</label>
-        <label><input type="checkbox" checked={spawns} onChange={(e) => setSpawns(e.target.checked)} /> Zones de départ</label>
-        <label><input type="checkbox" checked={zones} onChange={(e) => setZones(e.target.checked)} /> Zones peu fiables</label>
-        <label><input type="checkbox" checked={capture} onChange={(e) => setCapture(e.target.checked)} /> Points de capture (zones jouables)</label>
-        <label><input type="checkbox" checked={under} onChange={(e) => setUnder(e.target.checked)} /> Passage en dessous (étages superposés, en bleu clair)</label>
-        {rotors && (
-          <>
-            <label><input type="checkbox" checked={rings} onChange={(e) => setRings(e.target.checked)} /> Anneaux tournants (arcs pleins ; fenêtres en bleu ; extérieur horaire, intérieur anti-horaire)</label>
-            <label className="corridor__time">
-              Instant de game : {ringTime} s
-              <input type="range" min={0} max={120} step={1} value={ringTime} disabled={!rings} onChange={(e) => setRingTime(Number(e.target.value))} />
-            </label>
-          </>
-        )}
-        <label><input type="checkbox" checked={lines} onChange={(e) => setLines(e.target.checked)} /> Portes, fenêtres, murs et tirs tracés (trait pointillé : passage en dessous)</label>
-      </div>
-      <p className="corridor__note">
+      <details className="help">
+        <summary>Comment lire cette carte</summary>
+        <p className="help__body">
         Rouge : couloirs lus par le programme (construits à partir du fond de la minimap). Hors du rouge, une pastille est refusée (reflet, effet d'écran) et une position
         calculée est ramenée au couloir le plus proche. Un joueur peut longer un mur, pas sortir de ces limites. Sur Polaris, le cadre de la minimap sur le plan est aligné
         automatiquement sur les murs du plan ; les autres cartes sont montrées sur la médiane de leur minimap.
-      </p>
+        </p>
+      </details>
     </div>
   );
 }

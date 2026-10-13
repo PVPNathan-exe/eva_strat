@@ -45,12 +45,6 @@
   font-size: 0.9rem;
 }
 
-.game__positions {
-  margin: 0.3rem 0;
-  font-size: 0.8rem;
-  color: #5ad18b;
-}
-
 .game__check {
   display: flex;
   flex-direction: column;
@@ -63,18 +57,49 @@
 .game__doubt {
   text-align: left;
   color: var(--c-amber);
-  border-color: #6b4a1c;
+  border-color: var(--c-amber);
 }
 
 .game {
-  padding: 0.5rem;
+  padding: 0.4rem 0.5rem;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: 8px;
 }
 
 .game.is-selected {
-  border-color: #6c8cff;
+  border-color: var(--c-accent);
+}
+
+.game__dot {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--c-border-strong);
+}
+
+.game__dot.is-read {
+  background: var(--c-ok-text);
+}
+
+.game__map {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+}
+
+.game__warn {
+  color: var(--c-amber);
+}
+
+.game__body {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--c-border);
 }
 
 .game__head {
@@ -105,10 +130,6 @@
 
 .game__delete {
   color: var(--c-danger-soft);
-}
-
-.analysis__calibrate {
-  align-self: flex-start;
 }
 
 .game__teams {

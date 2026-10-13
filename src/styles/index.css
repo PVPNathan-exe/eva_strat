@@ -8,6 +8,7 @@
 @import './weapon-panel.css';
 @import './canvas.css';
 @import './tabs.css';
+@import './ui-common.css';
 @import './analysis-shell.css';
 @import './analysis-ingest.css';
 @import './analysis-player.css';

@@ -3,7 +3,7 @@
 // Les positions sont normalisées sur la minimap du jeu : un cadre réglable (par carte) les ramène sur l'image du plan.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftRight, ArrowRight, Crosshair, Pause, Play, X } from 'lucide-react';
+import { ArrowLeftRight, ArrowRight, Crosshair, Layers, Pause, Play, X } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { defaultInset, insetStorageKey, project, type Inset } from '../../lib/planInsets';
@@ -347,30 +347,37 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           <input type="checkbox" checked={follow} onChange={(e) => { setFollow(e.target.checked); setPlaying(false); setT(time); }} />
           Suivre la vidéo
         </label>
-        <label>
-          <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} />
-          Pseudos
-        </label>
-        <label>
-          <input type="checkbox" checked={trails} onChange={(e) => setTrails(e.target.checked)} />
-          Traînées
-        </label>
-        <label title="Anneau rouge : la vraie minimap n'a aucune pastille de cette équipe autour de la position calculée">
-          <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} />
-          Non confirmés
-        </label>
-        {reliability && (
-          <>
-            <label title="Cases de la carte où les positions se calculent mal">
-              <input type="checkbox" checked={zonesPos} onChange={(e) => setZonesPos(e.target.checked)} />
-              Zones : positions
+        <details className="menu replay__display">
+          <summary>
+            <Layers className="ic" /> Affichage
+          </summary>
+          <div className="menu__panel">
+            <label>
+              <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} />
+              Pseudos
             </label>
-            <label title="Cases de la carte où les regards se lisent mal">
-              <input type="checkbox" checked={zonesGaze} onChange={(e) => setZonesGaze(e.target.checked)} />
-              Zones : regards
+            <label>
+              <input type="checkbox" checked={trails} onChange={(e) => setTrails(e.target.checked)} />
+              Traînées
             </label>
-          </>
-        )}
+            <label title="Anneau rouge : la vraie minimap n'a aucune pastille de cette équipe autour de la position calculée">
+              <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} />
+              Positions non confirmées
+            </label>
+            {reliability && (
+              <>
+                <label title="Cases de la carte où les positions se calculent mal">
+                  <input type="checkbox" checked={zonesPos} onChange={(e) => setZonesPos(e.target.checked)} />
+                  Zones : positions
+                </label>
+                <label title="Cases de la carte où les regards se lisent mal">
+                  <input type="checkbox" checked={zonesGaze} onChange={(e) => setZonesGaze(e.target.checked)} />
+                  Zones : regards
+                </label>
+              </>
+            )}
+          </div>
+        </details>
         {observed !== null && (
           <span className="replay__observed">
             Observé : n° {numberOfSlot(observed)}

@@ -7,6 +7,7 @@ SQLite). Contexte et état d'avancement : `docs/PLAN_RESTANT.md`. Autre PC : `do
 
 - **Lire `ARCHITECTURE.md` avant de chercher ou de créer un fichier** (carte du projet, endpoints, flux), et le mettre à jour quand un fichier est ajouté, renommé ou supprimé.
 - **Un fichier = une fonctionnalité**, nom clair, fonctions courtes et commentées. Les couleurs de l'interface sont dans `src/styles/tokens.css` (jamais de couleur en dur dans un autre fichier CSS), un fichier CSS par composant ou zone dans `src/styles/`.
+- **Interface sobre** : pas de rangée de cases à cocher (menu « Calques » ou « Affichage », classes `.menu` et `.subtabs` de `src/styles/ui-common.css`), les textes d'explication dans un `<details className="help">`, une seule vue à la fois par sous-onglet, rien de plus large que l'écran (vérifier avec une capture à 1440 et 420 pixels).
 - **Répondre en français**, clairement, sans jargon inutile.
 - **Aucun emoji** ni pictogramme Unicode (play, flèche, cible) dans l'interface : utiliser `lucide-react` (classe `ic` dans `src/styles/icons.css`).
 - **Aucun tiret quadratin** (le long tiret) dans le code, les commentaires, les textes d'interface et la documentation : deux-points, virgule ou parenthèses.
