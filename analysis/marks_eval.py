@@ -49,7 +49,7 @@ def solve_with(conn, game_id, marks):
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
     kills = db.kill_tuples(conn, game_id, names)
     rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]),
-                          data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), None, marks, kills, db.stations_for(g["map"]), db.rotors_for(g["map"], g["start_s"]), db.button_doors_for(g["map"]))
+                          data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), None, marks, kills, db.stations_for(g["map"]), db.rotors_for(g["map"], g["start_s"]), db.button_doors_for(g["map"]), db.see_through_for(g["map"]))
     return rows, {fi: t for fi, t, _ in data["frames"]}, g
 
 
@@ -59,7 +59,7 @@ def solve_without_marks(conn, game_id):
     data = evaluate._load(conn, g, step_s)
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
     rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]),
-                          data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), stations=db.stations_for(g["map"]), rotors=db.rotors_for(g["map"], g["start_s"]), doors=db.button_doors_for(g["map"]))
+                          data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), stations=db.stations_for(g["map"]), rotors=db.rotors_for(g["map"], g["start_s"]), doors=db.button_doors_for(g["map"]), see=db.see_through_for(g["map"]))
     return rows, {fi: t for fi, t, _ in data["frames"]}, g
 
 

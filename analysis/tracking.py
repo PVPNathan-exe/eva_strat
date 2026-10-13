@@ -1414,7 +1414,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None, doors=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None, doors=None, see=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1429,6 +1429,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     (la boîte de capture de Polaris) est un joueur en jeu, pas un mort.
     reliability : {"grid": n, "gaze": {(i, j)}} cases de la carte où la forme des disques a donné de mauvais regards (reliability.py) : la forme y pèse moins que le cap et le camp ennemi.
     doors : [((x0, y0), (x1, y1))] portes opaques à bouton (db.button_doors_for) : passage pour les trajets, mur pour la vue entre deux joueurs (ouvertes ou fermées, on ne sait pas).
+    see : tableau booléen (db.see_through_for) des pixels où l'on voit à travers sans passer (tir par-dessus, vue seulement, vitre) : ils ne comptent pas comme mur pour la vue entre deux joueurs.
     kills : [(t, tueur, victime, arme)] du killfeed (arme : nom ou None) : le tueur regarde sa victime (kill_gaze).
     marks : [(t, joueur, x, y, regard ou None)] posés à la main : vérités qui ancrent le suivi (apply_marks).
     coherence_out : dict facultatif rempli de {(image, joueur): indice de cohérence du regard, 0 à 1} (voir gaze_coherence).
@@ -1440,6 +1441,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     _ROTORS.clear()
     _ROTORS.update(rotors or {})
     _DOORS[:] = doors or []
+    _SEE[:] = [see] if see is not None else []
     _STATIONS[:] = [(s["x"], s["y"], s["angle"]) for pair in stations or [] for s in (pair["a"], pair["b"]) if s.get("angle") is not None]
     _WALK.clear()
     _NEAR.clear()
@@ -1779,7 +1781,16 @@ SIGHT_RULE = True  # un mur entre deux joueurs : pas de règle du duel ni du kil
 SIGHT_BLOCK_CELLS = 2  # cases non praticables sur la droite qui séparent deux joueurs
 SIGHT_MARGIN_CELLS = 1.5  # on ne compte pas les cases autour des deux joueurs (collés à un mur)
 _ROTORS = {}  # anneaux tournants de la carte en cours avec t0 (début de la game dans la vidéo), posés par solve
+_SEE = []  # [tableau booléen des pixels où l'on voit à travers] ou vide, posé par solve
 _DOORS = []  # portes opaques à bouton de la carte en cours (segments), posées par solve
+
+
+def _sees_through(pt):
+    """Vrai si le point (fractions de la minimap) est sur un pixel où l'on voit à travers sans passer (ligne de tir dans un mur, fenêtre, vitre)."""
+    if not _SEE:
+        return False
+    h, w = _SEE[0].shape
+    return bool(_SEE[0][min(h - 1, max(0, int(pt[1] * h))), min(w - 1, max(0, int(pt[0] * w)))])
 
 
 def _segments_cross(p, q, r, s):
@@ -1807,7 +1818,8 @@ def sight_blocked(a, b):
         if math.hypot(pt[0] - p[0], pt[1] - p[1]) < WALK_CELL * SIGHT_MARGIN_CELLS or math.hypot(pt[0] - q[0], pt[1] - q[1]) < WALK_CELL * SIGHT_MARGIN_CELLS:
             continue
         if _WALK and _cell(pt) not in _WALK:
-            blocked += 1
+            if not _sees_through(pt):
+                blocked += 1
         elif _ROTORS:
             import rotors as model
 
@@ -2328,7 +2340,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 46  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 47  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

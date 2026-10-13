@@ -157,7 +157,7 @@ def detect_states(video, game, zone_a, zone_b, width, height, wait=None, step_s=
     return states
 
 
-def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None, teleports=None, walk_points=None, walk_mask=None, spawns=None, walls=None, players=None, reliability=None, states_out=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None, doors=None):
+def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, deaths=None, bars=None, teleports=None, walk_points=None, walk_mask=None, spawns=None, walls=None, players=None, reliability=None, states_out=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None, doors=None, see=None):
     """Échantillons d'une game : liste de lignes (frame, t, slot, team, x, y, angle, alive, confiance).
     deaths : [(t, slot)] morts connues par le killfeed. bars : (zone du bandeau gauche, zone du bandeau droit) pour guider le suivi."""
     states = detect_states(video, game, bars[0], bars[1], width, height, wait, step_s, players) if bars else None
@@ -165,4 +165,4 @@ def read_game(video, game, zone, width, height, emit=None, wait=None, step_s=STE
         states_out.update(states)  # l'appelant s'en sert pour le joueur observé et le contrôle à la minimap
     hints = hints_from_states(states) if states else None
     frames, noise = detect_frames_and_noise(video, game, zone, width, height, emit, wait, step_s, hints=hints, walls=walls)
-    return tracking.solve(frames, step_s, deaths, states, teleports, walk_points, walk_mask, dict(enumerate(noise)), spawns, reliability, coherence_out, marks, kills, stations, rotors, doors)
+    return tracking.solve(frames, step_s, deaths, states, teleports, walk_points, walk_mask, dict(enumerate(noise)), spawns, reliability, coherence_out, marks, kills, stations, rotors, doors, see)

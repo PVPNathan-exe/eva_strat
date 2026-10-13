@@ -465,6 +465,7 @@ def _no_wall():
     tracking._WALK.clear()
     tracking._ROTORS.clear()
     tracking._DOORS.clear()
+    tracking._SEE.clear()
 
 
 def test_a_wall_between_two_players_is_seen_and_an_open_line_is_not():
@@ -490,6 +491,22 @@ def test_a_button_door_between_two_players_separates_them_for_sight_but_not_for_
         assert tracking.sight_blocked(a, b) is True
         assert tracking.sight_blocked(a, row(0, 8, 0.40, 0.50)) is False  # du même côté de la porte
         assert tracking._cell((0.5, 0.5)) in tracking._WALK  # et on la franchit
+    finally:
+        _no_wall()
+
+
+def test_a_thin_firing_line_in_a_wall_lets_the_sight_through_but_the_wall_around_it_still_blocks():
+    import numpy as np
+
+    a, b = row(0, 1, 0.30, 0.50), row(0, 8, 0.70, 0.50)
+    try:
+        _wall_world()
+        assert tracking.sight_blocked(a, b) is True
+        see = np.zeros((400, 400), bool)
+        see[195:205, 170:230] = True  # ligne de tir qui traverse tout le bloc de mur (x de 0,43 à 0,57) à la hauteur des joueurs
+        tracking._SEE[:] = [see]
+        assert tracking.sight_blocked(a, b) is False  # on voit à travers
+        assert tracking.sight_blocked(a, row(0, 8, 0.70, 0.45)) is True  # une ligne qui ne passe pas par la ligne de tir reste bloquée
     finally:
         _no_wall()
 

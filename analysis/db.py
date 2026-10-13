@@ -222,6 +222,26 @@ def teleports_for(map_name):
     return [(tuple(a), tuple(b)) for a, b in pairs]
 
 
+def see_through_for(map_name):
+    """Pixels où l'on voit à travers sans passer (tir par-dessus, vue seulement, porte vitrée) : tableau booléen à la taille du masque praticable, ou None sans image de classes. Une fine
+    ligne de tir dans un bloc de mur (Silva : ligne de visée vers la tyrolienne) laisse passer le regard : elle ne compte pas comme mur pour la vue entre deux joueurs."""
+    import cv2
+    import numpy as np
+
+    import map_annotations
+    import map_mask
+
+    path = map_annotations.MASK_DIR / f"{map_name}_classes.png"
+    mask = map_mask.load(map_name) if map_name else None
+    if mask is None or not path.exists():
+        return None
+    classes = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if classes is None:
+        return None
+    see = np.isin(classes, [map_annotations.CODES[k] for k in ("tir", "vue", "porte_vitre")]).astype(np.uint8)
+    return cv2.resize(see, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_NEAREST) > 0
+
+
 def button_doors_for(map_name):
     """Portes opaques à bouton d'une carte : [((x0, y0), (x1, y1))] en fractions de la minimap ; vide pour les cartes dont les portes ne sont pas à bouton (BUTTON_DOOR_MAPS)."""
     if map_name not in BUTTON_DOOR_MAPS or not DOORS_PATH.exists():
