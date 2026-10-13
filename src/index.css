@@ -10,6 +10,14 @@
   box-sizing: border-box;
 }
 
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
 html,
 body,
 #root {
