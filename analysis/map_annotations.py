@@ -9,7 +9,8 @@ L'utilisateur choisit des couleurs à la pipette (au pixel près) sur la médian
   tir         on tire au-dessus mais on ne passe pas (couverture basse) ;
   vue         on voit à travers mais on ne tire pas et on ne passe pas (vitre) ;
   porte       porte hachurée : on la traverse (praticable) ;
-  porte_vitre porte avec une vitre : on la traverse et on voit à travers.
+  porte_vitre porte avec une vitre : on la traverse et on voit à travers ;
+  hors        hors de la carte : retire tous les pixels de cette couleur du masque, avant toute autre classe, tracé ou correction.
 Les portes, les fenêtres, les murs et les tirs par-dessus se tracent aussi en traits (extrémité à extrémité) : une porte (vitrée ou non) est rendue praticable, une fenêtre est « vue seulement » (ni passage ni
 tir), un trait de mur est infranchissable (mur dans un carré de capture), un trait « tir » aussi mais on tire par-dessus. Une même couleur peut avoir deux sens (une fenêtre ici, une couverture
 basse ailleurs) : une zone de classe remplace une classe par une autre à l'intérieur d'un polygone (appliquée avant les tracés) ; l'une comme l'autre peut être à sens unique (on ne voit à travers que d'un côté, noté `side`). Les zones des points de capture (forme libre : le carré n'est pas toujours fermé, comme sur Polaris) sont jouables : sol sous les pixels sans classe, les murs classés ou tracés dedans restent des murs. Les zones de départ et les disques des stations de tyrolienne sont jouables de la même façon.
@@ -70,12 +71,14 @@ def redirect_outputs(folder):
 
 if os.environ.get("EVA_MAPS_OUT"):
     redirect_outputs(os.environ["EVA_MAPS_OUT"])
-CLASSES = ("sol", "mur", "tir", "vue", "porte", "porte_vitre")
+CLASSES = ("sol", "mur", "tir", "vue", "porte", "porte_vitre", "hors")
 LEGACY_CLASSES = ("tp",)  # ancienne classe « chemin de tyrolienne » : ignorée à la lecture (remplacée par les cercles de stations)
 PASSABLE = ("sol", "porte", "porte_vitre")  # classes où l'on marche
 DEFAULT_STATION_RADIUS = 0.02
 MAX_STATION_RADIUS = 0.2
 MAX_REFUSED = 0.01  # un masque qui refuserait plus de cette part des lectures sûres de la carte n'est pas écrit (un masque juste en refuse 0,05 % ou moins)
+TP_THICK_FLOOR_SHARE = 0.25  # part de sol autour d'un pixel d'un chemin épais pour qu'il soit ouvert (un chemin qui passe dans le vide n'ouvre rien)
+TP_SEARCH_PX = 10  # recherche de l'axe du chemin de part et d'autre du segment entre les deux centres
 TP_BAND_PX = 5  # largeur de la bande sous une flèche de tyrolienne où un trait fin est rendu au sol
 DOOR_WIDTH_PX = 3  # épaisseur d'un trait de porte sur la médiane
 CODES = {name: i + 1 for i, name in enumerate(CLASSES)}  # 0 : aucune classe
@@ -89,7 +92,8 @@ TP_NEIGHBOURHOOD = 7
 
 def classify(median_bgr, colors):
     """Image de classes (uint8, 0 = aucune) d'après les couleurs choisies : colors = [{"rgb": [r, g, b], "tol": n, "cls": nom}]. Chaque pixel prend la classe de la couleur
-    la plus proche (distance euclidienne dans RGB) si elle est à moins de sa tolérance."""
+    la plus proche (distance euclidienne dans RGB) si elle est à moins de sa tolérance. Exception : la classe « hors » (hors de la carte) l'emporte toujours sur les autres : tous les pixels
+    à moins de la tolérance d'une couleur « hors » en sont, quelle que soit la couleur la plus proche (le fond de la minimap a parfois la couleur du sol, Outlaw)."""
     rgb = median_bgr[:, :, ::-1].astype(np.int32)
     best = np.full(rgb.shape[:2], 1 << 30, np.int64)
     out = np.zeros(rgb.shape[:2], np.uint8)
@@ -100,6 +104,10 @@ def classify(median_bgr, colors):
         hit = (d <= int(c.get("tol", 10)) ** 2) & (d < best)
         out[hit] = CODES[c["cls"]]
         best[hit] = d[hit]
+    for c in colors:
+        if c.get("cls") == "hors":
+            d = ((rgb - np.array(c["rgb"], np.int32)) ** 2).sum(axis=2)
+            out[d <= int(c.get("tol", 10)) ** 2] = CODES["hors"]
     return out
 
 
@@ -108,19 +116,69 @@ def walkable_from_classes(labels):
     return np.isin(labels, [CODES[c] for c in PASSABLE])
 
 
-def open_tp_paths(walk, tps):
-    """Sous chaque flèche de tyrolienne, les pixels non praticables dont le voisinage est au moins à moitié du sol (un trait fin, de la couleur des murs, posé sur le sol) deviennent
-    praticables ; un vrai mur épais sous la flèche reste un mur."""
+def measure_paths(median_bgr, tps):
+    """Chemin de chaque tyrolienne vu dans la médiane : {"width": largeur en pixels, "shift": (dx, dy) décalage en pixels du chemin par rapport au segment entre les deux centres}. Le
+    chemin est plus clair que le sol : sur 9 coupes entre 15 et 85 % du segment, on lit la luminosité à ±TP_SEARCH_PX pixels, le sol est le quart inférieur, le chemin le quart supérieur
+    (ou le maximum si le chemin est fin) ; le chemin est la plage continue au-dessus de leur milieu autour du point le plus clair (les points blancs d'un chemin pointillé n'en font
+    pas la couleur). Un chemin fin (Polaris : 2 à 3 pixels) ou épais (Outlaw : une bande de 6 à 8 pixels de la couleur des murs) ; largeur bornée entre 3 et 20."""
+    h, w = median_bgr.shape[:2]
+    gray = median_bgr.astype(np.int32).sum(axis=2)
+    at = lambda p: gray[min(h - 1, max(0, int(round(p[1])))), min(w - 1, max(0, int(round(p[0]))))]
+    paths = []
+    for t in tps:
+        a = np.array([t["from"][0] * (w - 1), t["from"][1] * (h - 1)])
+        b = np.array([t["to"][0] * (w - 1), t["to"][1] * (h - 1)])
+        d = b - a
+        length = float(np.hypot(*d))
+        if length < 4:
+            paths.append({"width": TP_BAND_PX, "shift": (0.0, 0.0)})
+            continue
+        across = np.array([-d[1], d[0]]) / length
+        ks = list(range(-TP_SEARCH_PX, TP_SEARCH_PX + 1))
+        sizes, offsets = [], []
+        for f in np.linspace(0.15, 0.85, 9):
+            spot = a + d * f
+            level = np.array([at(spot + across * k) for k in ks], float)
+            floor, cable = np.percentile(level, 25), np.percentile(level, 75)
+            if cable - floor < 30:
+                cable = level.max()
+            threshold = (floor + cable) / 2
+            top = int(np.argmax(level))
+            lo = hi = top
+            while lo > 0 and level[lo - 1] >= threshold:
+                lo -= 1
+            while hi < len(ks) - 1 and level[hi + 1] >= threshold:
+                hi += 1
+            # un point blanc d'un chemin pointillé peut être plus clair que le corps du chemin : on élargit au corps (les points sombres du dessin ne coupent pas la plage)
+            sizes.append(hi - lo + 1)
+            offsets.append((ks[lo] + ks[hi]) / 2)
+        paths.append({"width": int(max(3, min(20, np.median(sizes)))), "shift": tuple(across * float(np.median(offsets)))})
+    return paths
+
+
+def open_tp_paths(walk, tps, paths=None):
+    """Sous chaque tyrolienne, le chemin ne coupe pas le sol qu'il traverse. Chemin fin (au plus TP_BAND_PX pixels) : les pixels non praticables dont le voisinage est au moins à moitié du
+    sol deviennent praticables, un vrai mur épais sous le trait reste un mur. Chemin épais (`paths` : mesures de measure_paths, Outlaw) : la bande du chemin est du sol là où il y a du sol de part et d'autre
+    (la couleur du chemin, celle des murs, cache ce qu'il y a dessous), pas dans le vide ; la bande suit l'axe mesuré du chemin."""
     if not tps:
         return
     h, w = walk.shape
     share = cv2.boxFilter(walk.astype(np.float32), -1, (TP_NEIGHBOURHOOD, TP_NEIGHBOURHOOD))
-    band = np.zeros((h, w), np.uint8)
-    for t in tps:
-        a = (round(t["from"][0] * (w - 1)), round(t["from"][1] * (h - 1)))
-        b = (round(t["to"][0] * (w - 1)), round(t["to"][1] * (h - 1)))
-        cv2.line(band, a, b, 255, TP_BAND_PX)
-    walk |= (band > 0) & (share >= TP_FLOOR_SHARE)
+    thin = np.zeros((h, w), np.uint8)
+    opened = np.zeros((h, w), bool)
+    for i, t in enumerate(tps):
+        path = paths[i] if paths else {"width": TP_BAND_PX, "shift": (0.0, 0.0)}
+        dx, dy = path["shift"]
+        a = (round(t["from"][0] * (w - 1) + dx), round(t["from"][1] * (h - 1) + dy))
+        b = (round(t["to"][0] * (w - 1) + dx), round(t["to"][1] * (h - 1) + dy))
+        if path["width"] > TP_BAND_PX:
+            band = np.zeros((h, w), np.uint8)
+            cv2.line(band, a, b, 255, path["width"] + 2)
+            around = cv2.boxFilter(walk.astype(np.float32), -1, (path["width"] + 8, path["width"] + 8))  # du sol de part et d'autre : le chemin passe sur le sol, pas dans le vide
+            opened |= (band > 0) & (around >= TP_THICK_FLOOR_SHARE)
+        else:
+            cv2.line(thin, a, b, 255, TP_BAND_PX)
+    walk |= ((thin > 0) & (share >= TP_FLOOR_SHARE)) | opened
 
 
 def _line_layer(shape, segments):
@@ -386,7 +444,10 @@ def apply(conn, map_name):
         apply_overrides(labels, data["overrides"])
         burn_shapes(labels, data["doors"], data["capture"], data["spawns"], [s for t in data["tps"] for s in (t["a"], t["b"])])
         walk = walkable_from_classes(labels)
-        open_tp_paths(walk, data["tps"])
+        paths = measure_paths(median, data["tps"])
+        open_tp_paths(walk, data["tps"], paths)
+        if data["tps"]:
+            summary["largeur_chemins_tyroliennes_px"] = [p["width"] for p in paths]
         walk &= ~_line_layer(walk.shape, blocking_lines(data["doors"]))  # fenêtres, murs et tirs ne se traversent pas, même sous une flèche de tyrolienne
         under = under_layer(walk.shape, data["doors"], data["overrides"], floor_before)
         walk |= under
@@ -396,6 +457,8 @@ def apply(conn, map_name):
 
             ring_model = rotors.load(map_name)  # Engine : les anneaux tournants restent des trous, ni le plan ni les lectures ne les remplissent
             holes = rotors.hole_mask(ring_model, walk.shape) if ring_model else None
+            outside = labels == CODES["hors"]  # hors de la carte : ni le plan ni les lectures ne le remplissent
+            holes = outside if holes is None else holes | outside
             if holes is not None:
                 summary["trous_des_anneaux_pixels"] = int((holes & ~walk).sum())
             walk, plan_info = plan_step(conn, map_name, data, labels, walk, under, holes)
@@ -406,6 +469,7 @@ def apply(conn, map_name):
                 labels[walk & ~before_plan] = CODES["sol"]
                 cv2.imwrite(str(MASK_DIR / f"{map_name}_plan_ajouts.png"), (walk & ~before_plan).astype(np.uint8) * 255)
                 cv2.imwrite(str(MASK_DIR / f"{map_name}_plan_retraits.png"), (before_plan & ~walk).astype(np.uint8) * 255)
+        walk &= ~(labels == CODES["hors"])  # « hors map » l'emporte sur tout le reste : rien n'y est praticable
         mask = cv2.resize(walk.astype(np.uint8) * 255, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST)
         summary["praticable"] = round(float(walk.mean()), 3)
         refused = refused_share(conn, map_name, mask)

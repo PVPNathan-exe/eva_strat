@@ -479,3 +479,72 @@ def test_outputs_can_be_redirected_so_that_a_test_never_touches_the_users_maps(t
     assert map_annotations.INSETS == tmp_path / "map_plan_insets.json" and (tmp_path / "map_plan_insets.json").exists()
     assert plan_mask.INSETS == map_annotations.INSETS  # le cadre lu par le recoupement avec le plan suit
     assert map_annotations.MASK_DIR != original_masks and map_annotations.INSETS != original_insets
+
+
+# --- classe « hors map » et chemins épais de tyrolienne (Outlaw) ---
+
+def test_hors_map_wins_over_every_other_class_and_nothing_can_make_it_walkable():
+    img = np.zeros((1, 3, 3), np.uint8)
+    img[0, 0] = (100, 100, 101)  # BGR : RVB (101, 100, 100)
+    img[0, 1] = (100, 100, 100)
+    img[0, 2] = (100, 100, 90)  # RVB (90, 100, 100)
+    colors = [{"rgb": [100, 100, 100], "tol": 10, "cls": "sol"}, {"rgb": [108, 100, 100], "tol": 10, "cls": "hors"}]
+    labels = map_annotations.classify(img, colors)
+    assert labels[0].tolist() == [map_annotations.CODES["hors"], map_annotations.CODES["hors"], map_annotations.CODES["sol"]]
+    assert not map_annotations.walkable_from_classes(labels)[0, 0]  # hors map n'est pas praticable
+
+
+def test_apply_removes_hors_map_pixels_even_where_the_plan_or_the_reads_would_add_floor(tmp_path, monkeypatch):
+    monkeypatch.setattr(map_annotations, "MASK_DIR", tmp_path)
+    for name in ("TELEPORTS", "SPAWNS", "INSETS", "DOORS", "STATIONS", "CAPTURE"):
+        monkeypatch.setattr(map_annotations, name, tmp_path / f"{name}.json")
+    img = np.zeros((50, 50, 3), np.uint8)
+    img[:, :] = (30, 30, 30)  # fond
+    img[10:40, 10:40] = (90, 90, 90)  # sol
+    img[10:40, 40:50] = (88, 90, 90)  # à côté : une couleur de fond très proche du sol, hors de la carte
+    cv2.imwrite(str(tmp_path / "Test_mediane.png"), img)
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE map_annotations (map TEXT PRIMARY KEY, data TEXT NOT NULL, updated TEXT)")
+    conn.execute("CREATE TABLE games (id INTEGER PRIMARY KEY, map TEXT)")
+    conn.execute("CREATE TABLE samples (game_id INTEGER, alive INTEGER, confidence REAL, x REAL, y REAL)")
+    conn.execute("INSERT INTO games VALUES (1, 'Test')")
+    conn.executemany("INSERT INTO samples VALUES (1, 1, 0.9, ?, ?)", [(0.3 + 0.0003 * k, 0.5) for k in range(1000)])  # des lectures sûres sur le sol
+    conn.executemany("INSERT INTO samples VALUES (1, 1, 0.9, ?, ?)", [(0.9 + 0.004 * k, 0.5) for k in range(6)])  # et quelques-unes dans la zone hors map (0,6 % : le masque n'est pas refusé)
+    data = {"colors": [{"rgb": [90, 90, 90], "tol": 4, "cls": "sol"}, {"rgb": [90, 90, 88], "tol": 1, "cls": "hors"}]}  # « hors » l'emporte partout où sa tolérance (1) est atteinte : le sol à 2 niveaux de là reste du sol
+    conn.execute("INSERT INTO map_annotations VALUES ('Test', ?, NULL)", (json.dumps(data),))
+    summary = map_annotations.apply(conn, "Test")
+    mask = cv2.imread(str(tmp_path / "Test.png"), cv2.IMREAD_GRAYSCALE)
+    assert mask[200, 160] == 255 and mask[200, 380] == 0  # sol gardé, hors map retiré (la zone de droite, malgré les lectures)
+    data["usePlan"] = True
+    conn.execute("UPDATE map_annotations SET data = ? WHERE map = 'Test'", (json.dumps(data),))
+    map_annotations.apply(conn, "Test")
+    assert cv2.imread(str(tmp_path / "Test.png"), cv2.IMREAD_GRAYSCALE)[200, 380] == 0  # les lectures ne le remplissent pas non plus
+    assert "praticable" in summary
+
+
+def test_a_thick_tp_path_of_wall_colour_becomes_floor_but_a_thin_wall_under_a_thin_path_stays_a_wall():
+    median = np.full((100, 100, 3), 60, np.uint8)
+    median[10:90, 46:54] = (150, 150, 150)  # chemin épais (8 pixels) de la couleur des murs, vertical
+    tps = [{"from": [0.5, 0.1], "to": [0.5, 0.9]}]
+    paths = map_annotations.measure_paths(median, tps)
+    assert 7 <= paths[0]["width"] <= 9 and abs(paths[0]["shift"][0]) < 1.5
+    labels = np.full((100, 100), map_annotations.CODES["sol"], np.uint8)
+    labels[median[:, :, 0] == 150] = map_annotations.CODES["mur"]  # la sélection des couleurs en a fait un mur
+    walk = map_annotations.walkable_from_classes(labels)
+    assert not walk[50, 50]
+    map_annotations.open_tp_paths(walk, tps, paths)
+    assert walk[50, 47] and walk[50, 52] and walk[20, 50]  # toute la bande du chemin est du sol
+    off = [{"from": [0.44, 0.1], "to": [0.44, 0.9]}]  # centres posés 6 pixels à côté du chemin : l'axe est retrouvé
+    paths_off = map_annotations.measure_paths(median, off)
+    assert 5 <= abs(paths_off[0]["shift"][0]) <= 7 and 7 <= paths_off[0]["width"] <= 9
+    walk_off = map_annotations.walkable_from_classes(labels)
+    map_annotations.open_tp_paths(walk_off, off, paths_off)
+    assert walk_off[50, 47] and walk_off[50, 52]
+    void = np.full((100, 100), map_annotations.CODES["mur"], np.uint8)  # un chemin épais qui traverse du vide (aucun sol autour) n'ouvre rien
+    nothing = map_annotations.walkable_from_classes(void)
+    map_annotations.open_tp_paths(nothing, tps, paths)
+    assert not nothing.any()
+    thin = np.full((100, 100, 3), 60, np.uint8)
+    thin[10:90, 49:51] = (150, 150, 150)  # chemin fin (2 pixels)
+    assert map_annotations.measure_paths(thin, tps)[0]["width"] <= map_annotations.TP_BAND_PX

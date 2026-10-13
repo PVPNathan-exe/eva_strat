@@ -3,7 +3,7 @@
 
 import type { Inset } from './planInsets';
 
-export type ClassName = 'sol' | 'mur' | 'tir' | 'vue' | 'porte' | 'porte_vitre';
+export type ClassName = 'sol' | 'mur' | 'tir' | 'vue' | 'porte' | 'porte_vitre' | 'hors';
 export type Team = 'A' | 'B';
 export type Point = [number, number]; // fractions de l'image (0 à 1)
 export type Rect = [number, number, number, number]; // x0, y0, x1, y1
@@ -84,6 +84,7 @@ export const CLASS_INFO: { name: ClassName; label: string; help: string; preview
   { name: 'vue', label: 'Vue seulement', help: 'on voit à travers : ni tir, ni passage', preview: [61, 139, 255] },
   { name: 'porte', label: 'Porte (hachures)', help: 'on la traverse', preview: [255, 214, 10] },
   { name: 'porte_vitre', label: 'Porte vitrée', help: 'on la traverse et on voit à travers', preview: [90, 220, 235] },
+  { name: 'hors', label: 'Hors map', help: 'hors de la carte : retire tous les pixels de cette couleur du masque, avant toute autre classe', preview: [200, 200, 215] },
 ];
 
 export const classCode = (name: ClassName) => CLASS_INFO.findIndex((c) => c.name === name) + 1; // 0 : aucune classe
@@ -197,6 +198,18 @@ export function classifyImage(rgba: Uint8ClampedArray, colors: PickedColor[]): U
         best[p] = d;
         labels[p] = code;
       }
+    }
+  }
+  // « hors map » l'emporte sur toutes les autres classes (même règle que classify de map_annotations.py)
+  for (const c of colors) {
+    if (c.cls !== 'hors') continue;
+    const code = classCode('hors');
+    const limit = c.tol * c.tol;
+    for (let p = 0; p < n; p++) {
+      const dr = rgba[p * 4] - c.rgb[0];
+      const dg = rgba[p * 4 + 1] - c.rgb[1];
+      const db = rgba[p * 4 + 2] - c.rgb[2];
+      if (dr * dr + dg * dg + db * db <= limit) labels[p] = code;
     }
   }
   return labels;

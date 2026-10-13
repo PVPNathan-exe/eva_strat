@@ -197,3 +197,13 @@ test('un trait ou une zone « passage possible en dessous » est lu tel quel, sa
   assert.deepEqual(a.doors.map((d) => d.under), [true, false, false]);
   assert.deepEqual(a.overrides.map((o) => o.under), [true, false]);
 });
+
+test('la classe « hors map » l\'emporte sur toutes les autres, même quand une autre couleur est plus proche', () => {
+  const colors: PickedColor[] = [
+    { rgb: [100, 100, 100], tol: 10, cls: 'sol' },
+    { rgb: [108, 100, 100], tol: 10, cls: 'hors' },
+  ];
+  // le pixel (101, 100, 100) est plus proche du sol (1) que du hors map (7) mais à moins de la tolérance des deux : le hors map gagne
+  const labels = classifyImage(px([101, 100, 100], [100, 100, 100], [90, 100, 100]), colors);
+  assert.deepEqual([...labels], [7, 7, 1]); // 7 : code de « hors » ; le troisième pixel n'est qu'au sol
+});
