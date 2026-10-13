@@ -1509,6 +1509,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     for t in placed:
         by_slot.setdefault(t.slot, []).append(t)
 
+    observed = {fi: t.slot for t in placed if t.slot for fi, d in t.pts.items() if d.get("spectated")}  # joueur observé (disque blanc) de chaque image
     rows = {}  # (frame, slot) -> ligne
 
     def put(fi, slot, team, x, y, angle, alive, conf):
@@ -1645,6 +1646,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     prestart_in_spawn(rows, spawns, min(times.values()))
     steady_gaze(rows, step_s)
     steady_still_gaze(rows)
+    observed_enemy_gaze(rows, observed)
     tp_gaze(rows, step_s, coherence_out)
     duel_gaze(rows, states, step_s, coherence_out)
     kill_gaze(rows, kills, times, step_s, coherence_out)
@@ -2215,6 +2217,42 @@ def snap_to_walkable(rows):
     return moved
 
 
+OBSERVED_ENEMY_SMOOTH = 5  # images de chaque côté de la médiane circulaire qui lisse le regard vers l'ennemi
+
+
+def observed_enemy_gaze(rows, observed):
+    """Regard du joueur observé qui n'est pas en marche franche (vitesse sous OBSERVED_FOLLOW_SPEED) : vers l'ennemi vivant le plus proche, lissé par une médiane circulaire. Sa forme n'est pas
+    lisible et son cap ne dit rien à l'arrêt ; mesuré sur 158 corrections à la main (games 25 et 26, vitesse sous 0,07) : l'écart au regard posé est de 21 degrés médians (18 % à plus de 60
+    degrés) avec le plus proche ennemi, contre 80 degrés (61 %) pour l'ancien estimé. Les règles du duel, du kill et des tyroliennes, et les corrections à la main, passent après."""
+    if not observed:
+        return 0
+    by_frame = {}
+    for (k, _), r in rows.items():
+        if r[7]:
+            by_frame.setdefault(k, []).append(r)
+    changed = 0
+    for slot in set(observed.values()):
+        raw = {}
+        for k in sorted(f for f, s in observed.items() if s == slot):
+            r = rows.get((k, slot))
+            if r is None or not r[7]:
+                continue
+            a, b = rows.get((k - 4, slot)), rows.get((k + 4, slot))
+            if a and b and a[7] and b[7] and math.hypot(b[4] - a[4], b[5] - a[5]) / max(b[1] - a[1], 0.1) >= OBSERVED_FOLLOW_SPEED:
+                continue  # en marche franche : son cap
+            enemies = [e for e in by_frame.get(k, []) if e[3] != r[3]]
+            if enemies:
+                e = min(enemies, key=lambda e: math.hypot((e[4] - r[4]) * ARENA_M[0], (e[5] - r[5]) * ARENA_M[1]))
+                raw[k] = math.degrees(math.atan2(e[5] - r[5], e[4] - r[4])) % 360
+        for k in raw:
+            angle = round(_circular_median([raw[j] for j in range(k - OBSERVED_ENEMY_SMOOTH, k + OBSERVED_ENEMY_SMOOTH + 1) if j in raw]), 1)
+            r = rows[(k, slot)]
+            if r[6] != angle:
+                rows[(k, slot)] = r[:6] + (angle,) + r[7:]
+                changed += 1
+    return changed
+
+
 GAZE_STILL_FRAMES = 8  # images de chaque côté de la fenêtre où le regard d'un joueur arrêté est stabilisé
 GAZE_STILL_SPREAD = 0.03  # le joueur est arrêté si toute la fenêtre tient dans ce carré (relatif à la minimap)
 
@@ -2437,7 +2475,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 51  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 52  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

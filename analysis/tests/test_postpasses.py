@@ -647,3 +647,23 @@ def test_banner_states_of_an_empty_minimap_are_ignored():
     assert tracking.drop_blank_states(frames, None) is None
     full = [(0, 0.0, [{"alive": True}]), (1, 0.1, [{"alive": True}])]
     assert tracking.drop_blank_states(full, states) is states  # aucune image vide : rien ne change
+
+
+def test_a_resting_observed_player_looks_at_the_nearest_living_enemy():
+    rows = table(
+        *[row(k, 4, 0.30, 0.50, angle=200.0) for k in range(0, 30)],  # l'observé immobile, regard estimé au hasard
+        *[row(k, 6, 0.60, 0.50) for k in range(0, 30)],  # un ennemi à droite, à 9,3 m
+        *[row(k, 7, 0.30, 0.80) for k in range(0, 30)],  # un ennemi plus proche, en bas, à 5 m
+        row(15, 8, 0.31, 0.50, alive=0),  # un ennemi mort n'est pas une cible
+    )
+    observed = {k: 4 for k in range(0, 30)}
+    assert tracking.observed_enemy_gaze(rows, observed) == 30
+    assert rows[(15, 4)][6] == 90.0  # vers le bas (image : 90 degrés = bas)
+    assert rows[(15, 6)][6] is None  # les autres joueurs ne sont pas touchés
+
+
+def test_a_moving_observed_player_keeps_his_heading_gaze():
+    rows = table(*[row(k, 4, 0.30 + 0.01 * k, 0.50, angle=0.0) for k in range(0, 30)], *[row(k, 6, 0.50, 0.90) for k in range(0, 30)])  # 0,1 par seconde vers la droite
+    tracking.observed_enemy_gaze(rows, {k: 4 for k in range(0, 30)})
+    assert all(rows[(k, 4)][6] == 0.0 for k in range(5, 25))  # en marche : le regard reste son cap (les images des bords, sans vitesse mesurable, sont à l'arrêt)
+    assert tracking.observed_enemy_gaze(rows, {}) == 0
