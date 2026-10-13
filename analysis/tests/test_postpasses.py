@@ -610,3 +610,31 @@ def test_the_dead_window_stops_at_the_next_correction_of_the_same_player():
     assert abs(times[last] + tracking.FRAME_LAG_S - 12.0) < 0.2  # il s'arrête à la correction du 8, pas à celle du 3
     assert 8 in frames and 3 not in frames
     assert tracking.user_dead_frames(None, None, times) == {}
+
+
+def test_a_hand_placed_position_is_an_indication_when_a_sure_read_is_close_but_the_gaze_is_kept():
+    times = {k: k * 0.1 for k in range(60)}
+    ref = table(row(30, 5, 0.300, 0.500, conf=0.95), row(31, 6, 0.700, 0.300, conf=0.95), row(32, 7, 0.200, 0.200, conf=0.4))
+    rows = dict(ref)
+    put = lambda fi, slot, team, x, y, angle, alive, conf: rows.__setitem__((fi, slot), (fi, round(fi * 0.1, 2), slot, team, x, y, angle, int(alive), conf))
+    marks = [
+        (3.0 + tracking.FRAME_LAG_S, 5, 0.310, 0.500, 40.0),  # à 0,31 m de la lecture sûre : elle garde sa position, la correction donne le regard
+        (3.1 + tracking.FRAME_LAG_S, 6, 0.400, 0.300, 90.0),  # à 3,1 m : le suivi s'est trompé, la position posée fait foi
+        (3.2 + tracking.FRAME_LAG_S, 7, 0.210, 0.200, 10.0),  # lecture peu sûre : la position posée fait foi
+    ]
+    assert tracking.apply_marks(rows, marks, times, 0.1, put, reference=ref) == 3
+    assert rows[(30, 5)][4:7] == (0.300, 0.500, 40.0) and rows[(30, 5)][8] == 0.95
+    assert rows[(31, 6)][4:7] == (0.400, 0.300, 90.0) and rows[(31, 6)][8] == 1.0
+    assert rows[(32, 7)][4:7] == (0.210, 0.200, 10.0)
+    tracking.apply_marks(rows, marks, times, 0.1, put, final=True, reference=ref)  # la passe finale donne le même résultat
+    assert rows[(30, 5)][4:6] == (0.300, 0.500) and rows[(31, 6)][4:6] == (0.400, 0.300)
+
+
+def test_a_cross_is_not_the_death_of_a_player_whose_banner_has_been_grey_for_a_long_time():
+    times = {k: k * 0.1 for k in range(300)}
+    dead = {5: set(range(0, 200)), 6: set(range(180, 300))}
+    assert tracking._fresh_death(190, 6, dead, times)  # le 6 vient de mourir : sa croix
+    assert not tracking._fresh_death(190, 5, dead, times)  # le 5 est mort depuis 19 s : ce n'est pas sa croix
+    assert tracking._fresh_death(5, 5, dead, times)  # il vient de mourir : sa croix
+    assert tracking._fresh_death(190, 8, dead, times)  # pas de bandeau exploitable pour ce joueur : croix gardée
+    assert tracking._fresh_death(250, 5, dead, times)  # son bandeau n'est plus grisé : il est revenu

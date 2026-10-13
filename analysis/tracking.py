@@ -901,6 +901,21 @@ RECOVER_MAX = 0.30
 DEATH_BACKING_S = 2.0  # une croix doit avoir, à cette durée près, le bandeau grisé du joueur ou son kill dans le killfeed
 
 
+CROSS_FRESH_S = 6.0  # une croix ne marque la mort d'un joueur que si son bandeau est grisé depuis moins que cela (une croix reste visible quelques secondes) : sinon c'est celle d'un autre
+
+
+def _fresh_death(k, slot, dead, times):
+    """Vrai si la croix vue à l'image k peut être la mort de ce joueur : son bandeau n'est pas grisé à cet instant (mort annoncée par le killfeed, ou bandeau inexploitable), ou il l'est depuis
+    moins de CROSS_FRESH_S. Cliff, 4:33 : le 6 mort depuis 11 s recevait la croix du 7, d'où deux croix au même endroit."""
+    frames = dead.get(slot)
+    if not frames or k not in frames or k not in times:
+        return True
+    start = k
+    while start - 1 in frames:
+        start -= 1
+    return times[k] - times.get(start, times[k]) <= CROSS_FRESH_S
+
+
 def _death_backed(k, slot, dead, deaths, times):
     """Une croix de la minimap est une mort si le bandeau du joueur est grisé à cet instant ou si le killfeed annonce sa mort à quelques secondes près. Sans l'un ni
     l'autre c'est une tache de lumière en forme de croix (le 3 « mort » à 2,5 s dans la zone de départ orange alors que son bandeau est plein). Sans bandeaux
@@ -1595,12 +1610,13 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
                     put(k, slot, a.team, x, y, ang, True, CONF_FILL)
     for x in crosses:
         for k, d in x.pts.items():
-            if (k, x.slot) not in rows and _death_backed(k, x.slot, dead, deaths, times):
+            if (k, x.slot) not in rows and _death_backed(k, x.slot, dead, deaths, times) and _fresh_death(k, x.slot, dead, times):
                 put(k, x.slot, x.team, d["x"], d["y"], None, False, x.how)
     # Un joueur dont le bandeau est grisé n'a pas de pastille vivante (les croix restent : elles montrent où il est mort).
     for key in [k for k, r in rows.items() if r[7] and k[0] in dead.get(k[1], ())]:
         del rows[key]
-    apply_marks(rows, marks, times, step_s, put)
+    before_marks = dict(rows)  # lectures du suivi avant les corrections : elles gardent leur position quand la correction n'en est que proche
+    apply_marks(rows, marks, times, step_s, put, reference=before_marks)
     if states and dead:
         runs = alive_runs(states, dead)
         recover_from_unused(rows, runs, frames, states, step_s, put, contaminated, spawns)
@@ -1623,7 +1639,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     duel_gaze(rows, states, step_s, coherence_out)
     kill_gaze(rows, kills, times, step_s, coherence_out)
     separate_players(rows)
-    apply_marks(rows, marks, times, step_s, put, final=True, coherence_out=coherence_out)
+    apply_marks(rows, marks, times, step_s, put, final=True, coherence_out=coherence_out, reference=before_marks)
     apply_dead_marks(rows, dead_marks, marks, times, put)
     return sorted((r[:1] + (round(r[1] + FRAME_LAG_S, 2),) + r[2:] for r in rows.values()), key=lambda r: (r[0], r[2]))
 
@@ -1915,12 +1931,15 @@ DUEL_COHERENCE = 0.7  # indice d'un regard tiré de la règle du duel
 FRAME_LAG_S = 0.1  # une image d'analyse montre la minimap de la vidéo 0,1 s plus tard que son temps de lecture (mesuré sur 66 corrections d'un joueur en mouvement : décalage médian de 0,095 s) : son temps affiché est décalé d'autant
 MARK_CLEAR_S = 1.0  # autour d'une position posée à la main, les lignes du même joueur plus loin que MARK_CLEAR_DIST sont retirées (le trou est comblé à partir de la vérité)
 MARK_CLEAR_DIST = 0.08
+MARK_TRUST_M = 1.0  # une lecture sûre à moins de ce nombre de mètres de la position posée à la main garde sa position (mesuré sur 288 corrections : écart médian de 0,21 à 0,25 m entre le clic et le suivi)
 
 
-def apply_marks(rows, marks, times, step_s, put, final=False, coherence_out=None):
+def apply_marks(rows, marks, times, step_s, put, final=False, coherence_out=None, reference=None):
     """Positions et regards posés à la main (onglet Lecture) : à l'image la plus proche de chaque instant, le joueur est à la position donnée (confiance 1), avec le regard
     donné s'il y en a un. Avant le comblement des trous (final=False), les lignes du même joueur qui s'en écartent de plus de MARK_CLEAR_DIST dans la seconde voisine sont
-    retirées : le suivi se refait à partir de cette vérité. À la fin (final=True) elle est reposée telle quelle : aucune passe de lissage ne la déplace."""
+    retirées : le suivi se refait à partir de cette vérité. À la fin (final=True) elle est reposée telle quelle : aucune passe de lissage ne la déplace.
+    La position posée est une indication (un clic de la main est moins précis qu'une pastille lue) : si `reference` (les lignes du suivi avant les corrections) a une lecture sûre du joueur à moins de
+    MARK_TRUST_M de la correction, elle garde sa position et la correction n'apporte que le regard ; au-delà, c'est le suivi qui s'est trompé et la position posée fait foi."""
     if not marks or not times:
         return 0
     ordered = sorted(times)
@@ -1930,6 +1949,10 @@ def apply_marks(rows, marks, times, step_s, put, final=False, coherence_out=None
         k = min(ordered, key=lambda j: abs(times[j] + FRAME_LAG_S - t))
         if abs(times[k] + FRAME_LAG_S - t) > 1.0:
             continue
+        seen = reference.get((k, slot)) if reference is not None else None
+        trusted = seen is not None and seen[7] and seen[8] >= READ_MIN_CONF and math.hypot((seen[4] - x) * ARENA_M[0], (seen[5] - y) * ARENA_M[1]) <= MARK_TRUST_M
+        if trusted:
+            x, y = seen[4], seen[5]  # la lecture sûre fait foi pour la position, la correction donne le regard
         if not final:
             for j in range(k - span, k + span + 1):
                 r = rows.get((j, slot))
@@ -1937,7 +1960,7 @@ def apply_marks(rows, marks, times, step_s, put, final=False, coherence_out=None
                     del rows[(j, slot)]
         current = rows.get((k, slot))
         keep = current[6] if (current is not None and angle is None) else angle
-        put(k, slot, "A" if slot <= 4 else "B", x, y, keep, True, 1.0)
+        put(k, slot, "A" if slot <= 4 else "B", x, y, keep, True, seen[8] if trusted else 1.0)
         if final and coherence_out is not None and angle is not None:
             coherence_out[(k, slot)] = 1.0  # regard posé à la main : vérité
         applied += 1
@@ -2404,7 +2427,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 48  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 49  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
