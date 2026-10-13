@@ -1,8 +1,10 @@
 // Ce que le programme sait d'une carte : couloirs (masque), traits de murs, stations de tyrolienne, zones de départ.
 // Les images viennent de analysis/map_masks (construites par map_mask.py), les stations et zones de départ des JSON de analysis/.
 
+import type { RotorModel } from './rotors';
 import teleports from '../../analysis/map_teleports.json';
 import spawns from '../../analysis/map_spawns.json';
+import rotorModels from '../../analysis/map_rotors.json';
 import captureZones from '../../analysis/map_capture.json';
 import openingLines from '../../analysis/map_doors.json';
 
@@ -53,6 +55,9 @@ export const mapsWithReading = (): string[] =>
     .map((p) => p.split('/').pop() ?? '')
     .filter((f) => f.endsWith('.png') && !f.includes('_'))
     .map((f) => f.replace('.png', ''));
+
+/** Anneaux tournants de la carte (Engine), ou null. */
+export const rotorsOf = (map: string): RotorModel | null => ((rotorModels as Record<string, unknown>)[map] as RotorModel | undefined) ?? null;
 
 export type Rgb = [number, number, number];
 

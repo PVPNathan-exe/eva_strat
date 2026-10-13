@@ -77,6 +77,26 @@
   stroke-width: 2;
 }
 
+.corridor__ring {
+  stroke-width: 7;
+  stroke-linecap: butt;
+  opacity: 0.9;
+}
+
+.corridor__ring--exterieur {
+  stroke: var(--c-cyan);
+}
+
+.corridor__ring--interieur {
+  stroke: var(--c-ok);
+}
+
+.corridor__time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .corridor__line {
   stroke-width: 2.5;
 }

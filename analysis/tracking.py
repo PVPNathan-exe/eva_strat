@@ -1414,7 +1414,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1605,6 +1605,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     despike(rows)
     steady_positions(rows)
     snap_to_walkable(rows)
+    rotor_snap(rows, rotors)
     steady_gaze(rows, step_s)
     steady_still_gaze(rows)
     tp_gaze(rows, step_s, coherence_out)
@@ -1984,6 +1985,28 @@ def steady_gaze(rows, step_s):
 SNAP_MAX = 0.06  # une position vivante hors des couloirs est ramenée au passage le plus proche si il est à moins de cela
 
 
+ROTOR_MAX_CONF = READ_MIN_CONF  # seules les positions peu sûres (reconstruites, lissées) sont déplacées : une lecture sûre n'est jamais corrigée
+
+
+def rotor_snap(rows, rotors):
+    """Anneaux tournants (Engine) : une position peu sûre dans un arc plein d'un anneau à cet instant est ramenée à l'ouverture la plus proche (un trou comblé en ligne droite à travers
+    l'anneau, une position gardée pendant que l'ouverture tourne). Les lectures sûres ne bougent pas. `rotors` : modèle de rotors.py avec t0, l'instant de début de la game dans la vidéo.
+    Renvoie le nombre de positions déplacées."""
+    if not rotors:
+        return 0
+    import rotors as model
+
+    moved = 0
+    for key, r in list(rows.items()):
+        if not r[7] or r[8] >= ROTOR_MAX_CONF:
+            continue
+        spot = model.snap_point(rotors, r[4], r[5], r[1] + FRAME_LAG_S - rotors["t0"])
+        if spot:
+            rows[key] = r[:4] + (round(spot[0], 4), round(spot[1], 4)) + r[6:]
+            moved += 1
+    return moved
+
+
 def snap_to_walkable(rows):
     """Un joueur peut être collé à un mur, jamais hors des limites de la carte : une position vivante hors des passages connus (lissage, centre d'un disque coupé
     par un trait de mur) est ramenée au centre de la case praticable la plus proche. Sans carte des passages, rien n'est fait."""
@@ -2231,7 +2254,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 43  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 44  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 

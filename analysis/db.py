@@ -227,6 +227,14 @@ def stations_for(map_name):
     return json.loads(STATIONS_PATH.read_text(encoding="utf-8")).get(map_name, [])
 
 
+def rotors_for(map_name, start_s):
+    """Anneaux tournants d'une carte (rotors.py, map_rotors.json) avec l'instant de début de la game dans la vidéo (clé t0), ou None si la carte n'en a pas."""
+    import rotors
+
+    model = rotors.load(map_name) if map_name else None
+    return {**model, "t0": start_s} if model else None
+
+
 def spawns_for(map_name):
     """Zones de départ d'une carte : {"A": (x0, y0, x1, y1), "B": ...} (une équipe peut avoir plusieurs rectangles : "A": ((...), (...))), vide si la carte n'en a pas de connues."""
     if not map_name or not SPAWNS_PATH.exists():

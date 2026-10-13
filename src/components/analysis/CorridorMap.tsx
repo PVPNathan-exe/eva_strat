@@ -3,7 +3,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { builtinMaps } from '../../lib/builtinMaps';
-import { loadTinted, readingOf, type Rgb } from '../../lib/mapReading';
+import { loadTinted, readingOf, rotorsOf, type Rgb } from '../../lib/mapReading';
+import { arcPoints, solidArcs } from '../../lib/rotors';
 import { defaultInset, isAligned, project } from '../../lib/planInsets';
 import { ReliabilityLayer } from './ReliabilityLayer';
 import { useGameFlags } from './useGameFlags';
@@ -47,6 +48,9 @@ export function CorridorMap({ map }: { map: string }) {
   const [capture, setCapture] = useState(true);
   const [under, setUnder] = useState(true);
   const [lines, setLines] = useState(false);
+  const rotors = rotorsOf(map); // anneaux tournants (Engine) : arcs pleins à l'instant choisi
+  const [rings, setRings] = useState(true);
+  const [ringTime, setRingTime] = useState(15);
   const { reliability } = useGameFlags(-1, map, 0);
 
   // Cadre de la minimap sur le plan, en fractions du plan
@@ -77,6 +81,20 @@ export function CorridorMap({ map }: { map: string }) {
             reading.capture.map((polygon, i) => (
               <polygon key={`cap${i}`} points={polygon.map(([x, y]) => `${at(x, y).x},${at(x, y).y}`).join(' ')} className="corridor__capture" vectorEffect="non-scaling-stroke" />
             ))}
+          {rings &&
+            rotors?.anneaux.flatMap((ring) =>
+              solidArcs(ring, ringTime, rotors.t_ref).map((arc, i) => (
+                <polyline
+                  key={`ring${ring.nom}${i}`}
+                  points={arcPoints(rotors, ring, arc)
+                    .map(([x, y]) => `${at(x, y).x},${at(x, y).y}`)
+                    .join(' ')}
+                  className={`corridor__ring corridor__ring--${ring.nom}`}
+                  fill="none"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )),
+            )}
           {lines &&
             reading.openings.map((o, i) => {
               const a = at(o.from[0], o.from[1]);
@@ -112,6 +130,15 @@ export function CorridorMap({ map }: { map: string }) {
         <label><input type="checkbox" checked={zones} onChange={(e) => setZones(e.target.checked)} /> Zones peu fiables</label>
         <label><input type="checkbox" checked={capture} onChange={(e) => setCapture(e.target.checked)} /> Points de capture (zones jouables)</label>
         <label><input type="checkbox" checked={under} onChange={(e) => setUnder(e.target.checked)} /> Passage en dessous (étages superposés, en bleu clair)</label>
+        {rotors && (
+          <>
+            <label><input type="checkbox" checked={rings} onChange={(e) => setRings(e.target.checked)} /> Anneaux tournants (arcs pleins ; extérieur horaire, intérieur anti-horaire)</label>
+            <label className="corridor__time">
+              Instant de game : {ringTime} s
+              <input type="range" min={0} max={120} step={1} value={ringTime} disabled={!rings} onChange={(e) => setRingTime(Number(e.target.value))} />
+            </label>
+          </>
+        )}
         <label><input type="checkbox" checked={lines} onChange={(e) => setLines(e.target.checked)} /> Portes, fenêtres, murs et tirs tracés (trait pointillé : passage en dessous)</label>
       </div>
       <p className="corridor__note">
