@@ -141,6 +141,8 @@ export interface UserMark {
   x: number;
   y: number;
   angle: number | null;
+  /** Niveau du joueur sur une carte à deux étages (Atlantis, The Cliff), posé à la main ; null : non précisé. */
+  level?: 'etage' | 'dessous' | null;
 }
 
 /** Contrôle des positions à la vraie minimap et joueur observé (GET /api/flags). */

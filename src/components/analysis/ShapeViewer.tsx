@@ -10,6 +10,7 @@ import { formatTime } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game, GameFlags, Sample, Zone } from '../../types/analysis';
 import { drawMarks, dragAngle, type Drag } from './markDraw';
+import { KillFlagsPanel } from './KillFlagsPanel';
 import { MarkPanel } from './MarkPanel';
 import { useGameFlags } from './useGameFlags';
 import { useMarks } from './useMarks';
@@ -66,6 +67,7 @@ export function ShapeViewer({ game }: { game: Game }) {
   const { marks, error: markError, add: addMark, remove: removeMark } = useMarks(game.id);
   const [correcting, setCorrecting] = useState(false);
   const [pick, setPick] = useState<number | null>(null);
+  const [level, setLevel] = useState<'etage' | 'dessous' | null>(null); // niveau posé avec les prochaines corrections
   const [drag, setDrag] = useState<Drag | null>(null);
   const setCurrentTime = useAnalysisStore((s) => s.setCurrentTime);
   const startTime = useAnalysisStore((s) => s.currentTime);
@@ -188,7 +190,7 @@ export function ShapeViewer({ game }: { game: Game }) {
     const angle = dragAngle(drag, canvas.current.width, canvas.current.height);
     const t = video.current?.currentTime ?? time;
     setDrag(null);
-    void addMark({ game_id: game.id, slot: drag.slot, t, x: drag.x0, y: drag.y0, angle });
+    void addMark({ game_id: game.id, slot: drag.slot, t, x: drag.x0, y: drag.y0, angle, level });
   };
   const reloadSamples = () => {
     analysisApi.samples(game.id).then(setSamples).catch(() => setSamples([]));
@@ -220,7 +222,8 @@ export function ShapeViewer({ game }: { game: Game }) {
         <label><input type="checkbox" checked={showCoh} onChange={(e) => setShowCoh(e.target.checked)} /> Indice de cohérence du regard (0 à 100)</label>
         <label><input type="checkbox" checked={corridors} onChange={(e) => setCorridors(e.target.checked)} /> Couloirs lus</label>
       </div>
-      <MarkPanel game={game} marks={marks} error={markError} correcting={correcting} onCorrecting={setCorrecting} pick={pick} onPick={setPick} onRemove={(id) => void removeMark(id)} onRecomputed={reloadSamples} />
+      <MarkPanel game={game} marks={marks} error={markError} correcting={correcting} onCorrecting={setCorrecting} pick={pick} onPick={setPick} onRemove={(id) => void removeMark(id)} onRecomputed={reloadSamples} level={level} onLevel={setLevel} />
+      <KillFlagsPanel game={game} />
       <p className="shapes__note">
         Contour vert : disque et pointe tels que le programme les a lus (pointillé : lecture peu sûre). Contour magenta : position et regard posés à la main. Contour rouge : position que la vraie minimap ne confirme pas. Contour orange pointillé : regard incertain (les directions lues se contredisent, indice sous 40). Le nombre à côté du numéro est l'indice de cohérence du regard : mesuré, le regard lu est dans le cap pour 47 % des lignes sous 20, 66 % de 40 à 60 et 96 % au-dessus de 80.
         Croix rouge : joueur mort. Le contour doit recouvrir la pastille réelle et sa pointe doit viser dans le même sens que le triangle de la pastille.

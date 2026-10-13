@@ -345,3 +345,33 @@ test('cartographie à la main : enregistrement, relecture et refus des entrées 
   assert.equal(handleApi(ctx, 'PUT', '/api/map-annotations', q('map=Atlantis'), { data: [1] }).status, 400);
   assert.equal(handleApi(ctx, 'PUT', '/api/map-annotations', q('map=Atlantis'), {}).status, 400);
 });
+
+test('le niveau (étage ou dessous) d\'une correction à la main est enregistré et relu', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  handleApi(ctx, 'POST', '/api/games', q(), { video_id: videoId, start_s: 100, end_s: 700 });
+  const id = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { id: number }[])[0].id;
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 2, t: 105, x: 0.32, y: 0.6, angle: 0, level: 'dessous' }).status, 201);
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 3, t: 106, x: 0.2, y: 0.4, level: 'etage' }).status, 201);
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 4, t: 107, x: 0.2, y: 0.4 }).status, 201); // niveau non précisé
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 4, t: 108, x: 0.2, y: 0.4, level: 'cave' }).status, 400);
+  const list = JSON.parse(JSON.stringify(handleApi(ctx, 'GET', '/api/marks', q(`game=${id}`), undefined).json)) as { slot: number; level: string | null }[];
+  assert.deepEqual(list.map((m) => [m.slot, m.level]), [[2, 'dessous'], [3, 'etage'], [4, null]]);
+});
+
+test('un kill se marque et se démarque « libanaise » ; un kill inconnu est refusé', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  handleApi(ctx, 'POST', '/api/games', q(), { video_id: videoId, start_s: 100, end_s: 700 });
+  const id = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { id: number }[])[0].id;
+  ctx.db.prepare("INSERT INTO kills (game_id, t, killer_slot, victim_slot, weapon, headshot, kind) VALUES (?, 230.4, 1, 8, 'B12', 0, 'kill')").run(id);
+  const get = () => JSON.parse(JSON.stringify(handleApi(ctx, 'GET', '/api/kill-flags', q(`game=${id}`), undefined).json)) as [number, number][];
+  assert.deepEqual(get(), []);
+  assert.equal(handleApi(ctx, 'PUT', '/api/kill-flags', q(), { game_id: id, t: 230.41, victim: 8, libanaise: true }).status, 200); // instant à 0,05 s près
+  assert.deepEqual(get(), [[230.4, 8]]);
+  assert.equal(handleApi(ctx, 'PUT', '/api/kill-flags', q(), { game_id: id, t: 230.4, victim: 8, libanaise: true }).status, 200); // deux fois : pas de doublon
+  assert.equal(get().length, 1);
+  assert.equal(handleApi(ctx, 'PUT', '/api/kill-flags', q(), { game_id: id, t: 400, victim: 8, libanaise: true }).status, 404);
+  assert.equal(handleApi(ctx, 'PUT', '/api/kill-flags', q(), { game_id: id, t: 230.4, victim: 8, libanaise: false }).status, 200);
+  assert.deepEqual(get(), []);
+});

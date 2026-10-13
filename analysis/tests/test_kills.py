@@ -373,3 +373,15 @@ def test_a_group_with_contradicting_readings_is_not_labelled():
     ocr = {sig: (None, None) for sig in pieces}
     ocr["a0"], ocr["b0"] = (1, 0.1), (1, 0.1)  # les deux groupes réclament le joueur 1 : on ne tranche pas
     assert killfeed.resolve_by_appearance(pieces, team_of, ocr) == {}
+
+
+def test_kill_tuples_carry_the_libanaise_flag(tmp_path):
+    conn = db.connect(str(tmp_path / "t.db"))
+    conn.execute("INSERT INTO videos (id, path, duration_s, fps, width, height) VALUES (1, 'v.mp4', 600, 30, 1920, 1080)")
+    conn.execute("INSERT INTO games (id, video_id, start_s, end_s, map, status) VALUES (1, 1, 0, 600, 'Atlantis', 'confirmed')")
+    conn.execute("INSERT INTO kills (game_id, t, killer_slot, victim_slot, weapon, headshot, kind) VALUES (1, 12.34, 1, 8, 'B12', 0, 'kill'), (1, 50.0, 2, 7, 'B12', 0, 'kill')")
+    conn.execute("INSERT INTO kill_flags (game_id, t, victim_slot, flag) VALUES (1, 12.34, 8, 'libanaise')")
+    conn.commit()
+    got = db.kill_tuples(conn, 1, {"B12": "SPECTRE"})
+    assert got == [(12.34, 1, 8, "SPECTRE", True), (50.0, 2, 7, "SPECTRE", False)]
+    assert db.libanaise_of(conn, 1) == {(12.3, 8)}

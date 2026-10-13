@@ -26,6 +26,8 @@ automatiques avaient trouvé."""
 import argparse
 import json
 import math
+import os
+import shutil
 import sqlite3
 import sys
 from pathlib import Path
@@ -42,6 +44,32 @@ DOORS = HERE / "map_doors.json"  # portes et fenêtres tracées : extrémités, 
 CAPTURE = HERE / "map_capture.json"  # zones des points de capture : polygones (zones jouables)
 STATIONS = HERE / "map_stations.json"  # rayon et direction d'entrée et de sortie de chaque station (map_teleports.json ne garde que les centres)
 SIZE = 400  # côté du masque enregistré (comme map_mask.py)
+
+
+def redirect_outputs(folder):
+    """Écrit désormais les fichiers du programme dans `folder` (copie des fichiers existants, médianes comprises) au lieu de analysis/ : pour essayer « Appliquer » sans toucher aux cartes de
+    l'utilisateur, qui appuie lui-même sur « Appliquer » dans le même dépôt (variable d'environnement EVA_MAPS_OUT)."""
+    global MASK_DIR, TELEPORTS, SPAWNS, INSETS, DOORS, CAPTURE, STATIONS
+    folder = Path(folder)
+    source = MASK_DIR
+    MASK_DIR = folder / "map_masks"
+    if not MASK_DIR.exists():
+        shutil.copytree(source, MASK_DIR)
+    names = {}
+    for name in ("TELEPORTS", "SPAWNS", "INSETS", "DOORS", "CAPTURE", "STATIONS"):
+        original = globals()[name]
+        copy = folder / original.name
+        if original.exists() and not copy.exists():
+            shutil.copy(original, copy)
+        names[name] = copy
+    TELEPORTS, SPAWNS, INSETS, DOORS, CAPTURE, STATIONS = (names[n] for n in ("TELEPORTS", "SPAWNS", "INSETS", "DOORS", "CAPTURE", "STATIONS"))
+    import plan_mask
+
+    plan_mask.INSETS = INSETS
+
+
+if os.environ.get("EVA_MAPS_OUT"):
+    redirect_outputs(os.environ["EVA_MAPS_OUT"])
 CLASSES = ("sol", "mur", "tir", "vue", "porte", "porte_vitre")
 LEGACY_CLASSES = ("tp",)  # ancienne classe « chemin de tyrolienne » : ignorée à la lecture (remplacée par les cercles de stations)
 PASSABLE = ("sol", "porte", "porte_vitre")  # classes où l'on marche

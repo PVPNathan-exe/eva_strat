@@ -436,3 +436,16 @@ def test_a_player_walking_past_a_station_without_riding_is_not_touched():
     finally:
         tracking._TELEPORTS[:] = []
         tracking._STATIONS[:] = []
+
+
+def test_a_kill_marked_libanaise_keeps_the_gaze_that_was_read():
+    """La libanaise : le tueur collé à un mur décale son arme dans l'ouverture et tire à l'aveugle, son regard ne vise pas la victime (marquage à la main)."""
+    times = {k: k * 0.1 for k in range(60)}
+    def world():
+        return table(*[row(k, 1, 0.30, 0.50, angle=100.0) for k in range(60)], *[row(k, 8, 0.45, 0.50, angle=100.0) for k in range(60)])
+    rows = world()
+    assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE", True)], times, 0.1) == 0 and rows[(30, 1)][6] == 100.0  # marqué : regard lu gardé
+    rows = world()
+    assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE", False)], times, 0.1) > 0 and abs(rows[(30, 1)][6] - 0.0) < 1.0  # non marqué : règle du kill
+    rows = world()
+    assert tracking.kill_gaze(rows, [(3.0, 1, 8, "SPECTRE")], times, 0.1) > 0  # ancien format sans drapeau : règle du kill

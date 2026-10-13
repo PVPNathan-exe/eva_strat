@@ -47,7 +47,7 @@ def solve_with(conn, game_id, marks):
     data = evaluate._load(conn, g, step_s)
     names = weapons.display_names()
     deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game_id)]
-    kills = [(k["t"], k["killer_slot"], k["victim_slot"], names.get(k["weapon"], k["weapon"])) for k in db.kills_of(conn, game_id)]
+    kills = db.kill_tuples(conn, game_id, names)
     rows = tracking.solve(data["frames"], step_s, deaths, data["states"], db.teleports_for(g["map"]), db.map_points(conn, g["map"], game_id), db.walk_mask_for(g["map"]),
                           data["noise"], db.spawns_for(g["map"]), db.reliability_for(g["map"]), None, marks, kills, db.stations_for(g["map"]))
     return rows, {fi: t for fi, t, _ in data["frames"]}, g

@@ -36,6 +36,8 @@ def connect(db_path):
     if "frame" not in {row["name"] for row in conn.execute("PRAGMA table_info(user_marks)")}:
         conn.execute("ALTER TABLE user_marks ADD COLUMN frame INTEGER")
         conn.execute("ALTER TABLE user_marks ADD COLUMN frame_t REAL")
+    if "level" not in {row["name"] for row in conn.execute("PRAGMA table_info(user_marks)")}:
+        conn.execute("ALTER TABLE user_marks ADD COLUMN level TEXT CHECK (level IN ('etage', 'dessous'))")
     if "zone_key" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
         conn.execute("ALTER TABLE samples_meta ADD COLUMN zone_key TEXT")
     if "with_kills" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
@@ -340,6 +342,17 @@ def index_marks(conn, game_id):
         done += 1
     conn.commit()
     return done
+
+
+def libanaise_of(conn, game_id):
+    """Kills marqués « libanaise » à la main : {(instant arrondi à 0,1 s, victime)}."""
+    return {(round(r["t"], 1), r["victim_slot"]) for r in conn.execute("SELECT t, victim_slot FROM kill_flags WHERE game_id = ? AND flag = 'libanaise'", (game_id,))}
+
+
+def kill_tuples(conn, game_id, names):
+    """Kills d'une game pour le suivi : [(t, tueur, victime, nom de l'arme, libanaise)]."""
+    flagged = libanaise_of(conn, game_id)
+    return [(k["t"], k["killer_slot"], k["victim_slot"], names.get(k["weapon"], k["weapon"]), (round(k["t"], 1), k["victim_slot"]) in flagged) for k in kills_of(conn, game_id)]
 
 
 def marks_of(conn, game_id):

@@ -467,3 +467,15 @@ def test_apply_writes_the_below_layer_only_when_something_passes_below(tmp_path,
     conn.execute("UPDATE map_annotations SET data = ? WHERE map = 'Test'", (json.dumps(data),))
     map_annotations.apply(conn, "Test")
     assert not (tmp_path / "Test_dessous.png").exists()  # plus rien en dessous : l'ancien fichier est retiré
+
+
+def test_outputs_can_be_redirected_so_that_a_test_never_touches_the_users_maps(tmp_path, monkeypatch):
+    for name in ("MASK_DIR", "TELEPORTS", "SPAWNS", "INSETS", "DOORS", "CAPTURE", "STATIONS"):
+        monkeypatch.setattr(map_annotations, name, getattr(map_annotations, name))  # restaure la valeur d'origine à la fin du test
+    monkeypatch.setattr(plan_mask, "INSETS", plan_mask.INSETS)
+    original_masks, original_insets = map_annotations.MASK_DIR, map_annotations.INSETS
+    map_annotations.redirect_outputs(tmp_path)
+    assert map_annotations.MASK_DIR == tmp_path / "map_masks" and (tmp_path / "map_masks" / "Polaris_mediane.png").exists()  # les médianes sont copiées : on peut appliquer
+    assert map_annotations.INSETS == tmp_path / "map_plan_insets.json" and (tmp_path / "map_plan_insets.json").exists()
+    assert plan_mask.INSETS == map_annotations.INSETS  # le cadre lu par le recoupement avec le plan suit
+    assert map_annotations.MASK_DIR != original_masks and map_annotations.INSETS != original_insets

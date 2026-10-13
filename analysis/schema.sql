@@ -79,7 +79,8 @@ CREATE TABLE IF NOT EXISTS user_marks (
   angle REAL,
   created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   frame INTEGER,
-  frame_t REAL
+  frame_t REAL,
+  level TEXT CHECK (level IN ('etage', 'dessous'))  -- niveau du joueur sur une carte à deux étages (Atlantis, The Cliff), posé à la main ; NULL : non précisé
 );
 
 -- Joueur observé (cadre blanc du bandeau) au cours de la game : un intervalle par période, temps de la vidéo.
@@ -172,4 +173,14 @@ CREATE TABLE IF NOT EXISTS map_annotations (
   map TEXT PRIMARY KEY,
   data TEXT NOT NULL,
   updated TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Kills marqués à la main : « libanaise » = le tueur est collé à un mur, décale son arme dans l'ouverture et tire à l'aveugle en restant protégé. Son regard ne vise pas sa victime :
+-- la règle du kill (tracking.kill_gaze) ne s'applique pas. Clé : le kill (game, instant, victime) ; l'instant est celui de la table kills au moment du marquage.
+CREATE TABLE IF NOT EXISTS kill_flags (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  t REAL NOT NULL,
+  victim_slot INTEGER NOT NULL CHECK (victim_slot BETWEEN 1 AND 8),
+  flag TEXT NOT NULL CHECK (flag IN ('libanaise')),
+  PRIMARY KEY (game_id, t, victim_slot, flag)
 );

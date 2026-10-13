@@ -1788,14 +1788,15 @@ KILL_GAZE_SKIP_WEAPONS = {"DX3", "STICKY", "SONAR", "CLONE"}  # un kill de gadge
 def kill_gaze(rows, kills, times, step_s, coherence_out=None):
     """Règle du kill : le tueur regarde le joueur qu'il vient de tuer (souvent sans que l'autre l'ait vu, donc sans duel). Dans la fenêtre autour de la ligne du killfeed, le regard
     du tueur est remplacé par la direction de sa victime (sa dernière position, croix comprise) quand il s'en écarte de plus de DUEL_TOLERANCE degrés. Pas pour un kill de gadget
-    ni pour les armes de KILL_GAZE_EXCEPT (une arme qui tire en dehors d'un mur en gardant le corps à couvert : le regard ne vise pas la victime). Les regards posés à la main passent après."""
+    ni pour un kill marqué « libanaise » à la main (le tueur collé à un mur décale son arme dans l'ouverture et tire à l'aveugle : son regard ne vise pas la victime ; la technique n'est pas
+    détectable : sur 3 games de Polaris, la moitié des kills ont un mur entre les deux joueurs et le tueur contre un mur, et le regard lu n'y diffère pas du reste). Les regards posés à la main passent après."""
     if not kills or not times:
         return 0
     ordered = sorted(times)
     before, after = round(KILL_GAZE_BEFORE_S / step_s), round(KILL_GAZE_AFTER_S / step_s)
     changed = 0
-    for t, killer, victim, weapon in kills:
-        if killer is None or victim is None or weapon in KILL_GAZE_SKIP_WEAPONS or weapon in KILL_GAZE_EXCEPT:
+    for t, killer, victim, weapon, *flags in kills:
+        if killer is None or victim is None or weapon in KILL_GAZE_SKIP_WEAPONS or (flags and flags[0]):  # flags[0] : kill marqué « libanaise » à la main
             continue
         k = min(ordered, key=lambda j: abs(times[j] - t))
         if abs(times[k] - t) > 1.0:
@@ -1817,7 +1818,6 @@ def kill_gaze(rows, kills, times, step_s, coherence_out=None):
     return changed
 
 
-KILL_GAZE_EXCEPT = ()  # armes (noms) dont le tueur ne regarde pas sa victime : à renseigner
 DUEL_TOLERANCE = 40  # un regard déjà à moins de cela de la direction de l'adversaire est gardé
 DUEL_COHERENCE = 0.7  # indice d'un regard tiré de la règle du duel
 FRAME_LAG_S = 0.1  # une image d'analyse montre la minimap de la vidéo 0,1 s plus tard que son temps de lecture (mesuré sur 66 corrections d'un joueur en mouvement : décalage médian de 0,095 s) : son temps affiché est décalé d'autant

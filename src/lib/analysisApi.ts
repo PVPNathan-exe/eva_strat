@@ -52,6 +52,8 @@ export const analysisApi = {
   deleteComment: (id: number) => fetch(`/api/comments/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
   marks: (gameId: number) => fetch(`/api/marks?game=${gameId}`, { cache: 'no-store' }).then(parse<UserMark[]>),
   addMark: (mark: Omit<UserMark, 'id'>) => fetch('/api/marks', jsonInit('POST', mark)).then(parse<{ id: number }>),
+  killFlags: (gameId: number) => fetch(`/api/kill-flags?game=${gameId}`, { cache: 'no-store' }).then(parse<[number, number][]>),
+  setKillFlag: (flag: { game_id: number; t: number; victim: number; libanaise: boolean }) => fetch('/api/kill-flags', jsonInit('PUT', flag)).then(parse<{ ok: true }>),
   deleteMark: (id: number) => fetch(`/api/marks/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
   resolveGame: (gameId: number) => fetch(`/api/games/${gameId}/resolve`, jsonInit('POST', {})).then(parse<{ ok: true }>),
   flags: (gameId: number) => fetch(`/api/flags?game=${gameId}`, { cache: 'no-store' }).then(parse<GameFlags>),

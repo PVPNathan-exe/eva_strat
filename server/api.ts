@@ -228,7 +228,7 @@ function getFlags(ctx: ApiContext, query: URLSearchParams): ApiResult {
 function listMarks(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const gameId = Number(query.get('game'));
   if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
-  return reply(200, ctx.db.prepare('SELECT id, game_id, slot, t, x, y, angle FROM user_marks WHERE game_id = ? ORDER BY t, id').all(gameId));
+  return reply(200, ctx.db.prepare('SELECT id, game_id, slot, t, x, y, angle, level FROM user_marks WHERE game_id = ? ORDER BY t, id').all(gameId));
 }
 
 function createMark(ctx: ApiContext, payload: Row): ApiResult {
@@ -242,10 +242,12 @@ function createMark(ctx: ApiContext, payload: Row): ApiResult {
   if (!Number.isInteger(slot) || slot < 1 || slot > 8) return fail('Joueur invalide (1 à 8)');
   if (x < 0 || x > 1 || y < 0 || y > 1) return fail('Position hors de la minimap');
   if (payload.angle !== null && payload.angle !== undefined && angle === null) return fail('Regard invalide');
+  const level = payload.level === undefined || payload.level === null ? null : payload.level;
+  if (level !== null && level !== 'etage' && level !== 'dessous') return fail('Niveau invalide (etage ou dessous)');
   const game = ctx.db.prepare('SELECT start_s, end_s FROM games WHERE id = ?').get(gameId) as { start_s: number; end_s: number } | undefined;
   if (!game) return fail('Game inconnue', 404);
   if (t < game.start_s || t > game.end_s) return fail("Instant hors de la game");
-  const res = ctx.db.prepare('INSERT INTO user_marks (game_id, slot, t, x, y, angle) VALUES (?, ?, ?, ?, ?, ?)').run(gameId, slot, t, x, y, angle === null ? null : ((angle % 360) + 360) % 360);
+  const res = ctx.db.prepare('INSERT INTO user_marks (game_id, slot, t, x, y, angle, level) VALUES (?, ?, ?, ?, ?, ?, ?)').run(gameId, slot, t, x, y, angle === null ? null : ((angle % 360) + 360) % 360, level);
   return reply(201, { id: Number(res.lastInsertRowid) });
 }
 
@@ -268,6 +270,27 @@ function putMapAnnotation(ctx: ApiContext, query: URLSearchParams, payload: Row)
   const text = JSON.stringify(data);
   if (text.length > ANNOTATION_MAX_BYTES) return fail('Annotation trop volumineuse');
   ctx.db.prepare("INSERT INTO map_annotations (map, data, updated) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(map) DO UPDATE SET data = excluded.data, updated = CURRENT_TIMESTAMP").run(map, text);
+  return reply(200, { ok: true });
+}
+
+/** Kills marqués à la main (« libanaise ») d'une game : [[instant, victime]]. */
+function listKillFlags(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = Number(query.get('game'));
+  if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
+  const rows = ctx.db.prepare("SELECT t, victim_slot FROM kill_flags WHERE game_id = ? AND flag = 'libanaise' ORDER BY t").all(gameId) as { t: number; victim_slot: number }[];
+  return reply(200, rows.map((r) => [r.t, r.victim_slot]));
+}
+
+/** Marque ou démarque un kill « libanaise » : { game_id, t, victim, libanaise }. Le kill doit exister (instant à 0,05 s près). */
+function putKillFlag(ctx: ApiContext, payload: Row): ApiResult {
+  const gameId = num(payload.game_id);
+  const t = num(payload.t);
+  const victim = num(payload.victim);
+  if (gameId === null || t === null || victim === null) return fail('Kill incomplet (game_id, t, victim)');
+  const kill = ctx.db.prepare('SELECT t FROM kills WHERE game_id = ? AND victim_slot = ? AND ABS(t - ?) < 0.05').get(gameId, victim, t) as { t: number } | undefined;
+  if (!kill) return fail('Kill inconnu', 404);
+  if (payload.libanaise === true) ctx.db.prepare("INSERT OR IGNORE INTO kill_flags (game_id, t, victim_slot, flag) VALUES (?, ?, ?, 'libanaise')").run(gameId, kill.t, victim);
+  else ctx.db.prepare("DELETE FROM kill_flags WHERE game_id = ? AND t = ? AND victim_slot = ? AND flag = 'libanaise'").run(gameId, kill.t, victim);
   return reply(200, { ok: true });
 }
 
@@ -427,6 +450,10 @@ export function handleApi(
   if (pathname === '/api/map-annotations') {
     if (method === 'GET') return getMapAnnotation(ctx, query);
     if (method === 'PUT') return putMapAnnotation(ctx, query, payload);
+  }
+  if (pathname === '/api/kill-flags') {
+    if (method === 'GET') return listKillFlags(ctx, query);
+    if (method === 'PUT') return putKillFlag(ctx, payload);
   }
   if (method === 'GET' && pathname === '/api/reliability') return getReliability(ctx, query);
   if (pathname === '/api/comments') {
