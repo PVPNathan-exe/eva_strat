@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { CaptureBox, CaptureSeries, CommentTag, IconWork, Correction, Game, GameFlags, JobEvent, Reliability, Sample, UserMark, Video, VideoComment, Weapon, Zones } from '../types/analysis';
+import type { TeamRange, CaptureBox, CaptureSeries, CommentTag, IconWork, Correction, Game, GameFlags, JobEvent, Reliability, Sample, UserMark, Video, VideoComment, Weapon, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -52,6 +52,10 @@ export const analysisApi = {
   deleteComment: (id: number) => fetch(`/api/comments/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
   marks: (gameId: number) => fetch(`/api/marks?game=${gameId}`, { cache: 'no-store' }).then(parse<UserMark[]>),
   addMark: (mark: Omit<UserMark, 'id'>) => fetch('/api/marks', jsonInit('POST', mark)).then(parse<{ id: number }>),
+  teamRanges: (videoId: number) => fetch(`/api/team-ranges?video=${videoId}`, { cache: 'no-store' }).then(parse<TeamRange[]>),
+  putTeamRange: (range: { video_id: number; start_s: number; end_s: number; team_a: string | null; team_b: string | null }) => fetch('/api/team-ranges', jsonInit('PUT', range)).then(parse<{ id: number; games: number }>),
+  deleteTeamRange: (id: number) => fetch(`/api/team-ranges/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
+  applyTeamRanges: (videoId: number) => fetch(`/api/team-ranges/apply?video=${videoId}`, jsonInit('POST', {})).then(parse<{ games: number }>),
   captureBoxes: (gameId: number) => fetch(`/api/capture-boxes?game=${gameId}`, { cache: 'no-store' }).then(parse<CaptureBox[]>),
   killFlags: (gameId: number) => fetch(`/api/kill-flags?game=${gameId}`, { cache: 'no-store' }).then(parse<[number, number][]>),
   setKillFlag: (flag: { game_id: number; t: number; victim: number; libanaise: boolean }) => fetch('/api/kill-flags', jsonInit('PUT', flag)).then(parse<{ ok: true }>),

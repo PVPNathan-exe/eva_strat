@@ -8,6 +8,7 @@ import { setVideoElement } from '../../lib/videoRef';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { PlayerControls } from './PlayerControls';
 import { VISION_LAYER_LABELS, type VisionLayers } from '../../lib/vision';
+import { TeamRangeBar } from './TeamRangeBar';
 import { VisionOverlay } from './VisionOverlay';
 
 const LAYERS_KEY = 'eva_strat:vision';
@@ -108,6 +109,7 @@ export function VideoPlayer({ videoId, duration }: { videoId: number; duration: 
             </div>
           </details>
         )}
+        <TeamRangeBar videoId={videoId} duration={duration} />
       </div>
       <div className="player-stage" ref={stage}>
       <video

@@ -112,6 +112,15 @@ export interface CaptureBox {
   point: string | null;
 }
 
+/** Noms d'équipes valables pour un morceau de la vidéo (secondes de la vidéo). */
+export interface TeamRange {
+  id: number;
+  start_s: number;
+  end_s: number;
+  team_a: string | null;
+  team_b: string | null;
+}
+
 export interface Game {
   id: number;
   video_id: number;

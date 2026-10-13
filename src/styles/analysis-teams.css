@@ -1,0 +1,78 @@
+/* Onglet Analyse : noms d'équipes par morceau de vidéo (TeamRangeBar), sur la ligne de « Ce que voit le programme ». */
+
+.teambar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.teambar__label {
+  color: var(--c-text-muted);
+}
+
+.teambar__input,
+.teambar__panel input {
+  width: 9rem;
+  padding: 0.25rem 0.45rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+}
+
+.teambar__input--a {
+  border-color: var(--c-orange);
+}
+
+.teambar__input--b {
+  border-color: var(--c-blue);
+}
+
+.teambar__menu .menu__panel {
+  right: 0;
+  left: auto;
+  min-width: 20rem;
+}
+
+.teambar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--c-text-soft);
+}
+
+.teambar__row input {
+  width: 5.5rem;
+}
+
+.teambar__note {
+  margin: 0;
+  color: var(--c-warn);
+  font-size: 0.85rem;
+}
+
+.teambar__list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--c-text-soft);
+}
+
+.teambar__list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .teambar__menu .menu__panel {
+    right: 0.75rem;
+  }
+}

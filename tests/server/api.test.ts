@@ -388,3 +388,28 @@ test('les points de capture vus sur la minimap sont lus par game et triés par t
   assert.deepEqual(handleApi(ctx, 'GET', '/api/capture-boxes', q('game=999'), undefined).json, []);
   assert.equal(handleApi(ctx, 'GET', '/api/capture-boxes', q(), undefined).status, 400);
 });
+
+test('des noms d\'équipes valables pour un morceau de vidéo vont aux games du morceau et aux games posées ensuite', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  for (const [s, e] of [[100, 200], [300, 400], [500, 600]]) handleApi(ctx, 'POST', '/api/games', q(), { video_id: videoId, start_s: s, end_s: e });
+  const names = () => (JSON.parse(JSON.stringify(handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json)) as { team_a: string | null; team_b: string | null }[]).map((g) => `${g.team_a}/${g.team_b}`);
+  assert.deepEqual(names(), ['null/null', 'null/null', 'null/null']);
+  const put = handleApi(ctx, 'PUT', '/api/team-ranges', q(), { video_id: videoId, start_s: 0, end_s: 450, team_a: ' NCT ', team_b: 'SNV' });
+  assert.equal(put.status, 201);
+  assert.equal((put.json as { games: number }).games, 2);
+  assert.deepEqual(names(), ['NCT/SNV', 'NCT/SNV', 'null/null']); // la troisième game est hors du morceau
+  // un second morceau qui chevauche le premier le remplace
+  handleApi(ctx, 'PUT', '/api/team-ranges', q(), { video_id: videoId, start_s: 250, end_s: 700, team_a: 'OMG', team_b: null });
+  assert.deepEqual(names(), ['NCT/SNV', 'OMG/SNV', 'OMG/null']); // un côté sans nom ne touche pas l'autre côté
+  const ranges = JSON.parse(JSON.stringify(handleApi(ctx, 'GET', '/api/team-ranges', q(`video=${videoId}`), undefined).json)) as { id: number; start_s: number }[];
+  assert.equal(ranges.length, 1); // le premier morceau [0, 450] chevauche [250, 700] : il est remplacé en entier
+  // une game posée plus tard dans un morceau reçoit ses noms
+  handleApi(ctx, 'POST', '/api/games', q(), { video_id: videoId, start_s: 650, end_s: 690 });
+  assert.equal(names().at(-1), 'OMG/null');
+  // oublier un morceau garde les noms déjà donnés
+  assert.equal(handleApi(ctx, 'DELETE', `/api/team-ranges/${ranges[0].id}`, q(), undefined).status, 200);
+  assert.deepEqual(names().slice(0, 3), ['NCT/SNV', 'OMG/SNV', 'OMG/null']);
+  assert.equal(handleApi(ctx, 'PUT', '/api/team-ranges', q(), { video_id: videoId, start_s: 10, end_s: 5, team_a: 'X' }).status, 400);
+  assert.equal(handleApi(ctx, 'PUT', '/api/team-ranges', q(), { video_id: videoId, start_s: 0, end_s: 5 }).status, 400);
+});

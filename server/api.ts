@@ -95,6 +95,63 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   );
 }
 
+/** Morceaux de vidéo qui portent des noms d'équipes : [{ id, start_s, end_s, team_a, team_b }] triés par début. */
+function listTeamRanges(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const videoId = Number(query.get('video'));
+  if (query.get('video') === null || !Number.isInteger(videoId)) return fail('Paramètre video manquant');
+  return reply(200, ctx.db.prepare('SELECT id, start_s, end_s, team_a, team_b FROM team_ranges WHERE video_id = ? ORDER BY start_s').all(videoId));
+}
+
+const cleanTeam = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 60) : null);
+
+/** Donne les noms d'un morceau aux games dont le milieu y tombe. `onlyEmpty` : ne touche pas aux noms déjà saisis. Renvoie le nombre de games modifiées. */
+function fillTeams(db: DatabaseSync, videoId: number, start: number, end: number, a: string | null, b: string | null, onlyEmpty: boolean): number {
+  const games = db
+    .prepare('SELECT id, team_a, team_b FROM games WHERE video_id = ? AND (start_s + end_s) / 2 >= ? AND (start_s + end_s) / 2 <= ?')
+    .all(videoId, start, end) as { id: number; team_a: string | null; team_b: string | null }[];
+  let changed = 0;
+  for (const g of games) {
+    const nextA = a !== null && (!onlyEmpty || !g.team_a) ? a : g.team_a;
+    const nextB = b !== null && (!onlyEmpty || !g.team_b) ? b : g.team_b;
+    if (nextA === g.team_a && nextB === g.team_b) continue;
+    db.prepare('UPDATE games SET team_a = ?, team_b = ? WHERE id = ?').run(nextA, nextB, g.id);
+    changed++;
+  }
+  return changed;
+}
+
+/** Enregistre un morceau de vidéo avec ses deux noms d'équipes (un morceau déjà là qui le chevauche est remplacé : le dernier gagne) et les donne aux games qu'il couvre. */
+function putTeamRange(ctx: ApiContext, body: Row): ApiResult {
+  const videoId = num(body.video_id);
+  const start = num(body.start_s);
+  const end = num(body.end_s);
+  if (videoId === null || start === null || end === null) return fail('video_id, start_s et end_s doivent être des nombres');
+  if (start < 0 || end <= start) return fail('Bornes invalides : il faut 0 ≤ début < fin');
+  if (!ctx.db.prepare('SELECT id FROM videos WHERE id = ?').get(videoId)) return fail('Vidéo inconnue');
+  const a = cleanTeam(body.team_a);
+  const b = cleanTeam(body.team_b);
+  if (a === null && b === null) return fail('Il faut au moins un nom d\'équipe');
+  ctx.db.prepare('DELETE FROM team_ranges WHERE video_id = ? AND start_s < ? AND end_s > ?').run(videoId, end, start);
+  const result = ctx.db.prepare('INSERT INTO team_ranges (video_id, start_s, end_s, team_a, team_b) VALUES (?, ?, ?, ?, ?)').run(videoId, start, end, a, b);
+  return reply(201, { id: Number(result.lastInsertRowid), games: fillTeams(ctx.db, videoId, start, end, a, b, false) });
+}
+
+/** Oublie un morceau (les noms déjà donnés aux games restent). */
+function deleteTeamRange(ctx: ApiContext, id: number): ApiResult {
+  ctx.db.prepare('DELETE FROM team_ranges WHERE id = ?').run(id);
+  return reply(200, { ok: true });
+}
+
+/** Les morceaux enregistrés donnent leurs noms aux games de la vidéo qui n'en ont pas (games détectées ou posées après coup). */
+function applyTeamRanges(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const videoId = Number(query.get('video'));
+  if (query.get('video') === null || !Number.isInteger(videoId)) return fail('Paramètre video manquant');
+  const ranges = ctx.db.prepare('SELECT start_s, end_s, team_a, team_b FROM team_ranges WHERE video_id = ? ORDER BY id').all(videoId) as { start_s: number; end_s: number; team_a: string | null; team_b: string | null }[];
+  let games = 0;
+  for (const r of ranges) games += fillTeams(ctx.db, videoId, r.start_s, r.end_s, r.team_a, r.team_b, true);
+  return reply(200, { games });
+}
+
 function createGame(ctx: ApiContext, body: Row): ApiResult {
   const videoId = num(body.video_id);
   if (videoId === null) return fail('video_id manquant');
@@ -104,6 +161,7 @@ function createGame(ctx: ApiContext, body: Row): ApiResult {
   const result = ctx.db
     .prepare("INSERT INTO games (video_id, start_s, end_s, map, status) VALUES (?, ?, ?, ?, 'confirmed')")
     .run(videoId, body.start_s as number, body.end_s as number, map);
+  applyTeamRanges(ctx, new URLSearchParams({ video: String(videoId) })); // une game posée dans un morceau qui porte des noms les reçoit
   return reply(201, { id: Number(result.lastInsertRowid) });
 }
 
@@ -489,6 +547,13 @@ export function handleApi(
     if (method === 'PATCH') return patchGame(ctx, id, payload);
     if (method === 'DELETE') return deleteGame(ctx, id);
   }
+  if (pathname === '/api/team-ranges') {
+    if (method === 'GET') return listTeamRanges(ctx, query);
+    if (method === 'PUT') return putTeamRange(ctx, payload);
+  }
+  if (method === 'POST' && pathname === '/api/team-ranges/apply') return applyTeamRanges(ctx, query);
+  const rangeMatch = /^\/api\/team-ranges\/(\d+)$/.exec(pathname);
+  if (rangeMatch && method === 'DELETE') return deleteTeamRange(ctx, Number(rangeMatch[1]));
   if (pathname === '/api/teams') {
     if (method === 'GET') return listTeams(ctx);
     if (method === 'PUT') return putTeam(ctx, payload);

@@ -198,3 +198,13 @@ CREATE TABLE IF NOT EXISTS capture_boxes (
   point TEXT,
   PRIMARY KEY (game_id, t0)
 );
+
+-- Noms d'équipes valables pour un morceau de vidéo (bootcamp : des rediffs de 4 à 5 heures où les équipes tournent) : les games dont le milieu tombe dans l'intervalle les reçoivent.
+CREATE TABLE IF NOT EXISTS team_ranges (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  start_s REAL NOT NULL,
+  end_s REAL NOT NULL,
+  team_a TEXT,
+  team_b TEXT
+);

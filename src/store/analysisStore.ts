@@ -110,9 +110,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
     await get().applyKnownTeams();
   },
   applyKnownTeams: async () => {
-    const { games, teams } = get();
+    const { games, teams, videoId } = get();
+    if (videoId !== null) await analysisApi.applyTeamRanges(videoId); // morceaux de vidéo qui portent des noms : ils passent avant le nom retenu d'un diminutif
+    const fresh = videoId === null ? games : await analysisApi.games(videoId);
     let changed = false;
-    for (const g of games) {
+    for (const g of fresh) {
       const patch: { team_a?: string; team_b?: string } = {};
       const sides: ['team_a' | 'team_b', number[]][] = [['team_a', [1, 2, 3, 4]], ['team_b', [5, 6, 7, 8]]];
       for (const [key, slots] of sides) {
