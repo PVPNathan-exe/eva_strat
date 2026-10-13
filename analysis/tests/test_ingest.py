@@ -26,3 +26,16 @@ def test_probe_reads_real_video(tmp_path):
     assert meta["width"] == 320 and meta["height"] == 180
     assert abs(meta["fps"] - 25.0) < 0.01
     assert 1.9 < meta["duration_s"] < 2.2
+
+
+def test_best_height_ignores_audio_only_formats_and_missing_info():
+    info = {"formats": [{"vcodec": "none", "height": None}, {"vcodec": "avc1", "height": 360}, {"vcodec": "avc1", "height": 1080}, {"vcodec": "av01", "height": 720}]}
+    assert ingest.best_height(info) == 1080
+    assert ingest.best_height({"formats": [{"vcodec": "none"}]}) == 0
+    assert ingest.best_height({}) == 0
+
+
+def test_youtube_cookie_options_come_from_the_environment_file_first():
+    assert ingest.cookie_options({}) == {}
+    assert ingest.cookie_options({"EVA_YT_COOKIES_BROWSER": "firefox"}) == {"cookiesfrombrowser": ("firefox",)}
+    assert ingest.cookie_options({"EVA_YT_COOKIES_FILE": "C:/c.txt", "EVA_YT_COOKIES_BROWSER": "firefox"}) == {"cookiefile": "C:/c.txt"}
