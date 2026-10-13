@@ -707,7 +707,7 @@ def anchor_spectated(frames, states, spawns=None):
         dets = [d for d in dets if not (d.get("spectated") and d is not pick and d["team"] == team and d.get("number") not in (None, _number_of(slot)))]  # autre numéro : joueur mort qui attend
         if pick is None and not cands:
             mine = [d for d in waits if d["team"] == team]
-            dead = sum(1 for s, v in states[fi].items() if (s <= 4) == (team == "A") and not v["alive"])
+            dead = sum(1 for s, v in states.get(fi, {}).items() if (s <= 4) == (team == "A") and not v["alive"])
             pick = next((d for d in mine if d.get("number") == _number_of(slot)), None) or (mine[0] if len(mine) == dead + 1 and dead == 0 else None)
             if pick is not None:
                 dets = dets + [pick]

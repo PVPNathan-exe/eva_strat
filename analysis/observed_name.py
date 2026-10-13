@@ -130,7 +130,7 @@ MIN_SEGMENT_S = 1.0  # une période d'observation plus courte que cela, entre de
 def observed_segments(states, times, min_s=MIN_SEGMENT_S):
     """Joueur observé au cours de la game : [(slot, t0, t1)] en temps de vidéo. states : {image: {slot: {"spectated"}}}, times : {image: temps}.
     Les images sans joueur observé unique et les clignotements de moins de min_s sont absorbés par la période voisine quand ses deux bords sont d'accord."""
-    keys = sorted(states)
+    keys = sorted(k for k in states if k in times)  # une image sans aucune ligne de suivi (écran vide) n'a pas de temps
     who = []
     for k in keys:
         flagged = [s for s, v in states[k].items() if v.get("spectated")]
