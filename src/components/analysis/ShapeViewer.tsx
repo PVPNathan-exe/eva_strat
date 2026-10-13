@@ -11,6 +11,7 @@ import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game, GameFlags, Sample, Zone } from '../../types/analysis';
 import { drawMarks, dragAngle, type Drag } from './markDraw';
 import { KillFlagsPanel } from './KillFlagsPanel';
+import { TWO_LEVEL_MAPS } from '../../lib/twoLevelMaps';
 import { MarkPanel } from './MarkPanel';
 import { useGameFlags } from './useGameFlags';
 import { useMarks } from './useMarks';
@@ -67,7 +68,7 @@ export function ShapeViewer({ game }: { game: Game }) {
   const { marks, error: markError, add: addMark, remove: removeMark } = useMarks(game.id);
   const [correcting, setCorrecting] = useState(false);
   const [pick, setPick] = useState<number | null>(null);
-  const [level, setLevel] = useState<'etage' | 'dessous' | null>(null); // niveau posé avec les prochaines corrections
+  const [level, setLevel] = useState<'etage' | 'dessous'>('dessous'); // niveau posé avec les prochaines corrections : rez-de-chaussée par défaut
   const [markDead, setMarkDead] = useState(false); // les prochaines corrections posent le joueur mort à cet endroit
   const [drag, setDrag] = useState<Drag | null>(null);
   const setCurrentTime = useAnalysisStore((s) => s.setCurrentTime);
@@ -191,7 +192,7 @@ export function ShapeViewer({ game }: { game: Game }) {
     const angle = dragAngle(drag, canvas.current.width, canvas.current.height);
     const t = video.current?.currentTime ?? time;
     setDrag(null);
-    void addMark({ game_id: game.id, slot: drag.slot, t, x: drag.x0, y: drag.y0, angle: markDead ? null : angle, level, dead: markDead });
+    void addMark({ game_id: game.id, slot: drag.slot, t, x: drag.x0, y: drag.y0, angle: markDead ? null : angle, level: TWO_LEVEL_MAPS.includes(game.map ?? '') ? level : null, dead: markDead });
   };
   const reloadSamples = () => {
     analysisApi.samples(game.id).then(setSamples).catch(() => setSamples([]));

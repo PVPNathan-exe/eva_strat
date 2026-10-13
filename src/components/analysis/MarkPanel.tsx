@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { analysisApi } from '../../lib/analysisApi';
+import { TWO_LEVEL_MAPS } from '../../lib/twoLevelMaps';
 import { formatTime } from '../../lib/timeline';
 import type { Game, UserMark } from '../../types/analysis';
 
@@ -32,8 +33,8 @@ export function MarkPanel({
   onPick: (slot: number | null) => void;
   onRemove: (id: number) => void;
   onRecomputed: () => void;
-  level: 'etage' | 'dessous' | null;
-  onLevel: (level: 'etage' | 'dessous' | null) => void;
+  level: 'etage' | 'dessous';
+  onLevel: (level: 'etage' | 'dessous') => void;
   markDead: boolean;
   onMarkDead: (dead: boolean) => void;
 }) {
@@ -71,14 +72,15 @@ export function MarkPanel({
           <label className="marks__dead">
             <input type="checkbox" checked={markDead} onChange={(e) => onMarkDead(e.target.checked)} /> Le joueur est mort (clique l'endroit de sa mort : il reste mort 14 s, ou jusqu'à ta correction suivante pour lui)
           </label>
-          <label className="marks__level">
-            Niveau du joueur (Atlantis, The Cliff : la lecture est ambiguë entre l'étage et le dessous){' '}
-            <select value={level ?? ''} onChange={(e) => onLevel(e.target.value === '' ? null : (e.target.value as 'etage' | 'dessous'))}>
-              <option value="">non précisé</option>
-              <option value="etage">étage</option>
-              <option value="dessous">dessous</option>
-            </select>
-          </label>
+          {TWO_LEVEL_MAPS.includes(game.map ?? '') && (
+            <label className="marks__level">
+              Niveau du joueur (la lecture est ambiguë entre le rez-de-chaussée et l'étage){' '}
+              <select value={level} onChange={(e) => onLevel(e.target.value as 'etage' | 'dessous')}>
+                <option value="dessous">rdc</option>
+                <option value="etage">étage 1</option>
+              </select>
+            </label>
+          )}
           <p className="marks__help">
             1. Mets la vidéo à l'instant voulu. 2. Choisis le joueur. 3. Clique sur le centre de sa pastille pour la position, ou clique et glisse vers la direction de la pointe pour la
             position et le regard. Plusieurs corrections valent mieux qu'une, surtout autour d'une erreur.
@@ -91,7 +93,7 @@ export function MarkPanel({
             <li key={m.id}>
               <span>
                 {formatTime(m.t - game.start_s)} · joueur {numberOf(m.slot)} · {m.dead ? 'mort' : m.angle === null ? 'position' : `position et regard ${Math.round(m.angle)}°`}
-                {m.level === 'etage' ? ' · étage' : m.level === 'dessous' ? ' · dessous' : ''}
+                {m.level === 'etage' ? ' · étage 1' : m.level === 'dessous' ? ' · rdc' : ''}
               </span>
               <button onClick={() => onRemove(m.id)}>Retirer</button>
             </li>
