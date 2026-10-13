@@ -61,6 +61,7 @@ export function IngestBar({ onCalibrate }: { onCalibrate: () => void }) {
         />
         <button
           type="submit"
+          className="btn-primary"
           disabled={job.running || !target}
           title="Repère les games par le chrono. Rien n'est relu si la vidéo a déjà ses games : tu confirmes ensuite les bornes et tu choisis quoi analyser dans « Analyse détaillée ». Champ vide : vidéo choisie."
         >

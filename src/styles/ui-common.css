@@ -158,3 +158,9 @@ input[type='radio'] {
     scroll-behavior: auto;
   }
 }
+
+.ingest .btn-primary,
+.mapping .btn-primary {
+  background: var(--c-ok-strong);
+  border-color: var(--c-ok);
+}

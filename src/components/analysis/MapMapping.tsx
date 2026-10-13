@@ -458,7 +458,7 @@ export function MapMapping({ map }: { map: string }) {
         <button onClick={() => void save()} disabled={busy || !dirty}>
           Enregistrer
         </button>
-        <button onClick={() => void apply()} disabled={busy}>
+        <button className="btn-primary" onClick={() => void apply()} disabled={busy}>
           Appliquer au programme
         </button>
         {dirty && <span className="mapping__dirty">Modifications non enregistrées</span>}
