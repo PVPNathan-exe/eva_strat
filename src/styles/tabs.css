@@ -10,6 +10,8 @@
 }
 
 .tabs__brand {
+  margin: 0;
+  font-size: 1rem;
   align-self: center;
   margin-right: 1rem;
   color: var(--c-danger);
