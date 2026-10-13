@@ -558,3 +558,27 @@ def test_the_kill_rule_applies_through_a_wall_unless_the_option_is_on():
     finally:
         tracking.SIGHT_KILL = False
         _no_wall()
+
+
+def test_nobody_is_outside_the_spawn_zone_before_the_game_starts():
+    spawns = {"A": [(0.05, 0.30, 0.15, 0.70)], "B": [(0.85, 0.30, 0.95, 0.70)]}
+    early, late = 0, round(2.0 / STEP)  # image du tout début, image 2 s plus tard
+    rows = table(
+        row(early, 1, 0.30, 0.50),  # équipe A hors de sa zone : ramené au bord le plus proche
+        row(early, 5, 0.90, 0.50),  # équipe B dans sa zone : inchangé
+        row(early, 2, 0.10, 0.10, alive=0),  # un mort n'est pas concerné
+        row(late, 1, 0.30, 0.50),  # la game a commencé : il peut être n'importe où
+    )
+    moved = tracking.prestart_in_spawn(rows, spawns, 0.0)
+    assert moved == 1
+    assert rows[(early, 1)][4:6] == (0.15, 0.5)
+    assert rows[(early, 5)][4:6] == (0.90, 0.50) and rows[(early, 2)][4:6] == (0.10, 0.10) and rows[(late, 1)][4:6] == (0.30, 0.50)
+
+
+def test_neutral_spawn_zones_let_any_player_start_in_any_of_them():
+    zones = [(0.05, 0.05, 0.15, 0.15), (0.85, 0.85, 0.95, 0.95)]
+    spawns = {"A": zones, "B": zones}
+    rows = table(row(0, 1, 0.90, 0.90), row(0, 5, 0.10, 0.10), row(0, 6, 0.80, 0.80))
+    assert tracking.prestart_in_spawn(rows, spawns, 0.0) == 1  # seul le 6 est hors de toute zone
+    assert rows[(0, 6)][4:6] == (0.85, 0.85)
+    assert tracking.prestart_in_spawn(rows, None, 0.0) == 0  # sans zone de départ, rien n'est fait

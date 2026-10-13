@@ -1613,6 +1613,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     steady_positions(rows)
     snap_to_walkable(rows)
     rotor_snap(rows, rotors)
+    prestart_in_spawn(rows, spawns, min(times.values()))
     steady_gaze(rows, step_s)
     steady_still_gaze(rows)
     tp_gaze(rows, step_s, coherence_out)
@@ -2093,6 +2094,28 @@ def rotor_snap(rows, rotors):
     return moved
 
 
+PRESTART_S = 1.5  # secondes après la première image de la game pendant lesquelles elle n'a pas commencé : les joueurs sont encore à leur départ (mesuré sur 12 games : à partir de 1,5 à 2,5 s une grande part des positions sort des zones de départ, avant c'est 0 à 40 % sur les bords)
+
+
+def prestart_in_spawn(rows, spawns, t_first):
+    """Avant le début de la game (PRESTART_S depuis la première image), aucun joueur vivant n'est hors de la zone de départ de son équipe (toutes les zones pour les départs neutres
+    d'Outlaw) : une position hors zone (reflet, pastille d'une autre équipe, zone tracée un peu juste) est ramenée au point le plus proche de la zone la plus proche. Les
+    corrections posées à la main passent ensuite et gagnent. Sans zone de départ, rien n'est fait."""
+    if not spawns:
+        return 0
+    moved = 0
+    for key, r in list(rows.items()):
+        if not r[7] or r[1] + FRAME_LAG_S - t_first >= PRESTART_S:
+            continue
+        rects = _rects(spawns, "A" if r[3] == "A" else "B")
+        if not rects or any(x0 <= r[4] <= x1 and y0 <= r[5] <= y1 for x0, y0, x1, y1 in rects):
+            continue
+        near = min(((min(max(r[4], x0), x1), min(max(r[5], y0), y1)) for x0, y0, x1, y1 in rects), key=lambda p: math.hypot(p[0] - r[4], p[1] - r[5]))
+        rows[key] = r[:4] + (round(near[0], 4), round(near[1], 4)) + r[6:]
+        moved += 1
+    return moved
+
+
 def snap_to_walkable(rows):
     """Un joueur peut être collé à un mur, jamais hors des limites de la carte : une position vivante hors des passages connus (lissage, centre d'un disque coupé
     par un trait de mur) est ramenée au centre de la case praticable la plus proche. Sans carte des passages, rien n'est fait."""
@@ -2340,7 +2363,7 @@ def configure(params):
             globals()[name] = float(value)
 
 
-ALGO_REVISION = 47  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
+ALGO_REVISION = 48  # à incrémenter quand l'algorithme change : les positions déjà lues sont alors relues
 PARAMS_VERSION = ALGO_REVISION  # version des réglages sauvegardés + révision de l'algorithme
 
 
