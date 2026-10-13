@@ -582,3 +582,31 @@ def test_neutral_spawn_zones_let_any_player_start_in_any_of_them():
     assert tracking.prestart_in_spawn(rows, spawns, 0.0) == 1  # seul le 6 est hors de toute zone
     assert rows[(0, 6)][4:6] == (0.85, 0.85)
     assert tracking.prestart_in_spawn(rows, None, 0.0) == 0  # sans zone de départ, rien n'est fait
+
+
+def _times(n=400):
+    return {k: round(k * STEP, 2) for k in range(n)}
+
+
+def test_a_dead_mark_keeps_the_player_dead_for_the_respawn_delay_and_drops_his_alive_rows():
+    times = _times()
+    rows = table(*[row(k, 8, 0.4, 0.5) for k in range(0, 300)], *[row(k, 3, 0.2, 0.2) for k in range(0, 300)])
+    put = lambda k, slot, team, x, y, angle, alive, conf: rows.__setitem__((k, slot), (k, times[k], slot, team, x, y, angle, int(alive), conf))
+    t = 11.8 + tracking.FRAME_LAG_S  # instant de la mort (secondes de la vidéo)
+    assert tracking.apply_dead_marks(rows, [(t, 8, 0.45, 0.55)], [], times, put) == 1
+    alive = sorted(k for (k, s), r in rows.items() if s == 8 and r[7])
+    assert alive[0] == 0 and 118 not in alive and 119 not in alive  # le joueur 8 n'est plus vivant dans la fenêtre
+    assert not any(118 <= k < 118 + round(tracking.USER_DEAD_S / STEP) - 2 for k in alive)  # 14 s plus tard environ il peut réapparaître
+    assert alive[-1] == 299  # ... et ses lignes après la fenêtre restent
+    cross = rows[(118, 8)]
+    assert cross[7] == 0 and cross[4:6] == (0.45, 0.55)  # une croix à l'endroit donné
+    assert all(rows[(k, 3)][7] == 1 for k in range(300))  # un autre joueur n'est pas touché
+
+
+def test_the_dead_window_stops_at_the_next_correction_of_the_same_player():
+    times = _times()
+    frames = tracking.user_dead_frames([(10.0, 8, 0.4, 0.5)], [(12.0, 8, 0.2, 0.2, None), (11.0, 3, 0.1, 0.1, None)], times)
+    last = max(frames[8])
+    assert abs(times[last] + tracking.FRAME_LAG_S - 12.0) < 0.2  # il s'arrête à la correction du 8, pas à celle du 3
+    assert 8 in frames and 3 not in frames
+    assert tracking.user_dead_frames(None, None, times) == {}

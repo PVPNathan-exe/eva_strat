@@ -413,3 +413,15 @@ test('des noms d\'équipes valables pour un morceau de vidéo vont aux games du 
   assert.equal(handleApi(ctx, 'PUT', '/api/team-ranges', q(), { video_id: videoId, start_s: 10, end_s: 5, team_a: 'X' }).status, 400);
   assert.equal(handleApi(ctx, 'PUT', '/api/team-ranges', q(), { video_id: videoId, start_s: 0, end_s: 5 }).status, 400);
 });
+
+test('une mort posée à la main s\'enregistre avec sa position, sans regard, et se relit', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  handleApi(ctx, 'POST', '/api/games', q(), { video_id: videoId, start_s: 100, end_s: 700 });
+  const id = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { id: number }[])[0].id;
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 8, t: 218, x: 0.4, y: 0.5, angle: 90, dead: true }).status, 201);
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 3, t: 219, x: 0.2, y: 0.5 }).status, 201);
+  assert.equal(handleApi(ctx, 'POST', '/api/marks', q(), { game_id: id, slot: 3, t: 220, x: 0.2, y: 0.5, dead: 'oui' }).status, 400);
+  const list = JSON.parse(JSON.stringify(handleApi(ctx, 'GET', '/api/marks', q(`game=${id}`), undefined).json)) as { slot: number; angle: number | null; dead: number }[];
+  assert.deepEqual(list.map((m) => [m.slot, m.dead, m.angle]), [[8, 1, null], [3, 0, null]]); // la mort n'a pas de regard
+});

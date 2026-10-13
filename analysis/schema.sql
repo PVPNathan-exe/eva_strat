@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS user_marks (
   created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   frame INTEGER,
   frame_t REAL,
-  level TEXT CHECK (level IN ('etage', 'dessous'))  -- niveau du joueur sur une carte à deux étages (Atlantis, The Cliff), posé à la main ; NULL : non précisé
+  level TEXT CHECK (level IN ('etage', 'dessous')),  -- niveau du joueur sur une carte à deux étages (Atlantis, The Cliff), posé à la main ; NULL : non précisé
+  dead INTEGER NOT NULL DEFAULT 0  -- 1 : le joueur est mort à cet instant (position de la mort) ; le suivi le tient mort jusqu'à sa réapparition (tracking.USER_DEAD_S) ou la correction suivante
 );
 
 -- Joueur observé (cadre blanc du bandeau) au cours de la game : un intervalle par période, temps de la vidéo.

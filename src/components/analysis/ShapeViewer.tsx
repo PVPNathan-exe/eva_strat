@@ -68,6 +68,7 @@ export function ShapeViewer({ game }: { game: Game }) {
   const [correcting, setCorrecting] = useState(false);
   const [pick, setPick] = useState<number | null>(null);
   const [level, setLevel] = useState<'etage' | 'dessous' | null>(null); // niveau posé avec les prochaines corrections
+  const [markDead, setMarkDead] = useState(false); // les prochaines corrections posent le joueur mort à cet endroit
   const [drag, setDrag] = useState<Drag | null>(null);
   const setCurrentTime = useAnalysisStore((s) => s.setCurrentTime);
   const startTime = useAnalysisStore((s) => s.currentTime);
@@ -190,7 +191,7 @@ export function ShapeViewer({ game }: { game: Game }) {
     const angle = dragAngle(drag, canvas.current.width, canvas.current.height);
     const t = video.current?.currentTime ?? time;
     setDrag(null);
-    void addMark({ game_id: game.id, slot: drag.slot, t, x: drag.x0, y: drag.y0, angle, level });
+    void addMark({ game_id: game.id, slot: drag.slot, t, x: drag.x0, y: drag.y0, angle: markDead ? null : angle, level, dead: markDead });
   };
   const reloadSamples = () => {
     analysisApi.samples(game.id).then(setSamples).catch(() => setSamples([]));
@@ -222,7 +223,7 @@ export function ShapeViewer({ game }: { game: Game }) {
         <label><input type="checkbox" checked={showCoh} onChange={(e) => setShowCoh(e.target.checked)} /> Indice de cohérence du regard (0 à 100)</label>
         <label><input type="checkbox" checked={corridors} onChange={(e) => setCorridors(e.target.checked)} /> Couloirs lus</label>
       </div>
-      <MarkPanel game={game} marks={marks} error={markError} correcting={correcting} onCorrecting={setCorrecting} pick={pick} onPick={setPick} onRemove={(id) => void removeMark(id)} onRecomputed={reloadSamples} level={level} onLevel={setLevel} />
+      <MarkPanel game={game} marks={marks} error={markError} correcting={correcting} onCorrecting={setCorrecting} pick={pick} onPick={setPick} onRemove={(id) => void removeMark(id)} onRecomputed={reloadSamples} level={level} onLevel={setLevel} markDead={markDead} onMarkDead={setMarkDead} />
       <KillFlagsPanel game={game} />
       <details className="help">
         <summary>Comment lire les contours</summary>

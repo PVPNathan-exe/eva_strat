@@ -34,12 +34,29 @@ function outline(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: 
   ctx.setLineDash([]);
 }
 
+/** Croix d'une mort posée à la main. */
+function cross(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) {
+  ctx.beginPath();
+  ctx.moveTo(cx - radius, cy - radius);
+  ctx.lineTo(cx + radius, cy + radius);
+  ctx.moveTo(cx + radius, cy - radius);
+  ctx.lineTo(cx - radius, cy + radius);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = MARK_COLOR;
+  ctx.stroke();
+}
+
 export function drawMarks(ctx: CanvasRenderingContext2D, marks: UserMark[], time: number, width: number, height: number, drag: Drag | null) {
   const radius = MARKER_RADIUS * width;
   ctx.font = '700 15px system-ui, sans-serif';
   ctx.fillStyle = MARK_COLOR;
   for (const m of marks) {
     if (Math.abs(m.t - time) > MARK_SHOWN_S) continue;
+    if (m.dead) {
+      cross(ctx, m.x * width, m.y * height, radius);
+      ctx.fillText(`${numberOf(m.slot)} mort`, m.x * width + radius + 3, m.y * height + radius + 12);
+      continue;
+    }
     outline(ctx, m.x * width, m.y * height, radius, m.angle, false);
     ctx.fillText(`${numberOf(m.slot)} main`, m.x * width + radius + 3, m.y * height + radius + 12);
   }

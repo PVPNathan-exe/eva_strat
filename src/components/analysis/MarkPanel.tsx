@@ -20,6 +20,8 @@ export function MarkPanel({
   onRecomputed,
   level,
   onLevel,
+  markDead,
+  onMarkDead,
 }: {
   game: Game;
   marks: UserMark[];
@@ -32,6 +34,8 @@ export function MarkPanel({
   onRecomputed: () => void;
   level: 'etage' | 'dessous' | null;
   onLevel: (level: 'etage' | 'dessous' | null) => void;
+  markDead: boolean;
+  onMarkDead: (dead: boolean) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -64,6 +68,9 @@ export function MarkPanel({
               </button>
             ))}
           </div>
+          <label className="marks__dead">
+            <input type="checkbox" checked={markDead} onChange={(e) => onMarkDead(e.target.checked)} /> Le joueur est mort (clique l'endroit de sa mort : il reste mort 14 s, ou jusqu'à ta correction suivante pour lui)
+          </label>
           <label className="marks__level">
             Niveau du joueur (Atlantis, The Cliff : la lecture est ambiguë entre l'étage et le dessous){' '}
             <select value={level ?? ''} onChange={(e) => onLevel(e.target.value === '' ? null : (e.target.value as 'etage' | 'dessous'))}>
@@ -83,7 +90,7 @@ export function MarkPanel({
           {marks.map((m) => (
             <li key={m.id}>
               <span>
-                {formatTime(m.t - game.start_s)} · joueur {numberOf(m.slot)} · {m.angle === null ? 'position' : `position et regard ${Math.round(m.angle)}°`}
+                {formatTime(m.t - game.start_s)} · joueur {numberOf(m.slot)} · {m.dead ? 'mort' : m.angle === null ? 'position' : `position et regard ${Math.round(m.angle)}°`}
                 {m.level === 'etage' ? ' · étage' : m.level === 'dessous' ? ' · dessous' : ''}
               </span>
               <button onClick={() => onRemove(m.id)}>Retirer</button>

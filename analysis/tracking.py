@@ -1414,7 +1414,7 @@ def drop_static_spectated(frames, states=None):
     return out
 
 
-def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None, doors=None, see=None):
+def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=None, walk_mask=None, noise=None, spawns=None, reliability=None, coherence_out=None, marks=None, kills=None, stations=None, rotors=None, doors=None, see=None, dead_marks=None):
     """frames : [(indice, t, [détections])]. deaths : [(t, slot)] morts lues dans le killfeed (facultatif).
     states : {indice: {slot: {"alive", "spectated"}}} lu sur les bandeaux (facultatif) : il fixe la pastille du joueur observé, écarte les joueurs
     morts de l'attribution et retire les positions vivantes d'un joueur dont le bandeau est grisé.
@@ -1430,6 +1430,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     reliability : {"grid": n, "gaze": {(i, j)}} cases de la carte où la forme des disques a donné de mauvais regards (reliability.py) : la forme y pèse moins que le cap et le camp ennemi.
     doors : [((x0, y0), (x1, y1))] portes opaques à bouton (db.button_doors_for) : passage pour les trajets, mur pour la vue entre deux joueurs (ouvertes ou fermées, on ne sait pas).
     see : tableau booléen (db.see_through_for) des pixels où l'on voit à travers sans passer (tir par-dessus, vue seulement, vitre) : ils ne comptent pas comme mur pour la vue entre deux joueurs.
+    dead_marks : [(t, joueur, x, y)] morts posées à la main : le joueur est mort à cet instant jusqu'à sa réapparition (USER_DEAD_S) ou jusqu'à sa correction suivante, quoi qu'en dise le bandeau.
     kills : [(t, tueur, victime, arme)] du killfeed (arme : nom ou None) : le tueur regarde sa victime (kill_gaze).
     marks : [(t, joueur, x, y, regard ou None)] posés à la main : vérités qui ancrent le suivi (apply_marks).
     coherence_out : dict facultatif rempli de {(image, joueur): indice de cohérence du regard, 0 à 1} (voir gaze_coherence).
@@ -1451,6 +1452,8 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     dead = dead_frames(states, step_s)
     frames = drop_static_spectated(drop_static_noise(frames), states)
     times = {fi: t for fi, t, _ in frames}
+    for slot, frames_dead in user_dead_frames(dead_marks, marks, times).items():  # mort posée à la main : elle l'emporte sur le bandeau
+        dead.setdefault(slot, set()).update(frames_dead)
     own = [(d["x"], d["y"]) for _, _, dets in frames for d in dets if d["alive"] and d.get("number")]  # pastilles numérotées : les plus fiables
     if walk_mask is not None:
         import map_mask
@@ -1621,6 +1624,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     kill_gaze(rows, kills, times, step_s, coherence_out)
     separate_players(rows)
     apply_marks(rows, marks, times, step_s, put, final=True, coherence_out=coherence_out)
+    apply_dead_marks(rows, dead_marks, marks, times, put)
     return sorted((r[:1] + (round(r[1] + FRAME_LAG_S, 2),) + r[2:] for r in rows.values()), key=lambda r: (r[0], r[2]))
 
 
@@ -1947,6 +1951,43 @@ def apply_marks(rows, marks, times, step_s, put, final=False, coherence_out=None
                 rows[(k, slot)] = r[:6] + (min(near)[1],) + r[7:]
                 if coherence_out is not None:
                     coherence_out[(k, slot)] = max(coherence_out.get((k, slot)) or 0.0, 0.8)
+    return applied
+
+
+USER_DEAD_S = 14.0  # durée pendant laquelle une mort posée à la main tient (mesuré sur 694 morts du killfeed : première ligne vivante de la victime 14,2 s (10 % des cas), 17,0 s (médiane), 17,9 s (90 %) après la mort : on reste sous les 10 %)
+
+
+def _dead_window(t, slot, marks, times):
+    """Images où un joueur est mort d'après une mort posée à l'instant t : de t jusqu'à USER_DEAD_S plus tard, ou jusqu'à la correction (vivante) suivante du même joueur."""
+    end = min([t + USER_DEAD_S] + [m[0] for m in marks or [] if m[1] == slot and m[0] > t])
+    return {k for k, tk in times.items() if t <= tk + FRAME_LAG_S < end}
+
+
+def user_dead_frames(dead_marks, marks, times):
+    """{joueur: images} où le joueur est mort d'après les morts posées à la main."""
+    out = {}
+    for t, slot, _, _ in dead_marks or []:
+        out.setdefault(slot, set()).update(_dead_window(t, slot, marks, times))
+    return out
+
+
+def apply_dead_marks(rows, dead_marks, marks, times, put):
+    """Morts posées à la main : plus aucune ligne vivante du joueur pendant la fenêtre, et une croix à la position donnée à l'image la plus proche de l'instant. Passe en dernier : aucun lissage
+    ne la défait."""
+    if not dead_marks or not times:
+        return 0
+    ordered = sorted(times)
+    applied = 0
+    for t, slot, x, y in dead_marks:
+        k = min(ordered, key=lambda j: abs(times[j] + FRAME_LAG_S - t))
+        if abs(times[k] + FRAME_LAG_S - t) > 1.0:
+            continue
+        for j in _dead_window(t, slot, marks, times):
+            r = rows.get((j, slot))
+            if r is not None and r[7]:
+                del rows[(j, slot)]
+        put(k, slot, "A" if slot <= 4 else "B", x, y, None, False, 1.0)
+        applied += 1
     return applied
 
 

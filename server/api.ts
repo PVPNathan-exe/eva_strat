@@ -286,7 +286,7 @@ function getFlags(ctx: ApiContext, query: URLSearchParams): ApiResult {
 function listMarks(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const gameId = Number(query.get('game'));
   if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
-  return reply(200, ctx.db.prepare('SELECT id, game_id, slot, t, x, y, angle, level FROM user_marks WHERE game_id = ? ORDER BY t, id').all(gameId));
+  return reply(200, ctx.db.prepare('SELECT id, game_id, slot, t, x, y, angle, level, dead FROM user_marks WHERE game_id = ? ORDER BY t, id').all(gameId));
 }
 
 function createMark(ctx: ApiContext, payload: Row): ApiResult {
@@ -305,7 +305,9 @@ function createMark(ctx: ApiContext, payload: Row): ApiResult {
   const game = ctx.db.prepare('SELECT start_s, end_s FROM games WHERE id = ?').get(gameId) as { start_s: number; end_s: number } | undefined;
   if (!game) return fail('Game inconnue', 404);
   if (t < game.start_s || t > game.end_s) return fail("Instant hors de la game");
-  const res = ctx.db.prepare('INSERT INTO user_marks (game_id, slot, t, x, y, angle, level) VALUES (?, ?, ?, ?, ?, ?, ?)').run(gameId, slot, t, x, y, angle === null ? null : ((angle % 360) + 360) % 360, level);
+  if (payload.dead !== undefined && typeof payload.dead !== 'boolean') return fail('Mort invalide (vrai ou faux)');
+  const dead = payload.dead === true ? 1 : 0; // mort posée à la main : x et y sont l'endroit où le joueur est mort, sans regard
+  const res = ctx.db.prepare('INSERT INTO user_marks (game_id, slot, t, x, y, angle, level, dead) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(gameId, slot, t, x, y, angle === null || dead ? null : ((angle % 360) + 360) % 360, level, dead);
   return reply(201, { id: Number(res.lastInsertRowid) });
 }
 

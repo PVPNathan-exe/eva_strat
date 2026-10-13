@@ -38,6 +38,8 @@ def connect(db_path):
         conn.execute("ALTER TABLE user_marks ADD COLUMN frame_t REAL")
     if "level" not in {row["name"] for row in conn.execute("PRAGMA table_info(user_marks)")}:
         conn.execute("ALTER TABLE user_marks ADD COLUMN level TEXT CHECK (level IN ('etage', 'dessous'))")
+    if "dead" not in {row["name"] for row in conn.execute("PRAGMA table_info(user_marks)")}:
+        conn.execute("ALTER TABLE user_marks ADD COLUMN dead INTEGER NOT NULL DEFAULT 0")
     if "zone_key" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
         conn.execute("ALTER TABLE samples_meta ADD COLUMN zone_key TEXT")
     if "with_kills" not in {row["name"] for row in conn.execute("PRAGMA table_info(samples_meta)")}:
@@ -402,8 +404,13 @@ def kill_tuples(conn, game_id, names):
 
 
 def marks_of(conn, game_id):
-    """Positions et regards posés à la main : [(t, slot, x, y, angle ou None)] triés par temps."""
-    return [(r["t"], r["slot"], r["x"], r["y"], r["angle"]) for r in conn.execute("SELECT t, slot, x, y, angle FROM user_marks WHERE game_id = ? ORDER BY t, id", (game_id,))]
+    """Positions et regards posés à la main (joueur vivant) : [(t, slot, x, y, angle ou None)] triés par temps."""
+    return [(r["t"], r["slot"], r["x"], r["y"], r["angle"]) for r in conn.execute("SELECT t, slot, x, y, angle FROM user_marks WHERE game_id = ? AND dead = 0 ORDER BY t, id", (game_id,))]
+
+
+def dead_marks_of(conn, game_id):
+    """Morts posées à la main : [(t, slot, x, y)] triés par temps (x, y : où le joueur est mort)."""
+    return [(r["t"], r["slot"], r["x"], r["y"]) for r in conn.execute("SELECT t, slot, x, y FROM user_marks WHERE game_id = ? AND dead = 1 ORDER BY t, id", (game_id,))]
 
 
 def replace_flags(conn, game_id, flag, pairs):

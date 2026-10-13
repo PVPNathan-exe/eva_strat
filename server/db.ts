@@ -30,6 +30,7 @@ export function openDb(path: string, schemaPath: string): DatabaseSync {
     db.exec('ALTER TABLE user_marks ADD COLUMN frame_t REAL');
   }
   if (markCols.length && !markCols.some((c) => c.name === 'level')) db.exec("ALTER TABLE user_marks ADD COLUMN level TEXT CHECK (level IN ('etage', 'dessous'))");
+  if (markCols.length && !markCols.some((c) => c.name === 'dead')) db.exec('ALTER TABLE user_marks ADD COLUMN dead INTEGER NOT NULL DEFAULT 0');
   const meta = db.prepare('PRAGMA table_info(samples_meta)').all() as { name: string }[];
   if (meta.length && !meta.some((c) => c.name === 'with_kills')) db.exec('ALTER TABLE samples_meta ADD COLUMN with_kills INTEGER NOT NULL DEFAULT 0');
   // Une base créée avant l'ajout de zones du HUD a une contrainte CHECK trop stricte : on reconstruit la table (même logique que db.py).

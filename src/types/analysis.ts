@@ -163,6 +163,8 @@ export interface UserMark {
   angle: number | null;
   /** Niveau du joueur sur une carte à deux étages (Atlantis, The Cliff), posé à la main ; null : non précisé. */
   level?: 'etage' | 'dessous' | null;
+  /** Mort posée à la main : (x, y) est l'endroit où le joueur est mort (1 ou true) ; le suivi le tient mort jusqu'à sa réapparition. */
+  dead?: boolean | number;
 }
 
 /** Contrôle des positions à la vraie minimap et joueur observé (GET /api/flags). */
