@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { mapsWithReading } from '../../lib/mapReading';
 import { useAnalysisStore } from '../../store/analysisStore';
+import { CaptureSchedule } from './CaptureSchedule';
 import { CorridorMap } from './CorridorMap';
 import { MapMapping } from './MapMapping';
 import { ShapeViewer } from './ShapeViewer';
@@ -41,6 +42,7 @@ export function ReadingTab() {
               </select>
             </label>
             <CorridorMap key={map} map={map} />
+            <CaptureSchedule key={`${map}-${game?.map === map ? game.id : 'none'}`} map={map} gameId={game?.map === map ? game.id : undefined} />
           </>
         )}
       </section>

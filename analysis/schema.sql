@@ -184,3 +184,17 @@ CREATE TABLE IF NOT EXISTS kill_flags (
   flag TEXT NOT NULL CHECK (flag IN ('libanaise')),
   PRIMARY KEY (game_id, t, victim_slot, flag)
 );
+
+-- Boîte du point de capture actif vue sur la minimap (capture_points.py) : un segment par point actif (Outlaw : un seul point à la fois, il change toutes les 1 min 30). t0 et t1 en
+-- secondes depuis le début de la game ; x, y (centre), w, h en fractions de la minimap ; point : lettre du point de la carte le plus proche (map_capture_points.json).
+CREATE TABLE IF NOT EXISTS capture_boxes (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  w REAL,
+  h REAL,
+  point TEXT,
+  PRIMARY KEY (game_id, t0)
+);

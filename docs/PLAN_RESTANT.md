@@ -103,7 +103,8 @@ Erreurs connues, classées par ce que j'ai vu sur 47 images de 9 cartes :
 ### 4. Produit
 
 - Capture : lire sous le nom de carte le nombre de points, leur propriétaire (les points changent de couleur sur certaines cartes, et
-  l'utilisateur dit que cela fait perdre le suivi : exemple précis demandé, jamais fourni), le hardpoint d'Outlaw.
+  l'utilisateur dit que cela fait perdre le suivi : exemple précis demandé, jamais fourni). Le point actif d'Outlaw est lu sur la minimap (`capture_points.py`, table `capture_boxes`) et le calendrier des
+  changements est affiché dans l'onglet Lecture ; reste à brancher ces points sur les analyses complètes (qui tient quel point à quel moment) et à voir le point E (jamais vu sur les games lues).
 - « Ce que voit le programme » : ajouter l'état des bandeaux, une vue filtrée (l'inversion de couleurs a été testée : aucun gain de détection, utile seulement à l'affichage).
 - Commentaires : édition (aujourd'hui création, état résolu, suppression).
 - Image réelle de Reef Point à remplacer par la vraie (celle de l'onglet Stratégie est une image de substitution de 6 Ko).

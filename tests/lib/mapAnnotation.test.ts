@@ -29,11 +29,13 @@ test('ajouter deux fois la même couleur change sa classe sans la dupliquer', ()
 });
 
 test('une équipe a au plus 2 zones de départ', () => {
-  let spawns = { A: [], B: [] } as ReturnType<typeof sanitize>['spawns'];
+  let spawns = { A: [], B: [], any: [] } as ReturnType<typeof sanitize>['spawns'];
   spawns = addSpawn(spawns, 'A', [0.1, 0.1, 0.2, 0.2])!;
   spawns = addSpawn(spawns, 'A', [0.5, 0.5, 0.6, 0.6])!;
   assert.equal(addSpawn(spawns, 'A', [0.7, 0.7, 0.8, 0.8]), null);
   assert.ok(addSpawn(spawns, 'B', [0.7, 0.7, 0.8, 0.8]));
+  for (let i = 0; i < 4; i++) spawns = addSpawn(spawns, 'any', [0.1 * i, 0.1, 0.1 * i + 0.05, 0.2])!; // zones neutres (Outlaw) : 4 au plus
+  assert.equal(addSpawn(spawns, 'any', [0.9, 0.9, 0.95, 0.95]), null);
 });
 
 test('un rectangle trop petit est refusé et les coins sont remis dans l\'ordre', () => {
@@ -198,12 +200,12 @@ test('un trait ou une zone « passage possible en dessous » est lu tel quel, sa
   assert.deepEqual(a.overrides.map((o) => o.under), [true, false]);
 });
 
-test('la classe « hors map » l\'emporte sur toutes les autres, même quand une autre couleur est plus proche', () => {
-  const colors: PickedColor[] = [
-    { rgb: [100, 100, 100], tol: 10, cls: 'sol' },
-    { rgb: [108, 100, 100], tol: 10, cls: 'hors' },
-  ];
-  // le pixel (101, 100, 100) est plus proche du sol (1) que du hors map (7) mais à moins de la tolérance des deux : le hors map gagne
-  const labels = classifyImage(px([101, 100, 100], [100, 100, 100], [90, 100, 100]), colors);
-  assert.deepEqual([...labels], [7, 7, 1]); // 7 : code de « hors » ; le troisième pixel n'est qu'au sol
+test('« hors map » se pose par zone, jamais par couleur de pixel', () => {
+  const a = sanitize({ colors: [{ rgb: [1, 2, 3], tol: 10, cls: 'hors' }, { rgb: [4, 5, 6], tol: 10, cls: 'sol' }], overrides: [{ polygon: [[0, 0], [1, 0], [1, 1]], from: 'any', to: 'hors' }] });
+  assert.equal(a.colors.length, 1); // la couleur « hors » est écartée
+  assert.equal(a.overrides[0].to, 'hors'); // la zone « hors » est gardée
+  const labels = new Uint8Array(100).fill(1);
+  applyOverrides(labels, 10, 10, a.overrides);
+  assert.equal(labels[2 * 10 + 8], 7); // un pixel dans le triangle (haut droit) devient hors map, code 7
+  assert.equal(labels[8 * 10 + 1], 1); // un pixel hors du triangle reste du sol
 });

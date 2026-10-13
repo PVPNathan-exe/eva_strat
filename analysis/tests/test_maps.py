@@ -483,15 +483,15 @@ def test_outputs_can_be_redirected_so_that_a_test_never_touches_the_users_maps(t
 
 # --- classe « hors map » et chemins épais de tyrolienne (Outlaw) ---
 
-def test_hors_map_wins_over_every_other_class_and_nothing_can_make_it_walkable():
-    img = np.zeros((1, 3, 3), np.uint8)
-    img[0, 0] = (100, 100, 101)  # BGR : RVB (101, 100, 100)
-    img[0, 1] = (100, 100, 100)
-    img[0, 2] = (100, 100, 90)  # RVB (90, 100, 100)
-    colors = [{"rgb": [100, 100, 100], "tol": 10, "cls": "sol"}, {"rgb": [108, 100, 100], "tol": 10, "cls": "hors"}]
-    labels = map_annotations.classify(img, colors)
-    assert labels[0].tolist() == [map_annotations.CODES["hors"], map_annotations.CODES["hors"], map_annotations.CODES["sol"]]
-    assert not map_annotations.walkable_from_classes(labels)[0, 0]  # hors map n'est pas praticable
+def test_hors_map_is_a_zone_class_never_a_pixel_colour():
+    data = map_annotations.validate({"colors": [{"rgb": [1, 2, 3], "tol": 10, "cls": "hors"}, {"rgb": [4, 5, 6], "tol": 10, "cls": "sol"}],
+                                     "overrides": [{"polygon": [[0, 0], [1, 0], [1, 1], [0, 1]], "from": "any", "to": "hors"}]})
+    assert [c["cls"] for c in data["colors"]] == ["sol"]  # une couleur « hors » (ancien format) est écartée
+    assert data["overrides"][0]["to"] == "hors"
+    labels = np.full((10, 10), map_annotations.CODES["sol"], np.uint8)
+    map_annotations.apply_overrides(labels, [{"polygon": [[0.0, 0.0], [0.5, 0.0], [0.5, 1.0], [0.0, 1.0]], "from": "any", "to": "hors"}])
+    assert labels[5, 1] == map_annotations.CODES["hors"] and labels[5, 8] == map_annotations.CODES["sol"]  # seule la zone est retirée
+    assert not map_annotations.walkable_from_classes(labels)[5, 1]  # hors map n'est pas praticable
 
 
 def test_apply_removes_hors_map_pixels_even_where_the_plan_or_the_reads_would_add_floor(tmp_path, monkeypatch):
@@ -511,7 +511,8 @@ def test_apply_removes_hors_map_pixels_even_where_the_plan_or_the_reads_would_ad
     conn.execute("INSERT INTO games VALUES (1, 'Test')")
     conn.executemany("INSERT INTO samples VALUES (1, 1, 0.9, ?, ?)", [(0.3 + 0.0003 * k, 0.5) for k in range(1000)])  # des lectures sûres sur le sol
     conn.executemany("INSERT INTO samples VALUES (1, 1, 0.9, ?, ?)", [(0.9 + 0.004 * k, 0.5) for k in range(6)])  # et quelques-unes dans la zone hors map (0,6 % : le masque n'est pas refusé)
-    data = {"colors": [{"rgb": [90, 90, 90], "tol": 4, "cls": "sol"}, {"rgb": [90, 90, 88], "tol": 1, "cls": "hors"}]}  # « hors » l'emporte partout où sa tolérance (1) est atteinte : le sol à 2 niveaux de là reste du sol
+    zone = [[0.8, 0.2], [1.0, 0.2], [1.0, 0.8], [0.8, 0.8]]  # la bande de droite, de la couleur du sol à 2 niveaux près : aucune couleur ne peut la séparer, la zone le fait
+    data = {"colors": [{"rgb": [90, 90, 90], "tol": 4, "cls": "sol"}], "overrides": [{"polygon": zone, "from": "any", "to": "hors"}]}
     conn.execute("INSERT INTO map_annotations VALUES ('Test', ?, NULL)", (json.dumps(data),))
     summary = map_annotations.apply(conn, "Test")
     mask = cv2.imread(str(tmp_path / "Test.png"), cv2.IMREAD_GRAYSCALE)

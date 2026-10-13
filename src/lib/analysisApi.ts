@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { CaptureSeries, CommentTag, IconWork, Correction, Game, GameFlags, JobEvent, Reliability, Sample, UserMark, Video, VideoComment, Weapon, Zones } from '../types/analysis';
+import type { CaptureBox, CaptureSeries, CommentTag, IconWork, Correction, Game, GameFlags, JobEvent, Reliability, Sample, UserMark, Video, VideoComment, Weapon, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -52,6 +52,7 @@ export const analysisApi = {
   deleteComment: (id: number) => fetch(`/api/comments/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),
   marks: (gameId: number) => fetch(`/api/marks?game=${gameId}`, { cache: 'no-store' }).then(parse<UserMark[]>),
   addMark: (mark: Omit<UserMark, 'id'>) => fetch('/api/marks', jsonInit('POST', mark)).then(parse<{ id: number }>),
+  captureBoxes: (gameId: number) => fetch(`/api/capture-boxes?game=${gameId}`, { cache: 'no-store' }).then(parse<CaptureBox[]>),
   killFlags: (gameId: number) => fetch(`/api/kill-flags?game=${gameId}`, { cache: 'no-store' }).then(parse<[number, number][]>),
   setKillFlag: (flag: { game_id: number; t: number; victim: number; libanaise: boolean }) => fetch('/api/kill-flags', jsonInit('PUT', flag)).then(parse<{ ok: true }>),
   deleteMark: (id: number) => fetch(`/api/marks/${id}`, { method: 'DELETE' }).then(parse<{ ok: true }>),

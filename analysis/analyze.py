@@ -16,6 +16,7 @@ from pathlib import Path
 import db
 import banners
 import capture
+import capture_points
 import ingest
 import killfeed
 import loadout
@@ -136,6 +137,8 @@ def extract_capture(conn, video_id, path, meta, emit, control=None, only=None):
         zones = {"A": db.zone_for(conn, g["map"], "capture_pct_a"), "B": db.zone_for(conn, g["map"], "capture_pct_b")}
         series = capture.read_game(path, g, zones, meta["width"], meta["height"], wait=lambda: wait_if_paused(control), emit=progress)
         db.replace_capture(conn, g["id"], series)
+        if capture_points.load(g["map"]) is not None:  # Outlaw : un seul point actif à la fois, il change : on cherche lequel sur la minimap
+            capture_points.scan_and_store(conn, g, path)
     return len(todo)
 
 

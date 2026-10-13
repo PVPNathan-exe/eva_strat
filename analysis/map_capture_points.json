@@ -1,0 +1,103 @@
+{
+  "Outlaw": {
+    "duree_s": 720,
+    "points": {
+      "A": {
+        "x": 0.7224,
+        "y": 0.2848,
+        "w": 0.1026,
+        "h": 0.1096,
+        "vu": true,
+        "indication": [
+          0.724,
+          0.294
+        ]
+      },
+      "B": {
+        "x": 0.2553,
+        "y": 0.369,
+        "w": 0.1263,
+        "h": 0.0856,
+        "vu": true,
+        "indication": [
+          0.249,
+          0.36
+        ]
+      },
+      "C": {
+        "x": 0.4987,
+        "y": 0.8195,
+        "w": 0.1263,
+        "h": 0.0989,
+        "vu": true,
+        "indication": [
+          0.497,
+          0.822
+        ]
+      },
+      "D": {
+        "x": 0.8053,
+        "y": 0.7861,
+        "w": 0.0947,
+        "h": 0.1604,
+        "vu": true,
+        "indication": [
+          0.812,
+          0.811
+        ]
+      },
+      "E": {
+        "x": 0.178,
+        "y": 0.659,
+        "vu": false,
+        "indication": [
+          0.178,
+          0.659
+        ]
+      }
+    },
+    "calendrier": [
+      {
+        "restant": "11:25",
+        "t": 35,
+        "source": "indique"
+      },
+      {
+        "restant": "9:55",
+        "t": 125,
+        "source": "indique"
+      },
+      {
+        "restant": "8:25",
+        "t": 215,
+        "source": "indique"
+      },
+      {
+        "restant": "6:55",
+        "t": 305,
+        "source": "indique"
+      },
+      {
+        "restant": "5:25",
+        "t": 395,
+        "source": "indique"
+      },
+      {
+        "restant": "3:55",
+        "t": 485,
+        "source": "indique"
+      },
+      {
+        "restant": "2:25",
+        "t": 575,
+        "source": "deduit"
+      },
+      {
+        "restant": "0:55",
+        "t": 665,
+        "source": "indique"
+      }
+    ],
+    "remarque": "Un seul point est actif à la fois et change toutes les 1 min 30 (chrono restant : 11:25, 9:55, 8:25, 6:55, 5:25, 3:55, 2:25, 0:55). Le premier est toujours C ; la suite change d'une game à l'autre (C, B, A, B, D, B sur la game 32 ; C, D, A, D sur la game 19) : le programme la lit sur la minimap de chaque game. 2:25 : instant déduit du rythme, absent de la liste donnée. E n'a été vu sur aucune des deux games (trop courtes)."
+  }
+}

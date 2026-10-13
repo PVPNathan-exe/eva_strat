@@ -23,6 +23,28 @@
   color: var(--c-text-soft);
 }
 
+.capschedule {
+  margin-top: 0.8rem;
+}
+
+.capschedule h4 {
+  margin: 0 0 0.4rem;
+  color: var(--c-text);
+}
+
+.capschedule__table {
+  border-collapse: collapse;
+  width: 100%;
+  color: var(--c-text-soft);
+}
+
+.capschedule__table th,
+.capschedule__table td {
+  padding: 0.2rem 0.6rem;
+  border-bottom: 1px solid var(--c-border);
+  text-align: left;
+}
+
 .corridor__stage {
   position: relative;
   line-height: 0;
@@ -64,6 +86,10 @@
 
 .corridor__spawn--A {
   stroke: var(--c-orange);
+}
+
+.corridor__spawn--N {
+  stroke: var(--c-ok);
 }
 
 .corridor__spawn--B {

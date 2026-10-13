@@ -375,3 +375,16 @@ test('un kill se marque et se démarque « libanaise » ; un kill inconnu est re
   assert.equal(handleApi(ctx, 'PUT', '/api/kill-flags', q(), { game_id: id, t: 230.4, victim: 8, libanaise: false }).status, 200);
   assert.deepEqual(get(), []);
 });
+
+test('les points de capture vus sur la minimap sont lus par game et triés par temps', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  handleApi(ctx, 'POST', '/api/games', q(), { video_id: videoId, start_s: 100, end_s: 700 });
+  const id = (handleApi(ctx, 'GET', '/api/games', q(`video=${videoId}`), undefined).json as { id: number }[])[0].id;
+  ctx.db.prepare("INSERT INTO capture_boxes (game_id, t0, t1, x, y, w, h, point) VALUES (?, 125, 210, 0.25, 0.37, 0.12, 0.09, 'B')").run(id);
+  ctx.db.prepare("INSERT INTO capture_boxes (game_id, t0, t1, x, y, w, h, point) VALUES (?, 35, 120, 0.5, 0.82, 0.12, 0.1, 'C')").run(id);
+  const got = JSON.parse(JSON.stringify(handleApi(ctx, 'GET', '/api/capture-boxes', q(`game=${id}`), undefined).json)) as { t0: number; point: string }[];
+  assert.deepEqual(got.map((b) => [b.t0, b.point]), [[35, 'C'], [125, 'B']]);
+  assert.deepEqual(handleApi(ctx, 'GET', '/api/capture-boxes', q('game=999'), undefined).json, []);
+  assert.equal(handleApi(ctx, 'GET', '/api/capture-boxes', q(), undefined).status, 400);
+});

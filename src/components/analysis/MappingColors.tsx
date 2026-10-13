@@ -4,6 +4,8 @@ import { useEffect, useRef } from 'react';
 import { CLASS_INFO, MAX_TOLERANCE, hex, pixelColor, type ClassName, type ColorConflict, type MapAnnotation } from '../../lib/mapAnnotation';
 import type { Pixel } from './MappingCanvas';
 
+const COLOR_CLASSES = CLASS_INFO.filter((c) => c.name !== 'hors'); // « hors map » se pose par zone, pas par couleur
+
 const LOUPE_RADIUS = 7; // 15 x 15 pixels
 const CELL = 12; // taille d'un pixel de la médiane dans la loupe
 
@@ -73,7 +75,7 @@ export function ColorPanel({ annotation, cls, onClass, onChange, onRemove, confl
     <div className="mapping__colors">
       <p className="mapping__hint">Choisis ce que la couleur représente, puis clique sur un pixel de la carte : sa couleur exacte est prise.</p>
       <div className="mapping__classes" role="radiogroup" aria-label="Classe de la couleur à prendre">
-        {CLASS_INFO.map((c) => (
+        {COLOR_CLASSES.map((c) => (
           <label key={c.name} className={`mapping__class${cls === c.name ? ' is-on' : ''}`} title={c.help}>
             <input type="radio" name="mapping-class" checked={cls === c.name} onChange={() => onClass(c.name)} />
             <span className="mapping__swatch" style={{ background: `rgb(${c.preview.join(',')})` }} />
@@ -110,7 +112,7 @@ export function ColorPanel({ annotation, cls, onClass, onChange, onRemove, confl
               <span className="mapping__swatch" style={{ background: hex(c.rgb) }} />
               <code>{hex(c.rgb)}</code>
               <select value={c.cls} onChange={(e) => onChange(i, { cls: e.target.value as ClassName })} aria-label="Classe">
-                {CLASS_INFO.map((k) => (
+                {COLOR_CLASSES.map((k) => (
                   <option key={k.name} value={k.name}>
                     {k.label}
                   </option>

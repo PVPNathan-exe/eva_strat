@@ -22,7 +22,17 @@ export interface MapReading {
   openings: { from: [number, number]; to: [number, number]; kind: 'porte' | 'fenetre' | 'mur' | 'tir'; glass: boolean; under: boolean }[]; // portes, fenêtres, murs et tirs tracés
   medianUrl: string | null; // médiane de la minimap du jeu (fond des cartes dont le plan n'est pas aligné)
   stations: [number, number][][]; // paires [entrée, sortie] en fraction de la minimap
-  spawns: { team: 'A' | 'B'; rect: [number, number, number, number] }[]; // x0, y0, x1, y1 (une équipe peut avoir plusieurs zones)
+  spawns: { team: 'A' | 'B' | 'N'; rect: [number, number, number, number] }[]; // x0, y0, x1, y1 (une équipe peut avoir plusieurs zones ; N : zones neutres, communes aux deux équipes)
+}
+
+/** Zones de départ lues de map_spawns.json : des rectangles par équipe ; les mêmes pour les deux équipes (Outlaw) font des zones neutres, comptées une fois. */
+function spawnsOf(sp: Record<string, number[] | number[][]> | undefined): MapReading['spawns'] {
+  if (!sp) return [];
+  const rectsOf = (v: number[] | number[][] | undefined) => (!v ? [] : ((typeof v[0] === 'number' ? [v] : v) as number[][]));
+  const a = rectsOf(sp.A);
+  const b = rectsOf(sp.B);
+  if (a.length > 0 && JSON.stringify(a) === JSON.stringify(b)) return a.map((rect) => ({ team: 'N' as const, rect: rect as [number, number, number, number] }));
+  return [...a.map((rect) => ({ team: 'A' as const, rect: rect as [number, number, number, number] })), ...b.map((rect) => ({ team: 'B' as const, rect: rect as [number, number, number, number] }))];
 }
 
 export function readingOf(map: string): MapReading {
@@ -38,14 +48,7 @@ export function readingOf(map: string): MapReading {
     planAddedUrl: find(`${map}_plan_ajouts.png`),
     planCutUrl: find(`${map}_plan_retraits.png`),
     stations: Array.isArray(tp) ? (tp as [number, number][][]) : [],
-    spawns: sp
-      ? (['A', 'B'] as const).flatMap((t) => {
-          const v = sp[t];
-          if (!v) return [];
-          const rects = (typeof v[0] === 'number' ? [v] : v) as number[][];
-          return rects.map((rect) => ({ team: t, rect: rect as [number, number, number, number] }));
-        })
-      : [],
+    spawns: spawnsOf(sp),
   };
 }
 

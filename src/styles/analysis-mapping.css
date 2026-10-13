@@ -167,6 +167,10 @@
   stroke: var(--c-blue);
 }
 
+.mapping__spawn--any {
+  stroke: var(--c-ok);
+}
+
 .mapping__spawn--drag {
   stroke: var(--c-text);
 }

@@ -527,6 +527,21 @@ def replace_capture(conn, game_id, series):
     conn.commit()
 
 
+def replace_capture_boxes(conn, game_id, segs, letter_of):
+    """Points de capture actifs vus sur la minimap d'une game : segments de capture_points.segments ; letter_of(x, y) donne la lettre du point (ou None)."""
+    conn.execute("DELETE FROM capture_boxes WHERE game_id = ?", (game_id,))
+    conn.executemany(
+        "INSERT INTO capture_boxes (game_id, t0, t1, x, y, w, h, point) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [(game_id, round(s["t0"], 1), round(s["t1"], 1), s["x"], s["y"], s["w"], s["h"], letter_of(s["x"], s["y"])) for s in segs],
+    )
+    conn.commit()
+
+
+def capture_boxes_of(conn, game_id):
+    """Points de capture actifs d'une game [{t0, t1, x, y, w, h, point}] triés par temps (secondes depuis le début de la game)."""
+    return [dict(r) for r in conn.execute("SELECT t0, t1, x, y, w, h, point FROM capture_boxes WHERE game_id = ? ORDER BY t0", (game_id,))]
+
+
 def capture_of(conn, game_id):
     out = {"A": [], "B": []}
     for r in conn.execute("SELECT t, pct, team FROM capture_state WHERE game_id = ? AND point IN ('score_A', 'score_B') ORDER BY t", (game_id,)):

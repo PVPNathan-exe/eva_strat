@@ -75,7 +75,7 @@ export function MappingShapes({ annotation, draft, aspect }: { annotation: MapAn
       {annotation.overrides.map((o, i) => (
         <polygon key={`ov${i}`} points={o.polygon.map((p) => `${pct(p[0])},${pct(p[1])}`).join(' ')} className="mapping__override" vectorEffect="non-scaling-stroke" />
       ))}
-      {(['A', 'B'] as const).flatMap((team) =>
+      {(['A', 'B', 'any'] as const).flatMap((team) =>
         annotation.spawns[team].map((r, i) => <rect key={`${team}${i}`} {...rectProps(r)} className={`mapping__spawn mapping__spawn--${team}`} vectorEffect="non-scaling-stroke" />),
       )}
       {annotation.pairs.map((p, i) => (

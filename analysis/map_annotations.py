@@ -10,7 +10,7 @@ L'utilisateur choisit des couleurs à la pipette (au pixel près) sur la médian
   vue         on voit à travers mais on ne tire pas et on ne passe pas (vitre) ;
   porte       porte hachurée : on la traverse (praticable) ;
   porte_vitre porte avec une vitre : on la traverse et on voit à travers ;
-  hors        hors de la carte : retire tous les pixels de cette couleur du masque, avant toute autre classe, tracé ou correction.
+  hors        hors de la carte : se pose par zone (polygone, outil « Hors map »), pas par couleur ; retire tout ce qui est dans la zone du masque, quelle que soit la couleur.
 Les portes, les fenêtres, les murs et les tirs par-dessus se tracent aussi en traits (extrémité à extrémité) : une porte (vitrée ou non) est rendue praticable, une fenêtre est « vue seulement » (ni passage ni
 tir), un trait de mur est infranchissable (mur dans un carré de capture), un trait « tir » aussi mais on tire par-dessus. Une même couleur peut avoir deux sens (une fenêtre ici, une couverture
 basse ailleurs) : une zone de classe remplace une classe par une autre à l'intérieur d'un polygone (appliquée avant les tracés) ; l'une comme l'autre peut être à sens unique (on ne voit à travers que d'un côté, noté `side`). Les zones des points de capture (forme libre : le carré n'est pas toujours fermé, comme sur Polaris) sont jouables : sol sous les pixels sans classe, les murs classés ou tracés dedans restent des murs. Les zones de départ et les disques des stations de tyrolienne sont jouables de la même façon.
@@ -35,6 +35,8 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+
+import capture_points
 
 HERE = Path(__file__).parent
 MASK_DIR = HERE / "map_masks"
@@ -73,6 +75,7 @@ if os.environ.get("EVA_MAPS_OUT"):
     redirect_outputs(os.environ["EVA_MAPS_OUT"])
 CLASSES = ("sol", "mur", "tir", "vue", "porte", "porte_vitre", "hors")
 LEGACY_CLASSES = ("tp",)  # ancienne classe « chemin de tyrolienne » : ignorée à la lecture (remplacée par les cercles de stations)
+NOT_A_COLOUR_CLASS = ("hors",)  # « hors map » se pose par zone (polygone), jamais par couleur de pixel : une couleur de fond ressemble trop à celle du sol (Outlaw)
 PASSABLE = ("sol", "porte", "porte_vitre")  # classes où l'on marche
 DEFAULT_STATION_RADIUS = 0.02
 MAX_STATION_RADIUS = 0.2
@@ -83,6 +86,7 @@ TP_BAND_PX = 5  # largeur de la bande sous une flèche de tyrolienne où un trai
 DOOR_WIDTH_PX = 3  # épaisseur d'un trait de porte sur la médiane
 CODES = {name: i + 1 for i, name in enumerate(CLASSES)}  # 0 : aucune classe
 MAX_SPAWNS = 2
+MAX_NEUTRAL_SPAWNS = 4  # zones de départ où n'importe quel joueur réapparaît (Outlaw : 4 zones, aucune par équipe)
 MAX_CAPTURE_ZONES = 8
 MAX_OVERRIDES = 40
 MAX_POLYGON_POINTS = 80  # zones de départ par équipe
@@ -92,8 +96,7 @@ TP_NEIGHBOURHOOD = 7
 
 def classify(median_bgr, colors):
     """Image de classes (uint8, 0 = aucune) d'après les couleurs choisies : colors = [{"rgb": [r, g, b], "tol": n, "cls": nom}]. Chaque pixel prend la classe de la couleur
-    la plus proche (distance euclidienne dans RGB) si elle est à moins de sa tolérance. Exception : la classe « hors » (hors de la carte) l'emporte toujours sur les autres : tous les pixels
-    à moins de la tolérance d'une couleur « hors » en sont, quelle que soit la couleur la plus proche (le fond de la minimap a parfois la couleur du sol, Outlaw)."""
+    la plus proche (distance euclidienne dans RGB) si elle est à moins de sa tolérance."""
     rgb = median_bgr[:, :, ::-1].astype(np.int32)
     best = np.full(rgb.shape[:2], 1 << 30, np.int64)
     out = np.zeros(rgb.shape[:2], np.uint8)
@@ -104,10 +107,6 @@ def classify(median_bgr, colors):
         hit = (d <= int(c.get("tol", 10)) ** 2) & (d < best)
         out[hit] = CODES[c["cls"]]
         best[hit] = d[hit]
-    for c in colors:
-        if c.get("cls") == "hors":
-            d = ((rgb - np.array(c["rgb"], np.int32)) ** 2).sum(axis=2)
-            out[d <= int(c.get("tol", 10)) ** 2] = CODES["hors"]
     return out
 
 
@@ -302,7 +301,7 @@ def validate(data):
     colors = []
     for c in data.get("colors", []):
         rgb = c.get("rgb")
-        if c.get("cls") in LEGACY_CLASSES:
+        if c.get("cls") in LEGACY_CLASSES or c.get("cls") in NOT_A_COLOUR_CLASS:
             continue
         if c.get("cls") not in CODES or not (isinstance(rgb, list) and len(rgb) == 3 and all(isinstance(v, int) and 0 <= v <= 255 for v in rgb)):
             raise ValueError(f"couleur invalide : {c}")
@@ -316,10 +315,11 @@ def validate(data):
         kind = d.get("kind") if d.get("kind") in ("fenetre", "mur", "tir") else "porte"
         doors.append({"from": d["from"], "to": d["to"], "kind": kind, "glass": kind == "porte" and bool(d.get("glass")), "side": d["side"] if (kind == "fenetre" or (kind == "porte" and d.get("glass"))) and d.get("side") in (-1, 1) else 0, "under": kind != "porte" and d.get("under") is True})
     spawns = {}
-    for team in ("A", "B"):
+    for team in ("A", "B", "any"):
         rects = data.get("spawns", {}).get(team, [])
-        if len(rects) > MAX_SPAWNS:
-            raise ValueError(f"au plus {MAX_SPAWNS} zones de départ par équipe")
+        limit = MAX_NEUTRAL_SPAWNS if team == "any" else MAX_SPAWNS
+        if len(rects) > limit:
+            raise ValueError(f"au plus {limit} zones de départ {'neutres' if team == 'any' else 'par équipe'}")
         for r in rects:
             if not (isinstance(r, list) and len(r) == 4 and all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in r) and r[0] < r[2] and r[1] < r[3]):
                 raise ValueError(f"zone de départ invalide : {r}")
@@ -442,7 +442,14 @@ def apply(conn, map_name):
         labels = classify(median, data["colors"])
         floor_before = walkable_from_classes(labels)  # le sol avant zones de classe et tracés : base du « passage possible en dessous »
         apply_overrides(labels, data["overrides"])
-        burn_shapes(labels, data["doors"], data["capture"], data["spawns"], [s for t in data["tps"] for s in (t["a"], t["b"])])
+        capture_polygons = data["capture"]
+        found = capture_points.load(map_name)
+        if found:  # Outlaw : les polygones tracés sont des indications, le sol des boîtes est celui des boîtes vues sur la minimap (un seul point actif à la fois, toutes les games n'en montrent pas autant)
+            seen = {k: p for k, p in found["points"].items() if p.get("vu") and "w" in p}
+            capture_polygons = [[[p["x"] - p["w"] / 2, p["y"] - p["h"] / 2], [p["x"] + p["w"] / 2, p["y"] - p["h"] / 2], [p["x"] + p["w"] / 2, p["y"] + p["h"] / 2], [p["x"] - p["w"] / 2, p["y"] + p["h"] / 2]] for p in seen.values()]
+            summary["points_de_capture_vus"] = sorted(seen)
+            summary["points_de_capture_indiques_seulement"] = sorted(k for k in found["points"] if k not in seen)
+        burn_shapes(labels, data["doors"], capture_polygons, data["spawns"], [s for t in data["tps"] for s in (t["a"], t["b"])])
         walk = walkable_from_classes(labels)
         paths = measure_paths(median, data["tps"])
         open_tp_paths(walk, data["tps"], paths)
@@ -505,7 +512,11 @@ def apply(conn, map_name):
         summary["tyroliennes"] = len(data["tps"])
     if any(data["spawns"].values()):
         known = json.loads(SPAWNS.read_text(encoding="utf-8")).get(map_name, {}) if SPAWNS.exists() else {}
-        known.update({team: (rects[0] if len(rects) == 1 else rects) for team, rects in data["spawns"].items() if rects})  # une équipe sans zone saisie garde sa zone détectée
+        shared = data["spawns"].get("any", [])  # zones neutres : tout joueur peut y réapparaître, elles comptent pour les deux équipes
+        for team in ("A", "B"):
+            rects = data["spawns"][team] + shared
+            if rects:  # une équipe sans zone saisie garde sa zone détectée
+                known[team] = rects[0] if len(rects) == 1 else rects
         _merge_json(SPAWNS, map_name, known)
         summary["departs"] = {team: len(rects) for team, rects in data["spawns"].items()}
     if data["inset"]:

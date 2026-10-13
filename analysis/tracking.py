@@ -1111,7 +1111,7 @@ def bridge_gaps(rows, runs, step_s, put):
     """Aucun joueur vivant ne disparaît : dans chaque période vivante, un trou entre deux lectures est comblé en reliant les deux points
     visibles, le début est rempli par la première position connue (réapparition) et la fin par la dernière (jusqu'à la mort)."""
     lead, trail = max(1, round(LEAD_MAX_S / step_s)), max(1, round(TRAIL_MAX_S / step_s))
-    spawn = _spawn_points(rows, runs)
+    spawn = {} if _FLAGS["neutral_spawns"] else _spawn_points(rows, runs)  # zones de départ neutres : pas de point de réapparition propre à l'équipe
     for slot, rs in runs.items():
         for s, e in rs:
             seen = [k for k in range(s, e + 1) if rows.get((k, slot)) and rows[(k, slot)][7]]
@@ -1194,7 +1194,7 @@ ENEMY_WEIGHT = 0.6  # préférence pour le sens qui regarde vers le camp ennemi 
 
 def _enemy_headings(spawns):
     """{équipe: cap (degrés) vers le camp ennemi} d'après les zones de départ de la carte : du centre de la zone de son équipe au centre de l'autre. Vide sans zones."""
-    if not _rects(spawns, "A") or not _rects(spawns, "B"):
+    if not _rects(spawns, "A") or not _rects(spawns, "B") or _rects(spawns, "A") == _rects(spawns, "B"):  # zones neutres (Outlaw) : pas de camp ennemi
         return {}
     centre = {t: (sum((r[0] + r[2]) / 2 for r in _rects(spawns, t)) / len(_rects(spawns, t)), sum((r[1] + r[3]) / 2 for r in _rects(spawns, t)) / len(_rects(spawns, t))) for t in ("A", "B")}
     heading = lambda a, b: math.degrees(math.atan2(centre[b][1] - centre[a][1], centre[b][0] - centre[a][0])) % 360
@@ -1435,6 +1435,7 @@ def solve(frames, step_s, deaths=None, states=None, teleports=None, walk_points=
     if not frames:
         return []
     _TELEPORTS[:] = teleports or []
+    _FLAGS["neutral_spawns"] = bool(spawns and _rects(spawns, "A") and _rects(spawns, "A") == _rects(spawns, "B"))
     _ROTORS.clear()
     _ROTORS.update(rotors or {})
     _STATIONS[:] = [(s["x"], s["y"], s["angle"]) for pair in stations or [] for s in (pair["a"], pair["b"]) if s.get("angle") is not None]
@@ -1769,6 +1770,7 @@ def tp_gaze(rows, step_s, coherence_out=None):
     return changed
 
 
+_FLAGS = {"neutral_spawns": False}  # zones de départ communes aux deux équipes (posé par solve)
 SIGHT_DUEL = True  # la règle du mur s'applique au duel
 SIGHT_KILL = False  # pas au kill : mesuré sur les 220 corrections de la game 26, le tueur regarde sa victime même avec un mur entre eux (regard médian 38,0 puis 39,5 degrés, 74 puis 77 corrections à plus de 60 degrés avec la règle du mur) ; la libanaise se marque à la main
 SIGHT_RULE = True  # un mur entre deux joueurs : pas de règle du duel ni du kill (ils ne se voient pas)

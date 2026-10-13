@@ -273,6 +273,13 @@ function putMapAnnotation(ctx: ApiContext, query: URLSearchParams, payload: Row)
   return reply(200, { ok: true });
 }
 
+/** Points de capture actifs vus sur la minimap (capture_points.py) : [{ t0, t1, x, y, w, h, point }], secondes depuis le début de la game. */
+function listCaptureBoxes(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = Number(query.get('game'));
+  if (query.get('game') === null || !Number.isInteger(gameId)) return fail('Paramètre game manquant');
+  return reply(200, ctx.db.prepare('SELECT t0, t1, x, y, w, h, point FROM capture_boxes WHERE game_id = ? ORDER BY t0').all(gameId));
+}
+
 /** Kills marqués à la main (« libanaise ») d'une game : [[instant, victime]]. */
 function listKillFlags(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const gameId = Number(query.get('game'));
@@ -451,6 +458,7 @@ export function handleApi(
     if (method === 'GET') return getMapAnnotation(ctx, query);
     if (method === 'PUT') return putMapAnnotation(ctx, query, payload);
   }
+  if (method === 'GET' && pathname === '/api/capture-boxes') return listCaptureBoxes(ctx, query);
   if (pathname === '/api/kill-flags') {
     if (method === 'GET') return listKillFlags(ctx, query);
     if (method === 'PUT') return putKillFlag(ctx, payload);

@@ -116,10 +116,10 @@ export function CorridorMap({ map }: { map: string }) {
               return <line key={`line${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`corridor__line corridor__line--${o.kind}${o.under ? ' is-under' : ''}`} vectorEffect="non-scaling-stroke" />;
             })}
           {spawns &&
-            reading.spawns.map((s) => {
+            reading.spawns.map((s, i) => {
               const a = at(s.rect[0], s.rect[1]);
               const b = at(s.rect[2], s.rect[3]);
-              return <rect key={s.team} x={a.x} y={a.y} width={b.x - a.x} height={b.y - a.y} className={`corridor__spawn corridor__spawn--${s.team}`} />;
+              return <rect key={`${s.team}${i}`} x={a.x} y={a.y} width={b.x - a.x} height={b.y - a.y} className={`corridor__spawn corridor__spawn--${s.team}`} />;
             })}
           {stations &&
             reading.stations.map(([p, q]) => {

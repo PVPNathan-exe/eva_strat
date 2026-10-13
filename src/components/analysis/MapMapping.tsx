@@ -26,11 +26,12 @@ import {
   MAX_POLYGON_POINTS,
   MIN_POLYGON_POINTS,
   MAX_SPAWNS_PER_TEAM,
+  maxSpawns,
   type ClassName,
   type MapAnnotation,
   type Opening,
   type Point,
-  type Team,
+  type SpawnGroup,
 } from '../../lib/mapAnnotation';
 import { readingOf } from '../../lib/mapReading';
 import { ColorPanel, Loupe } from './MappingColors';
@@ -39,10 +40,11 @@ import { MappingPlan } from './MappingPlan';
 import type { Draft } from './MappingShapes';
 import { useMapAnnotation } from './useMapAnnotation';
 
-type Tool = 'colors' | 'zones' | 'tps' | 'openings' | 'capture' | 'spawns' | 'align';
+type Tool = 'colors' | 'zones' | 'hors' | 'tps' | 'openings' | 'capture' | 'spawns' | 'align';
 const TOOLS: { id: Tool; label: string }[] = [
   { id: 'colors', label: 'Couleurs' },
   { id: 'zones', label: 'Zones de classe' },
+  { id: 'hors', label: 'Hors map' },
   { id: 'tps', label: 'Tyroliennes' },
   { id: 'openings', label: 'Portes et fenêtres' },
   { id: 'capture', label: 'Points de capture' },
@@ -85,7 +87,7 @@ export function MapMapping({ map }: { map: string }) {
   const [overrideTo, setOverrideTo] = useState<ClassName>('vue');
   const [oneWay, setOneWay] = useState(false);
   const [underNew, setUnderNew] = useState(false); // les prochains traits ou zones laissent passer par en dessous
-  const [team, setTeam] = useState<Team>('A');
+  const [team, setTeam] = useState<SpawnGroup>('A');
   const [note, setNote] = useState<string | null>(null);
 
   const aspect = image ? image.width / image.height : 1;
@@ -94,7 +96,7 @@ export function MapMapping({ map }: { map: string }) {
   const error = inset ? alignmentError(annotation.pairs, inset) : null;
   const drawing = JSON.stringify(draft) !== JSON.stringify(NO_DRAFT);
   const conflicts = useMemo(() => (image ? findConflicts(image.data, annotation.colors) : null), [image, annotation.colors]);
-  const polygonTool = tool === 'capture' || tool === 'zones'; // outils où l'on trace un rectangle (glisser) ou une forme libre (clics)
+  const polygonTool = tool === 'capture' || tool === 'zones' || tool === 'hors'; // outils où l'on trace un rectangle (glisser) ou une forme libre (clics)
 
   if (!reading.medianUrl) return <p className="games__empty">Pas de médiane de minimap pour {map} (analysis/map_mask.py).</p>;
 
@@ -193,14 +195,15 @@ export function MapMapping({ map }: { map: string }) {
       setDraft(NO_DRAFT);
       if (!rect) return;
       const next = addSpawn(annotation.spawns, team, rect);
-      if (!next) return setNote(`L'équipe ${team} a déjà ${MAX_SPAWNS_PER_TEAM} zones de départ : retire-en une d'abord.`);
+      if (!next) return setNote(`${team === 'any' ? 'Les zones neutres ont' : `L'équipe ${team} a`} déjà ${maxSpawns(team)} zones de départ : retire-en une d'abord.`);
       update((a) => ({ ...a, spawns: next }));
     }
   };
 
   // Forme terminée : zone de capture (jouable) ou zone de classe (remplace une classe par une autre).
   const addPolygon = (points: Point[]) => {
-    if (tool === 'zones') update((a) => ({ ...a, overrides: [...a.overrides, { polygon: points, from: overrideFrom, to: overrideTo, under: underNew }] }));
+    if (tool === 'hors') update((a) => ({ ...a, overrides: [...a.overrides, { polygon: points, from: 'any', to: 'hors', under: false }] })); // hors de la carte : tout ce qui est dans la zone est retiré du masque
+    else if (tool === 'zones') update((a) => ({ ...a, overrides: [...a.overrides, { polygon: points, from: overrideFrom, to: overrideTo, under: underNew }] }));
     else update((a) => ({ ...a, capture: [...a.capture, points] }));
     setDraft(NO_DRAFT);
   };
@@ -285,6 +288,26 @@ export function MapMapping({ map }: { map: string }) {
               onShowConflicts={setShowConflicts}
               onSeparate={() => update((a) => ({ ...a, colors: separateTolerances(a.colors) }))}
             />
+          )}
+          {tool === 'hors' && (
+            <div>
+              <p className="mapping__hint">
+                Entoure ce qui est hors de la carte (rectangle au glisser, ou forme libre au clic) : tout ce qui est dans la zone est retiré du masque, quelle que soit sa couleur. Ni le plan ni les
+                lectures ne le remplissent. C'est une classe de zone, pas une couleur de pixel : le fond de la minimap a parfois la couleur du sol.
+              </p>
+              <ul className="mapping__list">
+                {annotation.overrides.flatMap((o, i) =>
+                  o.to === 'hors'
+                    ? [
+                        <li key={i}>
+                          Zone hors map {i + 1} ({o.polygon.length} points)
+                          <button onClick={() => without('overrides', i)}>Retirer</button>
+                        </li>,
+                      ]
+                    : [],
+                )}
+              </ul>
+            </div>
           )}
           {tool === 'zones' && (
             <div>
@@ -390,20 +413,21 @@ export function MapMapping({ map }: { map: string }) {
           {tool === 'spawns' && (
             <div>
               <p className="mapping__hint">
-                Glisse un rectangle sur la zone de départ de l'équipe choisie ({MAX_SPAWNS_PER_TEAM} zones au plus par équipe : le départ de la vidéo peut différer du plan stratégique).
+                Glisse un rectangle sur la zone de départ de l'équipe choisie ({MAX_SPAWNS_PER_TEAM} zones au plus par équipe : le départ de la vidéo peut différer du plan stratégique). Zones neutres
+                (Outlaw : 4 zones où n'importe quel joueur réapparaît, quelle que soit son équipe) : {maxSpawns('any')} au plus, elles comptent pour les deux équipes.
               </p>
               <div className="mapping__classes">
-                {(['A', 'B'] as const).map((t) => (
+                {(['A', 'B', 'any'] as const).map((t) => (
                   <label key={t} className={`mapping__class${team === t ? ' is-on' : ''}`}>
-                    <input type="radio" name="mapping-team" checked={team === t} onChange={() => setTeam(t)} /> Équipe {t} ({annotation.spawns[t].length}/{MAX_SPAWNS_PER_TEAM})
+                    <input type="radio" name="mapping-team" checked={team === t} onChange={() => setTeam(t)} /> {t === 'any' ? 'Neutres (toutes équipes)' : `Équipe ${t}`} ({annotation.spawns[t].length}/{maxSpawns(t)})
                   </label>
                 ))}
               </div>
               <ul className="mapping__list">
-                {(['A', 'B'] as const).flatMap((t) =>
+                {(['A', 'B', 'any'] as const).flatMap((t) =>
                   annotation.spawns[t].map((_, i) => (
                     <li key={`${t}${i}`}>
-                      Équipe {t}, zone {i + 1}
+                      {t === 'any' ? 'Zone neutre' : `Équipe ${t}, zone`} {i + 1}
                       <button onClick={() => update((a) => ({ ...a, spawns: { ...a.spawns, [t]: a.spawns[t].filter((_r, j) => j !== i) } }))}>Retirer</button>
                     </li>
                   )),

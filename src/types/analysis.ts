@@ -101,6 +101,17 @@ export interface Kill {
   kind: 'kill' | 'suicide' | 'environment' | 'unknown' | 'inferred' | null;
 }
 
+/** Point de capture actif vu sur la minimap (analysis/capture_points.py) : secondes depuis le début de la game, centre et taille en fractions de la minimap. */
+export interface CaptureBox {
+  t0: number;
+  t1: number;
+  x: number;
+  y: number;
+  w: number | null;
+  h: number | null;
+  point: string | null;
+}
+
 export interface Game {
   id: number;
   video_id: number;

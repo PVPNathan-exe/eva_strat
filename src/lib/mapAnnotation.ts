@@ -5,6 +5,7 @@ import type { Inset } from './planInsets';
 
 export type ClassName = 'sol' | 'mur' | 'tir' | 'vue' | 'porte' | 'porte_vitre' | 'hors';
 export type Team = 'A' | 'B';
+export type SpawnGroup = Team | 'any'; // « any » : zones de départ neutres, où n'importe quel joueur réapparaît (Outlaw)
 export type Point = [number, number]; // fractions de l'image (0 à 1)
 export type Rect = [number, number, number, number]; // x0, y0, x1, y1
 
@@ -57,7 +58,7 @@ export interface MapAnnotation {
   colors: PickedColor[];
   tps: TeleportPair[];
   doors: Opening[];
-  spawns: Record<Team, Rect[]>;
+  spawns: Record<SpawnGroup, Rect[]>;
   overrides: ClassOverride[];
   usePlan: boolean; // recouper le masque avec le plan stratégique à l'application (analysis/plan_mask.py)
   capture: Point[][]; // zones des points de capture (forme libre, au moins 3 points) : zones jouables
@@ -66,6 +67,8 @@ export interface MapAnnotation {
 }
 
 export const MAX_SPAWNS_PER_TEAM = 2;
+export const MAX_NEUTRAL_SPAWNS = 4;
+export const maxSpawns = (group: SpawnGroup) => (group === 'any' ? MAX_NEUTRAL_SPAWNS : MAX_SPAWNS_PER_TEAM);
 export const MAX_CAPTURE_ZONES = 8;
 export const MAX_OVERRIDES = 40;
 export const MAX_POLYGON_POINTS = 80;
@@ -84,12 +87,12 @@ export const CLASS_INFO: { name: ClassName; label: string; help: string; preview
   { name: 'vue', label: 'Vue seulement', help: 'on voit à travers : ni tir, ni passage', preview: [61, 139, 255] },
   { name: 'porte', label: 'Porte (hachures)', help: 'on la traverse', preview: [255, 214, 10] },
   { name: 'porte_vitre', label: 'Porte vitrée', help: 'on la traverse et on voit à travers', preview: [90, 220, 235] },
-  { name: 'hors', label: 'Hors map', help: 'hors de la carte : retire tous les pixels de cette couleur du masque, avant toute autre classe', preview: [200, 200, 215] },
+  { name: 'hors', label: 'Hors map', help: 'hors de la carte : se pose par zone (outil Hors map), retire tout ce qui est dans la zone du masque', preview: [200, 200, 215] },
 ];
 
 export const classCode = (name: ClassName) => CLASS_INFO.findIndex((c) => c.name === name) + 1; // 0 : aucune classe
 
-export const emptyAnnotation = (): MapAnnotation => ({ colors: [], tps: [], doors: [], spawns: { A: [], B: [] }, capture: [], overrides: [], usePlan: false, pairs: [], inset: null });
+export const emptyAnnotation = (): MapAnnotation => ({ colors: [], tps: [], doors: [], spawns: { A: [], B: [], any: [] }, capture: [], overrides: [], usePlan: false, pairs: [], inset: null });
 
 const isPoint = (p: unknown): p is Point => Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === 'number' && v >= 0 && v <= 1);
 const isRect = (r: unknown): r is Rect => Array.isArray(r) && r.length === 4 && r.every((v) => typeof v === 'number' && v >= 0 && v <= 1) && r[0] < r[2] && r[1] < r[3];
@@ -132,9 +135,10 @@ export function sanitize(raw: unknown): MapAnnotation {
   if (!raw || typeof raw !== 'object') return out;
   const r = raw as Record<string, unknown>;
   const names = new Set<string>(CLASS_INFO.map((c) => c.name));
+  const colourNames = new Set<string>(CLASS_INFO.filter((c) => c.name !== 'hors').map((c) => c.name)); // « hors map » se pose par zone, pas par couleur
   for (const c of Array.isArray(r.colors) ? r.colors : []) {
     const rgb = (c as PickedColor)?.rgb;
-    if (Array.isArray(rgb) && rgb.length === 3 && rgb.every((v) => Number.isInteger(v) && v >= 0 && v <= 255) && names.has((c as PickedColor).cls)) {
+    if (Array.isArray(rgb) && rgb.length === 3 && rgb.every((v) => Number.isInteger(v) && v >= 0 && v <= 255) && names.has((c as PickedColor).cls) && colourNames.has((c as PickedColor).cls)) {
       out.colors.push({ rgb: rgb as PickedColor['rgb'], tol: clampTolerance((c as PickedColor).tol), cls: (c as PickedColor).cls });
     }
   }
@@ -148,7 +152,7 @@ export function sanitize(raw: unknown): MapAnnotation {
     out.doors.push({ from: d.from, to: d.to, kind, glass: kind === 'porte' && Boolean(d.glass), side: (kind === 'fenetre' || (kind === 'porte' && d.glass)) && (d.side === 1 || d.side === -1) ? d.side : 0, under: kind !== 'porte' && d.under === true });
   }
   const sp = (r.spawns ?? {}) as Record<string, unknown>;
-  for (const team of ['A', 'B'] as const) out.spawns[team] = (Array.isArray(sp[team]) ? (sp[team] as unknown[]) : []).filter(isRect).slice(0, MAX_SPAWNS_PER_TEAM);
+  for (const group of ['A', 'B', 'any'] as const) out.spawns[group] = (Array.isArray(sp[group]) ? (sp[group] as unknown[]) : []).filter(isRect).slice(0, maxSpawns(group));
   for (const z of Array.isArray(r.capture) ? (r.capture as unknown[]) : []) {
     const polygon = isRect(z) ? polygonFromRect(z) : readPolygon(z);
     if (polygon && out.capture.length < MAX_CAPTURE_ZONES) out.capture.push(polygon);
@@ -198,18 +202,6 @@ export function classifyImage(rgba: Uint8ClampedArray, colors: PickedColor[]): U
         best[p] = d;
         labels[p] = code;
       }
-    }
-  }
-  // « hors map » l'emporte sur toutes les autres classes (même règle que classify de map_annotations.py)
-  for (const c of colors) {
-    if (c.cls !== 'hors') continue;
-    const code = classCode('hors');
-    const limit = c.tol * c.tol;
-    for (let p = 0; p < n; p++) {
-      const dr = rgba[p * 4] - c.rgb[0];
-      const dg = rgba[p * 4 + 1] - c.rgb[1];
-      const db = rgba[p * 4 + 2] - c.rgb[2];
-      if (dr * dr + dg * dg + db * db <= limit) labels[p] = code;
     }
   }
   return labels;
@@ -368,10 +360,10 @@ export function rectFrom(a: Point, b: Point, minSide = 0.01): Rect | null {
   return r[2] - r[0] < minSide || r[3] - r[1] < minSide ? null : r;
 }
 
-/** Ajoute une zone de départ à une équipe ; null si elle en a déjà MAX_SPAWNS_PER_TEAM. */
-export function addSpawn(spawns: Record<Team, Rect[]>, team: Team, rect: Rect): Record<Team, Rect[]> | null {
-  if (spawns[team].length >= MAX_SPAWNS_PER_TEAM) return null;
-  return { ...spawns, [team]: [...spawns[team], rect] };
+/** Ajoute une zone de départ à une équipe (2 au plus) ou aux zones neutres (4 au plus) ; null si le groupe est plein. */
+export function addSpawn(spawns: Record<SpawnGroup, Rect[]>, group: SpawnGroup, rect: Rect): Record<SpawnGroup, Rect[]> | null {
+  if (spawns[group].length >= maxSpawns(group)) return null;
+  return { ...spawns, [group]: [...spawns[group], rect] };
 }
 
 const MIN_SPREAD = 0.05; // écart minimal des repères sur un axe pour en tirer une échelle
