@@ -16,6 +16,27 @@
   position: relative;
 }
 
+.game-badge {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 2;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.2rem 0.6rem;
+  background: var(--c-shadow);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.game-badge span {
+  color: var(--c-text-soft);
+}
+
 .player-stage__vision {
   position: absolute;
   pointer-events: none;

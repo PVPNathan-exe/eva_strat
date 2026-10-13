@@ -76,6 +76,8 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
   const watchJob = (jobId: string) =>
     subscribeJob(jobId, (e: JobEvent) => {
       if (e.event === 'progress') {
+        const previous = get().job.gameIndex;
+        if ((e.gameIndex ?? 0) > previous && previous > 0) void get().refreshGames().catch(() => undefined); // la game précédente est enregistrée en entier : replay et positions disponibles sans attendre la fin
         set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, gameIndex: e.gameIndex ?? 0, gameCount: e.gameCount ?? 0, error: null, message: null } });
       } else if (e.event === 'done') {
         set({ job: { ...idleJob, message: e.message ?? 'Vidéo chargée' } });

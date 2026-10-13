@@ -8,6 +8,7 @@ import { setVideoElement } from '../../lib/videoRef';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { PlayerControls } from './PlayerControls';
 import { VISION_LAYER_LABELS, type VisionLayers } from '../../lib/vision';
+import { GameBadge } from './GameBadge';
 import { TeamRangeBar } from './TeamRangeBar';
 import { VisionOverlay } from './VisionOverlay';
 
@@ -112,6 +113,7 @@ export function VideoPlayer({ videoId, duration }: { videoId: number; duration: 
         <TeamRangeBar videoId={videoId} duration={duration} />
       </div>
       <div className="player-stage" ref={stage}>
+        <GameBadge />
       <video
         key={videoId}
         ref={ref}
