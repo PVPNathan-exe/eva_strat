@@ -79,13 +79,22 @@ def _load(conn, game, step_s, refresh=False):
             return _load(conn, game, step_s, refresh=True)
         frames = [(fi, t, dets) for fi, t, dets in raw["frames"]]
         states = {int(k): {int(slot): v for slot, v in per.items()} for k, per in raw["states"].items()}
-        return {"frames": frames, "states": states, "noise": dict(enumerate(raw["noise"]))}
+        return _with_counter_guard(conn, game, step_s, {"frames": frames, "states": states, "noise": dict(enumerate(raw["noise"]))})
     zone = db.zone_for(conn, game["map"], "minimap")
     za, zb = db.zone_for(conn, game["map"], "team_a_bar"), db.zone_for(conn, game["map"], "team_b_bar")
     states = positions.detect_states(game["path"], game, za, zb, game["width"], game["height"], step_s=step_s, players=db.players_of(conn, game["id"]))
     frames, noise = positions.detect_frames_and_noise(game["path"], game, zone, game["width"], game["height"], step_s=step_s, hints=positions.hints_from_states(states), walls=db.wall_lines_for(game["map"]))
     path.write_text(json.dumps({"frames": frames, "states": states, "zone_key": zone_key, "noise": noise, "walls": db.wall_lines_for(game["map"]) is not None}, default=float), encoding="utf-8")
-    return {"frames": frames, "states": states, "noise": dict(enumerate(noise))}
+    return _with_counter_guard(conn, game, step_s, {"frames": frames, "states": states, "noise": dict(enumerate(noise))})
+
+
+def _with_counter_guard(conn, game, step_s, data):
+    """Garde-fou du compteur de morts (death_counter.py) appliqué aux états des bandeaux, lus du cache ou de la vidéo."""
+    import death_counter
+
+    deaths = [(k["t"], k["victim_slot"]) for k in db.kills_of(conn, game["id"])]
+    data["states"], data["vetoed"] = death_counter.veto_states(conn, game, data["states"], deaths, step_s)
+    return data
 
 
 def evaluate_game(conn, game_id, refresh=False, every=6):
