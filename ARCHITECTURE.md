@@ -12,7 +12,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 
 ## Racine et configuration
 
-- `README.md` : présentation concise (fonctions principales et secondaires, tout tourne en local, installation, utilisation, données et réinstallation, avancé), avec trois animations en CSS dans des SVG (`docs/anim/installation.svg`, `utilisation.svg`, `donnees.svg`, générées par un script hors dépôt : à modifier à la main ou à régénérer). `docs/DETAILS_ANALYSE.md` : fonctionnement détaillé de chaque lecture et des cartes (ancien corps du README). `CLAUDE.md` : règles de travail pour Claude Code. `docs/SKILLS_ET_OUTILS.md` : skills et outils utiles au projet.
+- `README.md` : présentation concise (fonctions principales et secondaires, tout tourne en local, installation, utilisation, données et réinstallation, avancé), avec trois animations en CSS dans des SVG (`docs/anim/installation.svg`, `utilisation.svg`, `donnees.svg`, générées par `scripts/gen_readme_anim.py`). `docs/DETAILS_ANALYSE.md` : fonctionnement détaillé de chaque lecture et des cartes (ancien corps du README). `CLAUDE.md` : règles de travail pour Claude Code. `docs/SKILLS_ET_OUTILS.md` : skills et outils utiles au projet.
 - `package.json` : scripts npm (`setup`, `start`, `dev`, `build`, `lint`, `test:js`, `test:py`).
 - `vite.config.ts` : configuration Vite, branche `analysisPlugin`. `tsconfig*.json` : TypeScript. `eslint.config.js` : lint. `pytest.ini` : tests Python (dossier `analysis/tests`).
 - `index.html` : page d'entrée, charge `src/main.tsx`.
@@ -101,7 +101,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 ## tests/ et scripts/
 
 - `tests/*.test.ts` : fonctions pures du site. `tests/server/` : API, base, jobs, plage HTTP, garde, armes, sélecteur de fichier.
-- `scripts/setup.mjs` : prépare le projet (npm, Python, ffmpeg) et, avec `--run`, lance le site. `scripts/crop_maps.py` : rogne les plans.
+- `scripts/setup.mjs` : prépare le projet (npm, Python, ffmpeg) et, avec `--run`, lance le site. `scripts/crop_maps.py` : rogne les plans. `scripts/gen_readme_anim.py` : génère les animations SVG du README.
 - `docs/` : `PLAN_RESTANT.md` (reste à faire), `PLAN_OPTIMISATIONS.md` (vitesse), `CHANGER_DE_PC.md` (reprise sur un autre PC). `PLAN_STATS_AGENTS.md` : plan de l'onglet Stats (retakes, rotations, zones sûres) découpé par agent et par fichier, à lire avant de toucher à ces fonctions.
 
 ## Flux principaux
