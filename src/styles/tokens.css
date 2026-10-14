@@ -32,4 +32,19 @@
   --c-surface-deep: #141822;
   --c-surface-vision: #151a24;
   --c-shadow: rgba(0, 0, 0, 0.45);
+
+  /* Équipes : orange (joueurs 1 à 4, A), bleue (joueurs 5 à 8, B) */
+  --c-team-a: var(--c-orange);
+  --c-team-b: var(--c-blue);
+
+  /* Frise des games */
+  --c-timeline-bg: #2a2f3d;
+  --c-timeline-game: #2ec27e;
+  --c-timeline-cursor: #fff;
+  --c-timeline-neutral: #5b6378;
+
+  /* Marqueurs de kills de la frise : opacité au repos, d'un tueur déduit, agrandissement au survol et au focus */
+  --kill-rest-opacity: 0.9;
+  --kill-inferred-opacity: 0.7;
+  --kill-hover-scale: 1.25;
 }

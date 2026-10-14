@@ -12,7 +12,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 
 ## Racine et configuration
 
-- `README.md` : présentation et mode d'emploi. `CLAUDE.md` : règles de travail pour Claude Code. `docs/SKILLS_ET_OUTILS.md` : skills et outils utiles au projet.
+- `README.md` : présentation et mode d'emploi. `PROJECT_OVERVIEW.md` : synthèse technique complète à coller dans une conversation avec une IA sans accès aux fichiers. `CLAUDE.md` : règles de travail pour Claude Code. `docs/SKILLS_ET_OUTILS.md` : skills et outils utiles au projet.
 - `package.json` : scripts npm (`setup`, `start`, `dev`, `build`, `lint`, `test:js`, `test:py`).
 - `vite.config.ts` : configuration Vite, branche `analysisPlugin`. `tsconfig*.json` : TypeScript. `eslint.config.js` : lint. `pytest.ini` : tests Python (dossier `analysis/tests`).
 - `index.html` : page d'entrée, charge `src/main.tsx`.
@@ -38,7 +38,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 - `IngestBar.tsx` : source (chemin ou URL), « Détecter les games » (étape 1), options, progression (game en cours), pause et arrêt.
 - `AnalysisPlan.tsx` : panneau « Analyse détaillée » : confirmation des bornes, games à analyser et leur ordre, lancement (étape 2).
 - `GameList.tsx` : games d'une vidéo, bornes, carte, confirmation, suppression. `GameTeams.tsx` : noms des équipes orange et bleue d'une game (saisis, avec proposition tirée des pseudos).
-- `SegmentTimeline.tsx` : frise des games. `VideoPlayer.tsx` : lecteur sur `/api/videos/:id/stream`. `PlayerControls.tsx` : barre de lecture.
+- `SegmentTimeline.tsx` : frise des games ; un clic sur une game zoome la frise sur elle (`analysisStore.zoomGameId`, suit la game choisie et relit les games, bouton « Vue complète », bouton « Relire cette game » = `startAnalysis([id])`, message quand la game n'a aucun kill : `killsStatus` d'après `killsRead` et `captureRead`). En vue zoomée : `TimelineCapture.tsx` (barre orange ou bleue selon l'équipe qui capture, `/api/capture` ; barre verte sans lecture de capture) et `TimelineKills.tsx` (têtes de mort `Skull` de la couleur de l'équipe, cercle en pointillé pour un tueur déduit, pastille du nombre pour un regroupement ; kills orange au-dessus, bleus en dessous, rangée grise des kills sans équipe ; un clic place la vidéo `KILL_LEAD_S` avant). `VideoPlayer.tsx` : lecteur sur `/api/videos/:id/stream`. `PlayerControls.tsx` : barre de lecture.
 - `VisionOverlay.tsx` : calques « ce que voit le programme » (dont le contrôle à la vraie minimap et les zones peu fiables). `useGameFlags.ts` : positions non confirmées, joueur observé et carte de fiabilité d'une game. `ReliabilityLayer.tsx` : cases douteuses sur le plan du replay. `CalibrationEditor.tsx` : zones du HUD par carte.
 - `ReplayPanel.tsx` (549 lignes) : rejeu des positions sur le plan de la carte.
 - `CommentsPanel.tsx` : commentaires liés à un instant, export texte.
@@ -47,7 +47,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 
 ### src/lib, src/store, src/types
 
-- `lib/analysisApi.ts` : client HTTP de l'onglet Analyse et `subscribeJob` (SSE). `lib/timeline.ts` : fonctions pures de temps. `lib/comments.ts` : catégories et export. `lib/teams.ts` : diminutif d'équipe proposé par les pseudos.
+- `lib/analysisApi.ts` : client HTTP de l'onglet Analyse et `subscribeJob` (SSE). `lib/timeline.ts` : fonctions pures de temps (axe de la vidéo ou d'une game). `lib/captureTimeline.ts` : équipe qui capture à chaque instant d'après la hausse des scores (`captureSegments`, seuils `CAPTURE_GAP_S`, `CAPTURE_SMOOTH_S`, `CAPTURE_IDLE_S`). `lib/killTimeline.ts` : rangée d'un kill, sous-rangées et regroupement, infobulle, `KILL_LEAD_S`. `lib/comments.ts` : catégories et export. `lib/teams.ts` : diminutif d'équipe proposé par les pseudos.
 - `lib/planInsets.ts` : cadre de la minimap sur le plan (aligné par `plan_align.py`, sinon approximatif) et projection. `lib/mapReading.ts` : masque, murs, tyroliennes et zones de départ d'une carte. `lib/pinShape.ts` : contour disque plus pointe d'un joueur.
 - `lib/replayFlags.ts` : fonctions pures du contrôle à la minimap, du joueur observé et des cases douteuses. `lib/builtinMaps.ts`, `lib/storage.ts` (export JSON d'une carte), `lib/videoRef.ts` (référence au `<video>`), `lib/vision.ts` (calques).
 - `lib/stuffs.ts` (371 lignes) : données des armes de l'onglet Stratégie. `lib/weaponCatalog.ts` : suggestions de noms. `lib/weaponNames.ts` : `canonicalName`.
@@ -139,7 +139,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 | Méthode | Route | Rôle |
 |---|---|---|
 | GET | `/api/videos` | vidéos analysées |
-| GET, POST | `/api/games` | lister (`?video=`) ou créer |
+| GET, POST | `/api/games` | lister (`?video=`, avec kills, joueurs, `killsRead` : killfeed lu, `captureRead` : scores lus) ou créer |
 | PATCH, DELETE | `/api/games/:id` | modifier ou supprimer |
 | GET | `/api/samples?game=`, `/api/capture?game=` | positions, pourcentages de capture |
 | GET | `/api/flags?game=`, `/api/reliability?map=` | positions non confirmées et joueur observé, carte de fiabilité |

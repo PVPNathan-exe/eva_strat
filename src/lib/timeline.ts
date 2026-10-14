@@ -25,6 +25,17 @@ export function pctToTime(pct: number, duration: number): number {
   return (pct / 100) * duration;
 }
 
+/** Position en % d'un instant sur un axe qui va de from à to (frise zoomée sur une game), bornée à 0..100. */
+export function spanToPct(t: number, from: number, to: number): number {
+  if (to <= from) return 0;
+  return Math.min(100, Math.max(0, ((t - from) / (to - from)) * 100));
+}
+
+/** Instant d'une position en % sur un axe qui va de from à to (réciproque de spanToPct). */
+export function pctToSpan(pct: number, from: number, to: number): number {
+  return from + (pct / 100) * (to - from);
+}
+
 /** Ramène des bornes dans 0 ≤ début < fin ≤ durée (au moins 1 s d'écart). */
 export function clampBounds(start: number, end: number, duration: number): { start: number; end: number } {
   const s = Math.min(Math.max(0, start), Math.max(0, duration - 1));

@@ -144,5 +144,11 @@
   },
   "B29": {
     "reported": true
+  },
+  "G21": {
+    "reported": true
+  },
+  "B30": {
+    "guess": "AK77"
   }
 }
