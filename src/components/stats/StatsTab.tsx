@@ -1,16 +1,18 @@
-// Onglet Stats : filtres communs (carte, games, équipe, joueur) et une vue à la fois : Parcours, Morts, Présence, Zones sûres.
+// Onglet Stats : filtres communs (carte, games, équipe, joueur) et une vue à la fois : Parcours, Morts, Présence, Retakes, Rotations, Zones sûres.
 // Les vues Retakes et Rotations s'ajoutent ici quand elles sont livrées (docs/PLAN_STATS_AGENTS.md).
 
 import { useMemo, useState } from 'react';
-import { Flame, Route, ShieldCheck, Skull } from 'lucide-react';
+import { Flame, Repeat, Route, ShieldCheck, Skull, Swords } from 'lucide-react';
 import { StatsFilters, type StatsFilterState } from './StatsFilters';
 import { StatsDeaths } from './StatsDeaths';
 import { StatsPaths } from './StatsPaths';
 import { StatsPresence } from './StatsPresence';
+import { StatsRetakes } from './StatsRetakes';
+import { StatsRotations } from './StatsRotations';
 import { StatsSafe } from './StatsSafe';
 import { INITIAL_FILTERS, mapsOf, noticeOf, useStatsGames } from './useStats';
 
-type View = 'parcours' | 'morts' | 'presence' | 'safe';
+type View = 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe';
 
 export function StatsTab() {
   const [view, setView] = useState<View>('parcours');
@@ -38,6 +40,12 @@ export function StatsTab() {
         <button type="button" role="tab" aria-selected={view === 'presence'} className={view === 'presence' ? 'is-active' : ''} onClick={() => setView('presence')}>
           <Flame className="ic" /> Présence
         </button>
+        <button type="button" role="tab" aria-selected={view === 'retakes'} className={view === 'retakes' ? 'is-active' : ''} onClick={() => setView('retakes')}>
+          <Swords className="ic" /> Retakes
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'rotations'} className={view === 'rotations' ? 'is-active' : ''} onClick={() => setView('rotations')}>
+          <Repeat className="ic" /> Rotations
+        </button>
         <button type="button" role="tab" aria-selected={view === 'safe'} className={view === 'safe' ? 'is-active' : ''} onClick={() => setView('safe')}>
           <ShieldCheck className="ic" /> Zones sûres
         </button>
@@ -55,6 +63,10 @@ export function StatsTab() {
             <StatsDeaths {...common} />
           ) : view === 'presence' ? (
             <StatsPresence {...common} />
+          ) : view === 'retakes' ? (
+            <StatsRetakes {...common} />
+          ) : view === 'rotations' ? (
+            <StatsRotations {...common} />
           ) : (
             <StatsSafe {...common} />
           )}

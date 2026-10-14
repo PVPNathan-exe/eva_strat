@@ -1,0 +1,560 @@
+/* Vues Retakes et Rotations de l'onglet Stats (StatsRetakes, StatsRotations, EpisodeTimeline, RotationFlow, ValidateEpisode).
+   Couleurs uniquement par les jetons de tokens.css (--c-owner-*, --c-stats-*, --c-ok-strong, --c-danger-strong, --c-warn). */
+
+.eps__warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-warn);
+  border-radius: 6px;
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.eps__warn .ic {
+  flex: none;
+  margin-top: 0.1rem;
+  color: var(--c-warn);
+}
+
+/* Tableau par point : seul le tableau défile s'il est trop large */
+.eps__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.eps__table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: var(--c-text-soft);
+}
+
+.eps__table th,
+.eps__table td {
+  padding: 0.3rem 0.7rem;
+  border-bottom: 1px solid var(--c-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.eps__table thead th {
+  color: var(--c-text-muted);
+  font-weight: 500;
+}
+
+.eps__table tr.is-active {
+  background: var(--c-surface-2);
+}
+
+.eps__table th[scope='row'] button {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--c-text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--c-border-strong);
+  cursor: pointer;
+}
+
+.eps__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--c-text-soft);
+  font-size: 0.8rem;
+}
+
+.eps__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.eps__flows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* Plan : positions de départ des attaquants (couleur = résultat) */
+.epmap__dot {
+  position: absolute;
+  width: 0.8rem;
+  height: 0.8rem;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  background: var(--c-warn);
+  border: 2px solid var(--c-bg);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.epmap__dot--good {
+  background: var(--c-stats-life);
+}
+
+.epmap__dot--bad {
+  background: var(--c-stats-death);
+}
+
+.epmap__dot--doubt {
+  background: var(--c-warn);
+}
+
+.epmap__dot.is-dim {
+  opacity: 0.35;
+}
+
+.eps__legend .epmap__dot {
+  position: static;
+  flex: none;
+  transform: none;
+  cursor: default;
+}
+
+/* Joueurs de l'épisode ouvert : attaquants pleins, défenseurs en pointillé */
+.epmap__player {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--c-bg) 78%, transparent);
+  border: 2px solid var(--c-owner-a);
+  border-radius: 50%;
+  color: var(--c-text);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.epmap__player--B {
+  border-color: var(--c-owner-b);
+}
+
+.epmap__player.is-defender {
+  border-style: dashed;
+}
+
+.epmap__death {
+  position: absolute;
+  display: inline-flex;
+  transform: translate(-50%, -50%);
+  color: var(--c-stats-death);
+}
+
+/* Liste des épisodes */
+.eplist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.eplist__item {
+  min-width: 0;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+
+.eplist__item.is-active {
+  border-color: var(--c-border-strong);
+}
+
+.eplist__item.is-ko {
+  opacity: 0.6;
+}
+
+.eplist__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: none;
+  border: 0;
+  color: var(--c-text-soft);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.eplist__when {
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.eplist__sum {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.eplist__tag {
+  padding: 0.05rem 0.45rem;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.eplist__tag--good {
+  color: var(--c-stats-life);
+}
+
+.eplist__tag--bad {
+  color: var(--c-stats-death);
+}
+
+.eplist__tag--doubt {
+  color: var(--c-warn);
+}
+
+.eplist__team--A {
+  color: var(--c-owner-a);
+}
+
+.eplist__team--B {
+  color: var(--c-owner-b);
+}
+
+.eplist__route {
+  color: var(--c-text);
+}
+
+.eplist__verdict {
+  font-size: 0.75rem;
+}
+
+.eplist__verdict--ok {
+  color: var(--c-ok-text);
+}
+
+.eplist__verdict--ko {
+  color: var(--c-danger-soft);
+}
+
+.eplist__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.2rem 0.8rem 0.8rem;
+  border-top: 1px solid var(--c-border);
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+}
+
+.eplist__body h4 {
+  margin: 0 0 0.2rem;
+  color: var(--c-text);
+  font-size: 0.85rem;
+}
+
+.eplist__body ul,
+.eplist__body ol {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.eplist__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.2rem 0.8rem;
+  margin: 0.5rem 0 0;
+}
+
+.eplist__facts dt {
+  color: var(--c-text-muted);
+}
+
+.eplist__facts dd {
+  margin: 0;
+}
+
+.eplist__cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.6rem 1.2rem;
+}
+
+/* Frise du chrono d'un épisode */
+.eptl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.eptl__plot,
+.eptl__axis {
+  display: grid;
+  grid-template-columns: 4.8rem minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.eptl__axis::before {
+  content: '';
+}
+
+.eptl__labels,
+.eptl__tracks {
+  display: grid;
+  grid-auto-rows: 1.5rem;
+  gap: 0.3rem;
+}
+
+.eptl__label {
+  align-self: center;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+}
+
+.eptl__tracks {
+  position: relative;
+  min-width: 0;
+}
+
+.eptl__track {
+  position: relative;
+  background: var(--c-surface-deep);
+  border-radius: 3px;
+}
+
+.eptl__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--c-owner-none);
+}
+
+.eptl__band--A {
+  background: var(--c-owner-a);
+}
+
+.eptl__band--B {
+  background: var(--c-owner-b);
+}
+
+.eptl__nodata {
+  padding-left: 0.4rem;
+  color: var(--c-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.5rem;
+}
+
+.eptl__death {
+  position: absolute;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.2rem 0 0.1rem;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
+  border-radius: 999px;
+  color: var(--c-owner-a);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.eptl__death--B {
+  color: var(--c-owner-b);
+}
+
+.eptl__death span {
+  color: var(--c-text);
+}
+
+.eptl__overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.eptl__mark,
+.eptl__cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--c-text);
+}
+
+.eptl__cursor {
+  border-left: 1px dashed var(--c-text-soft);
+}
+
+.eptl__axisbar {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  height: 2.6rem;
+  color: var(--c-text-muted);
+  font-size: 0.7rem;
+}
+
+.eptl__marklabel {
+  position: absolute;
+  top: 0.9rem;
+  transform: translateX(-50%);
+  color: var(--c-text-soft);
+  white-space: nowrap;
+}
+
+.eptl__marklabel:nth-child(odd) {
+  top: 1.8rem;
+}
+
+.eptl__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+
+.eptl__time {
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+.eptl__video {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--c-border);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  color: var(--c-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Schéma des rotations d'une équipe */
+.rflow {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 28rem;
+  margin: 0;
+  color: var(--c-owner-a);
+}
+
+.rflow--B {
+  color: var(--c-owner-b);
+}
+
+.rflow figcaption {
+  margin-bottom: 0.3rem;
+  color: var(--c-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.rflow svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+
+.rflow__arrow line {
+  stroke: currentcolor;
+}
+
+.rflow__arrow polygon {
+  fill: currentcolor;
+}
+
+.rflow__arrow text {
+  fill: var(--c-text-soft);
+  font-size: 10px;
+}
+
+.rflow__node circle {
+  fill: var(--c-surface-2);
+  stroke: currentcolor;
+  stroke-width: 2;
+}
+
+.rflow__name {
+  fill: var(--c-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rflow__sub {
+  fill: var(--c-text-muted);
+  font-size: 9px;
+}
+
+.rflow__note {
+  margin: 0.3rem 0 0;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+}
+
+/* Validation d'un épisode */
+.epv {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+
+.epv__label {
+  color: var(--c-text-muted);
+}
+
+.epv__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  color: var(--c-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.epv__btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.epv__btn--ok.is-active {
+  background: var(--c-ok-strong);
+  border-color: var(--c-ok);
+}
+
+.epv__btn--ko.is-active {
+  background: var(--c-danger-strong);
+  border-color: var(--c-danger);
+}
+
+.epv__error {
+  color: var(--c-danger-soft);
+  font-size: 0.8rem;
+}
