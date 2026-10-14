@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import priority
+
 SCRIPT = Path(__file__).with_name("ocr_win.ps1")
 
 
@@ -26,7 +28,7 @@ def read_images(paths):
     try:
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT), "-ListFile", listing],
-            capture_output=True, stdin=subprocess.DEVNULL,
+            capture_output=True, stdin=subprocess.DEVNULL, creationflags=priority.creation_flags(),
         )
     except FileNotFoundError as exc:
         raise OcrUnavailable("PowerShell est introuvable : la reconnaissance de texte nécessite Windows.") from exc

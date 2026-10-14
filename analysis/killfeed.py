@@ -19,6 +19,7 @@ import numpy as np
 
 import names as names_mod
 import ocr
+import priority
 import weapons
 
 REGION = {"x": 0.78, "y": 0.19, "w": 0.22, "h": 0.30}  # zone du killfeed (relative à l'image)
@@ -192,7 +193,7 @@ def _grab(video, t, width, height):
         "ffmpeg", "-v", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(video),
         "-frames:v", "1", "-vf", f"crop={w}:{h}:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
-    data = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL).stdout
+    data = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, creationflags=priority.creation_flags()).stdout
     if len(data) < w * h * 3:
         return None
     return np.frombuffer(data[: w * h * 3], np.uint8).reshape(h, w, 3)
@@ -207,7 +208,7 @@ def iter_regions(video, game, width, height, step_s=SCAN_STEP_S):
         "ffmpeg", "-v", "error", "-an", *(["-ss", f"{start:.2f}"] if start > 0 else []), "-t", f"{end - start:.2f}", "-i", str(video),
         "-vf", f"fps=1/{step_s},crop={w}:{h}:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
-    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=priority.creation_flags())
     size = w * h * 3
     i = 0
     try:

@@ -17,6 +17,7 @@ import { openDb } from './db.ts';
 import { pickVideoFile } from './filePicker.ts';
 import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
+import { priorityArg } from './priority.ts';
 import { parseRange } from './range.ts';
 import { effectiveNames, iconFile, isWeaponId, listWeapons, readNames, readReviews, setReview, setWeaponName, type ReviewPatch } from './weapons.ts';
 
@@ -197,7 +198,7 @@ export function analysisPlugin(): Plugin {
           }
 
           if (url.pathname === '/api/ingest' && method === 'POST') {
-            const body = (await readJson(req)) as { source?: unknown; detect?: unknown; preRoll?: unknown; postRoll?: unknown; skipIfOk?: unknown; positions?: unknown; posEvery?: unknown; detectOnly?: unknown; redetect?: unknown; games?: unknown } | undefined;
+            const body = (await readJson(req)) as { source?: unknown; detect?: unknown; preRoll?: unknown; postRoll?: unknown; skipIfOk?: unknown; positions?: unknown; posEvery?: unknown; detectOnly?: unknown; redetect?: unknown; games?: unknown; priority?: unknown } | undefined;
             const source = typeof body?.source === 'string' ? body.source.trim() : '';
             if (!source) return sendJson(res, 400, { error: 'Indique un chemin de fichier ou une URL' });
             try {
@@ -213,6 +214,7 @@ export function analysisPlugin(): Plugin {
               if (body?.positions === true) extra.push('--positions');
               if (body?.detectOnly === true) extra.push('--detect-only');
               if (body?.redetect === true) extra.push('--redetect');
+              extra.push(...priorityArg(body?.priority));
               // Games à analyser en détail, dans l'ordre voulu (identifiants entiers seulement : jamais de texte libre dans la ligne de commande).
               if (Array.isArray(body?.games) && body.games.length > 0 && body.games.length <= 200 && body.games.every((g) => Number.isInteger(g) && g > 0)) extra.push(`--games=${body.games.join(',')}`);
               if (Number.isInteger(body?.posEvery) && (body?.posEvery as number) >= 1 && (body?.posEvery as number) <= 60) extra.push(`--pos-every=${body?.posEvery}`);

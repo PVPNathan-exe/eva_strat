@@ -11,6 +11,7 @@ import banners
 import frame_noise
 import minimap
 import observed_name
+import priority
 import timer
 import tracking
 
@@ -26,7 +27,7 @@ _walls = None  # traits de murs de la carte lue, posés une fois par processus d
 def _init_worker(walls):
     global _walls
     _walls = walls
-    _low_priority()
+    priority.apply_worker()
 
 
 def _detect_one(args):
@@ -84,16 +85,6 @@ def _workers():
     if free is not None:
         n = max(1, min(n, int((free - KEEP_FREE_RAM_MB) // WORKER_RAM_MB)))
     return n
-
-
-def _low_priority():
-    """Les processus de lecture passent après les autres applications."""
-    try:
-        import ctypes
-
-        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x4000)  # BELOW_NORMAL_PRIORITY_CLASS
-    except Exception:  # noqa: BLE001 - facultatif
-        pass
 
 
 def detect_frames(video, game, zone, width, height, emit=None, wait=None, step_s=STEP_S, workers=None):

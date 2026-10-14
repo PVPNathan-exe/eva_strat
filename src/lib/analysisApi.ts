@@ -1,6 +1,6 @@
 // Appels HTTP vers le plugin Vite (/api). Les erreurs du serveur remontent en Error(message).
 
-import type { TeamRange, CaptureBox, CaptureSeries, CommentTag, IconWork, Correction, Game, GameFlags, JobEvent, Reliability, Sample, UserMark, Video, VideoComment, Weapon, Zones } from '../types/analysis';
+import type { AnalysisPriority, TeamRange, CaptureBox, CaptureSeries, CommentTag, IconWork, Correction, Game, GameFlags, JobEvent, Reliability, Sample, UserMark, Video, VideoComment, Weapon, Zones } from '../types/analysis';
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -77,7 +77,7 @@ export const analysisApi = {
   saveCalibration: (map: string, zones: Zones) =>
     fetch('/api/calibrations', jsonInit('PUT', { map, zones })).then(parse<{ ok: true }>),
   currentJob: () => fetch('/api/jobs/current', { cache: 'no-store' }).then(parse<{ jobId: string | null; paused: boolean }>),
-  ingest: (source: string, options: { detect?: boolean; preRoll?: number; postRoll?: number; skipIfOk?: boolean; positions?: boolean; posEvery?: number; detectOnly?: boolean; redetect?: boolean; games?: number[] } = {}) =>
+  ingest: (source: string, options: { detect?: boolean; preRoll?: number; postRoll?: number; skipIfOk?: boolean; positions?: boolean; posEvery?: number; detectOnly?: boolean; redetect?: boolean; games?: number[]; priority?: AnalysisPriority } = {}) =>
     fetch('/api/ingest', jsonInit('POST', { source, ...options })).then(parse<{ jobId: string }>),
   jobControl: (jobId: string, action: 'pause' | 'resume' | 'stop') =>
     fetch(`/api/jobs/${jobId}/${action}`, jsonInit('POST', {})).then(parse<{ ok: true }>),

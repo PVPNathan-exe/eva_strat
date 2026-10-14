@@ -21,6 +21,7 @@ import death_counter
 import ingest
 import killfeed
 import loadout
+import priority
 import mapname
 import names
 import observed_name
@@ -416,8 +417,11 @@ def main(argv=None, emit=print_event):
     parser.add_argument("--positions", action="store_true", help="Lire aussi les positions des joueurs (minimap)")
     parser.add_argument("--detect-only", action="store_true", help="Détecter les games puis s'arrêter (l'utilisateur confirme les bornes avant l'analyse détaillée)")
     parser.add_argument("--redetect", action="store_true", help="Refaire la détection des games même si la vidéo en a déjà (les games inchangées sont gardées)")
+    parser.add_argument("--priority", choices=priority.LEVELS, default=None, help="Priorité Windows de l'analyse : low (basse), normal, high (haute) ; sans ce choix, les processus de lecture restent en priorité basse")
     parser.add_argument("--games", default=None, help="Identifiants des games à analyser en détail, dans l'ordre voulu (ex. 12,3,7) ; sinon toutes")
     args = parser.parse_args(argv)
+    if args.priority:
+        priority.apply(args.priority)
     try:
         run(args.source, args.db, args.cache, emit, do_detect=not args.no_detect, pre_roll=args.pre_roll, post_roll=args.post_roll, skip_if_ok=args.skip_if_ok, control=args.control, with_positions=args.positions, pos_every=args.pos_every, detect_only=args.detect_only, redetect=args.redetect, games=[int(i) for i in args.games.split(",") if i] if args.games else None)
     except Exception as exc:  # noqa: BLE001 - tout échec doit être signalé à l'UI

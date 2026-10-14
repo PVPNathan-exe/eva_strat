@@ -5,17 +5,21 @@ import { useState } from 'react';
 import { Pause, Play, Settings2, Square } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { useAnalysisStore } from '../../store/analysisStore';
+import type { AnalysisPriority } from '../../types/analysis';
+
+const PRIORITY_LABEL: Record<AnalysisPriority, string> = { low: 'Basse', normal: 'Normale', high: 'Haute' };
 
 const STAGE_LABEL = { download: 'Téléchargement', detect: 'Détection des games', maps: 'Lecture des cartes', names: 'Lecture des pseudos', loadout: 'Lecture des équipements', capture: 'Lecture des scores', kills: 'Lecture du killfeed', positions: 'Positions des joueurs' } as const;
 
 export function IngestBar({ onCalibrate }: { onCalibrate: () => void }) {
   const [source, setSource] = useState('');
   const [picking, setPicking] = useState(false);
-  const { preRoll, postRoll, posEvery } = useAnalysisStore((st) => st.options);
+  const { preRoll, postRoll, posEvery, priority } = useAnalysisStore((st) => st.options);
   const setOptions = useAnalysisStore((st) => st.setOptions);
   const setPreRoll = (v: number) => setOptions({ preRoll: v });
   const setPostRoll = (v: number) => setOptions({ postRoll: v });
   const setPosEvery = (v: number) => setOptions({ posEvery: v });
+  const setPriority = (v: AnalysisPriority) => setOptions({ priority: v });
   const [pickError, setPickError] = useState<string | null>(null);
   const videos = useAnalysisStore((s) => s.videos);
   const videoId = useAnalysisStore((s) => s.videoId);
@@ -99,6 +103,20 @@ export function IngestBar({ onCalibrate }: { onCalibrate: () => void }) {
               <input className="ingest__preroll" type="number" min={1} max={60} step={1} value={posEvery} onChange={(e) => setPosEvery(Math.min(60, Math.max(1, Math.round(Number(e.target.value)) || 1)))} disabled={job.running} />
               images
             </label>
+            <label title="Priorité Windows de l'analyse, prise en compte au prochain lancement">
+              Priorité
+              <select value={priority} onChange={(e) => setPriority(e.target.value as AnalysisPriority)} disabled={job.running} aria-label="Priorité de l'analyse">
+                {(Object.keys(PRIORITY_LABEL) as AnalysisPriority[]).map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_LABEL[p]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <details className="help">
+              <summary>À quoi sert la priorité ?</summary>
+              <p>Basse : l'analyse passe après les autres applications, le PC reste fluide. Normale : la priorité que Windows donne par défaut. Haute : l'analyse passe avant les autres applications ; elle avance plus vite quand le processeur est partagé, mais le PC peut devenir moins réactif. Sans autre application ouverte, la priorité ne change pas la vitesse.</p>
+            </details>
             {videoId !== null && currentVideo && (
               <button
                 type="button"

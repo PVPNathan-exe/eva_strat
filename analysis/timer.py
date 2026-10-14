@@ -10,6 +10,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+import priority
+
 TEMPLATES_PATH = Path(__file__).with_name("digit_templates.npz")
 GLYPH_SIZE = (12, 20)  # largeur, hauteur des chiffres normalisés
 DARK = 80  # niveau de gris sous lequel un pixel est de l'encre
@@ -110,7 +112,7 @@ def iter_crops(video, zone, width, height, step_s=1.0, t0=0.0, t1=None):
         "-vf", f"fps=1/{step_s},crop={w}:{h}:{x}:{y}",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
-    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=priority.creation_flags())
     size = w * h * 3
     i = 0
     try:

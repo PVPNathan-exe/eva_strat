@@ -93,3 +93,11 @@
 .ingest__ok {
   color: var(--c-ok-text);
 }
+
+/* Le menu Options est en bout de ligne : il s'ouvre vers la gauche, sinon la colonne de la vidéo le coupe (le téléphone garde la règle `.menu__panel` fixe de ui-common.css). */
+@media (min-width: 601px) {
+  .ingest__options .menu__panel {
+    left: auto;
+    right: 0;
+  }
+}

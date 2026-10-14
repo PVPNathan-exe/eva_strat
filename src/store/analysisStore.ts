@@ -3,9 +3,28 @@
 
 import { create } from 'zustand';
 import { analysisApi, subscribeJob } from '../lib/analysisApi';
-import type { CommentTag, Game, JobEvent, Video, VideoComment, Weapon } from '../types/analysis';
+import type { AnalysisPriority, CommentTag, Game, JobEvent, Video, VideoComment, Weapon } from '../types/analysis';
 import { canonicalName } from '../lib/weaponCatalog';
 import { teamTag } from '../lib/teams';
+
+// Priorité Windows de l'analyse : le seul réglage gardé d'une visite à l'autre (navigateur seulement, absent ou refusé : basse, comme avant).
+const PRIORITY_KEY = 'eva.analysis.priority';
+function savedPriority(): AnalysisPriority {
+  try {
+    const value = localStorage.getItem(PRIORITY_KEY);
+    if (value === 'low' || value === 'normal' || value === 'high') return value;
+  } catch {
+    // stockage indisponible : valeur par défaut
+  }
+  return 'low';
+}
+function savePriority(value: AnalysisPriority) {
+  try {
+    localStorage.setItem(PRIORITY_KEY, value);
+  } catch {
+    // stockage indisponible : le choix ne vaut que pour cette visite
+  }
+}
 
 // Icônes pour lesquelles l'invite de nom a déjà été fermée (« Plus tard ») : on ne redemande pas avant la prochaine analyse qui en trouve de nouvelles.
 const dismissedWeapons = new Set<string>();
@@ -67,8 +86,8 @@ interface AnalysisState {
   resumeJob: () => Promise<void>;
   startIngest: (source: string, options?: { preRoll?: number; postRoll?: number; skipIfOk?: boolean; withPositions?: boolean; posEvery?: number; detectOnly?: boolean; redetect?: boolean; games?: number[] }) => Promise<void>;
   /** Réglages communs à la détection et à l'analyse détaillée. */
-  options: { preRoll: number; postRoll: number; posEvery: number };
-  setOptions: (patch: Partial<{ preRoll: number; postRoll: number; posEvery: number }>) => void;
+  options: { preRoll: number; postRoll: number; posEvery: number; priority: AnalysisPriority };
+  setOptions: (patch: Partial<{ preRoll: number; postRoll: number; posEvery: number; priority: AnalysisPriority }>) => void;
   /** Analyse détaillée des games choisies, dans l'ordre donné (ce qui est déjà lu et à jour est sauté). */
   startAnalysis: (gameIds: number[]) => Promise<void>;
 }
@@ -250,8 +269,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
     }
   },
 
-  options: { preRoll: 3, postRoll: 1, posEvery: 6 },
-  setOptions: (patch) => set({ options: { ...get().options, ...patch } }),
+  options: { preRoll: 3, postRoll: 1, posEvery: 6, priority: savedPriority() },
+  setOptions: (patch) => {
+    set({ options: { ...get().options, ...patch } });
+    if (patch.priority) savePriority(patch.priority);
+  },
 
   startAnalysis: async (gameIds) => {
     const video = get().videos.find((v) => v.id === get().videoId);
@@ -264,7 +286,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
     stopBeforeStart = false;
     set({ job: { ...idleJob, running: true } });
     try {
-      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions, posEvery, detectOnly, redetect, games });
+      const { jobId } = await analysisApi.ingest(source, { preRoll, postRoll, skipIfOk, positions: withPositions, posEvery, detectOnly, redetect, games, priority: get().options.priority });
       if (stopBeforeStart) {
         stopBeforeStart = false;
         await analysisApi.jobControl(jobId, 'stop').catch(() => undefined);

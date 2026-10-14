@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 
 import ocr
+import priority
 
 TEAM_SLOTS = {"team_a_bar": (1, 2, 3, 4), "team_b_bar": (5, 6, 7, 8)}
 MIN_LETTERS = 3
@@ -131,7 +132,7 @@ def _grab(video, t, zone, width, height):
         "ffmpeg", "-v", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(video),
         "-frames:v", "1", "-vf", f"crop={w}:{h}:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
-    data = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL).stdout
+    data = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, creationflags=priority.creation_flags()).stdout
     if len(data) < w * h * 3:
         return None
     return np.frombuffer(data[: w * h * 3], np.uint8).reshape(h, w, 3)

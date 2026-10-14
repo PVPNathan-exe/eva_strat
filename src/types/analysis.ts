@@ -1,3 +1,6 @@
+/** Priorité Windows de l'analyse : basse (le PC reste fluide), normale (réglage de Windows), haute (l'analyse passe avant les autres applications). */
+export type AnalysisPriority = 'low' | 'normal' | 'high';
+
 export interface Video {
   id: number;
   path: string;

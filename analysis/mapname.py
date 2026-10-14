@@ -12,6 +12,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+import priority
+
 TEMPLATES_DIR = Path(__file__).with_name("map_names")
 REGION = {"x": 0.40, "y": 0.110, "w": 0.20, "h": 0.037}  # bande du nom, sous le chrono (relative)
 SIZE = (160, 24)  # largeur, hauteur des modèles normalisés
@@ -94,7 +96,7 @@ def grab_crop(video, t, width, height):
         "ffmpeg", "-v", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(video),
         "-frames:v", "1", "-vf", f"crop={w}:{h}:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
     ]
-    data = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL).stdout
+    data = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, creationflags=priority.creation_flags()).stdout
     if len(data) < w * h * 3:
         return None
     return np.frombuffer(data[: w * h * 3], np.uint8).reshape(h, w, 3)

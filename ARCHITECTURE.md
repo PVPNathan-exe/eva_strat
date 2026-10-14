@@ -79,6 +79,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 - `icon_fix.py` : recalcul des icônes (`candidates`, `rebuild` avec marge élargie, `audit`, `guess`).
 - Outils : `tune.py` (réglage du suivi), `evaluate.py` (accord avec les bandeaux, positions manquantes, sauts, test de trous simulés `--gap-test`), `benchmark.py` (vitesse), `build_templates.py` (chiffres du chrono).
 - `reread_loadouts.py` : relit l'équipement d'une vidéo avec l'algorithme actuel et retire les icônes B et G devenues inutiles (sans nom, ni verrou, ni signalement).
+- `priority.py` : priorité Windows de l'analyse (basse, normale, haute, choisie dans le menu Options de `IngestBar.tsx`, option `--priority` de `analyze.py`, route `POST /api/ingest` champ `priority`, serveur `server/priority.ts`) : posée sur le processus principal puis transmise aux processus de lecture (`positions._init_worker`) et à ffmpeg par la variable `EVA_PRIORITY` et `creation_flags()` ; sans choix, processus de lecture en priorité basse comme avant. Choix gardé par le navigateur (`analysisStore`).
 - `frame_noise.py` : contamination de couleur de la minimap (stries de lumière qui ressemblent à des joueurs), mesurée à partir d'une carte grossière des couleurs d'équipe gardée à chaque lecture (`minimap.coarse_colour_map`) ; le suivi n'y crée ni trajectoire ni croix sans numéro.
 - `observed_name.py` : pseudo du joueur observé lu en bas à droite de l'écran (images regroupées par ressemblance du texte, un représentant par groupe lu par la reconnaissance de texte de Windows) ; complète le cadre blanc des bandeaux, ne le contredit jamais.
 - `marks_eval.py` : erreur du suivi (sans corrections) mesurée sur les positions et regards posés à la main ; `python analysis/marks_eval.py --game 26 [--all]`.
@@ -98,7 +99,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 
 - `tests/*.test.ts` : fonctions pures du site. `tests/server/` : API, base, jobs, plage HTTP, garde, armes, sélecteur de fichier.
 - `scripts/setup.mjs` : prépare le projet (npm, Python, ffmpeg) et, avec `--run`, lance le site. `scripts/crop_maps.py` : rogne les plans.
-- `docs/` : `PLAN_RESTANT.md` (reste à faire), `PLAN_OPTIMISATIONS.md` (vitesse), `CHANGER_DE_PC.md` (reprise sur un autre PC).
+- `docs/` : `PLAN_RESTANT.md` (reste à faire), `PLAN_OPTIMISATIONS.md` (vitesse), `CHANGER_DE_PC.md` (reprise sur un autre PC). `PLAN_STATS_AGENTS.md` : plan de l'onglet Stats (retakes, rotations, zones sûres) découpé par agent et par fichier, à lire avant de toucher à ces fonctions.
 
 ## Flux principaux
 
