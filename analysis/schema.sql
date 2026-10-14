@@ -250,7 +250,7 @@ CREATE TABLE IF NOT EXISTS point_owner (
   t0 REAL NOT NULL,
   t1 REAL NOT NULL,
   owner TEXT NOT NULL CHECK (owner IN ('A', 'B', 'none')),
-  source TEXT CHECK (source IN ('box', 'score')),
+  source TEXT CHECK (source IN ('box', 'score', 'hud')),
   PRIMARY KEY (game_id, point, t0)
 );
 

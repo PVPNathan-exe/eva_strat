@@ -1,17 +1,21 @@
-"""Propriétaire de chaque point de capture au cours d'une game (table point_owner) : `python analysis/point_owner.py --game N [--db chemin]`.
+"""Propriétaire de chaque point de capture au cours d'une game (table point_owner) et point actif (table point_active) : `python analysis/point_owner.py --game N [--db chemin]`.
 
-Sur la minimap, le point de capture est une boîte : grise tant que personne ne l'a prise (`none`), orange (équipe A) ou bleue (équipe B) une fois prise. On la lit environ une fois par seconde
-(une image de la minimap par seconde, `timer.iter_crops`) en comptant les pixels de chaque couleur dans le cadre de la boîte ; les pastilles de joueurs qui passent dessus ne couvrent qu'une
-petite part du cadre, la couleur majoritaire l'emporte. Où est le cadre :
-- cartes à un seul point (`map_capture.json`, un polygone) : le rectangle englobant du polygone, point nommé `A` ;
-- Outlaw (un point actif à la fois, qui change toutes les 1 min 30) : la boîte vue sur la minimap par `capture_points.py` (table `capture_boxes`, lecture seule), point nommé par sa lettre (A à E) ;
-- Atlantis et Engine (trois points) : non calculés (voir MULTI_POINT_MAPS), la faisabilité est mesurée mais pas branchée.
+Deux sources de couleur, une image par seconde chacune (une lecture ffmpeg par source, `timer.iter_crops`) :
+- la BOÎTE sur la minimap : grise tant que personne ne l'a prise (`none`), orange (équipe A) ou bleue (équipe B) une fois prise ; on compte les pixels de chaque couleur dans le cadre de la boîte
+  (les pastilles de joueurs qui passent dessus ne couvrent qu'une petite part du cadre, la couleur majoritaire l'emporte). Où est le cadre :
+  - cartes à un seul point (`map_capture.json`, un polygone) : le rectangle englobant du polygone, point nommé `A` ;
+  - Outlaw (un point actif à la fois, qui change toutes les 1 min 30) : la boîte vue sur la minimap par `capture_points.py` (table `capture_boxes`, lecture seule), point nommé par sa lettre (A à E) ;
+- le HUD sous le chrono (`hud_points.py`, hexagones des points) : source UNIQUE de Atlantis et Engine (MULTI_POINT_MAPS : la minimap n'y donne pas le propriétaire de chaque point, le HUD si) ;
+  sur les cartes à un point et sur Outlaw la boîte reste la référence et le HUD la recoupe (accord rapporté dans les statistiques) et comble les secondes où la boîte est illisible.
 
-La pente des scores (`capture_state`, `score_A` et `score_B`) sert de deuxième témoin : l'équipe dont le score monte tient le point. Elle comble les secondes où la boîte n'est pas lisible
-(source `score`) et se compare à la boîte (`agreement`). Elle ne sait pas dire « personne » (un score qui ne monte pas peut aussi être à 100 % ou en pause) et retarde de 2 s environ sur la couleur.
+La pente des scores (`capture_state`, `score_A` et `score_B`) sert de troisième témoin : l'équipe dont le score monte tient le point. Elle comble les secondes que ni la boîte ni le HUD ne lisent
+(source `score`) et se compare à la boîte et au HUD (`agreement`). Elle ne sait pas dire « personne » (un score qui ne monte pas peut aussi être à 100 % ou en pause) et retarde de 2 s environ sur la couleur.
+
+Point actif (table point_active, source `hud`) : le point lumineux du HUD (Atlantis, Outlaw : un seul à la fois ; Engine : les trois en permanence). Sans HUD lisible, Outlaw garde les plages des boîtes
+de la minimap (source `box`).
 
 Temps : secondes depuis le début de la game (la table capture_state est en secondes de la vidéo, on retranche `start_s`). Un segment [t0, t1[ garde le même propriétaire.
-Contrat commun des modules Stats : `compute(conn, game_id) -> int` (idempotent, renvoie le nombre de segments) et `stats_meta` (module `point_owner`, révision REVISION)."""
+Contrat commun des modules Stats : `compute(conn, game_id) -> int` (idempotent, renvoie le nombre de segments de point_owner) et `stats_meta` (module `point_owner`, révision REVISION)."""
 
 import argparse
 import json
@@ -21,12 +25,13 @@ from pathlib import Path
 
 import numpy as np
 import paths
+import hud_points
 
 MODULE = "point_owner"
-REVISION = 1
+REVISION = 2  # 2 : source HUD (hud_points.py), Atlantis et Engine calculés, table point_active
 HERE = Path(__file__).parent
 CAPTURE = HERE / "map_capture.json"  # zones des points de capture tracées à la main (polygones, fractions de la minimap), une par point
-MULTI_POINT_MAPS = {"Atlantis", "Engine"}  # trois points : faisabilité mesurée (docstring), non branchée tant que le chef de chantier n'a pas décidé
+MULTI_POINT_MAPS = {"Atlantis", "Engine"}  # trois points : propriétaire lu sur le HUD seulement (la boîte de la minimap ne dit rien du propriétaire de chaque point)
 OUTLAW = "Outlaw"
 STEP_S = 1.0  # une image de la minimap par seconde
 SHRINK = 0.12  # part du cadre retirée de chaque côté (liseré de la boîte et fond de la minimap autour)
@@ -103,15 +108,15 @@ def _runs(labels):
     return out
 
 
-def clean_labels(labels, step_s=STEP_S):
-    """Comble les trous illisibles courts entre deux lectures identiques, puis efface les accidents d'une couleur lue trop brièvement entre deux fois la même autre. Renvoie une nouvelle liste."""
+def clean_labels(labels, step_s=STEP_S, max_gap_s=MAX_GAP_S, min_run_s=MIN_RUN_S):
+    """Comble les trous illisibles courts (`max_gap_s`) entre deux lectures identiques, puis efface les accidents d'une couleur lue moins de `min_run_s` entre deux fois la même autre. Renvoie une nouvelle liste."""
     out = list(labels)
     for _ in range(2):
         runs = _runs(out)
         for k, (a, b, v) in enumerate(runs):
             if 0 < k < len(runs) - 1 and runs[k - 1][2] == runs[k + 1][2] and runs[k - 1][2] is not None:
                 short = (b - a) * step_s
-                if (v is None and short <= MAX_GAP_S) or (v is not None and short < MIN_RUN_S):
+                if (v is None and short <= max_gap_s) or (v is not None and short < min_run_s):
                     out[a:b] = [runs[k - 1][2]] * (b - a)
     return out
 
@@ -153,13 +158,18 @@ def score_labels(capture, times):
     return filled
 
 
-def merge(box, score):
-    """Étiquette finale par seconde : la boîte l'emporte, la pente comble les secondes sans boîte lisible. Renvoie (étiquettes, sources) (source « box », « score » ou None)."""
+def merge(box, score, hud=None):
+    """Étiquette finale par seconde : la boîte l'emporte, puis le HUD (lu directement), puis la pente des scores comble ce qui reste. Renvoie (étiquettes, sources) (source « box », « hud », « score » ou None).
+    `hud` : étiquettes du HUD, facultatif (une liste de None si le HUD n'est pas lu)."""
+    hud = hud if hud is not None else [None] * len(box)
     labels, sources = [], []
-    for b, s in zip(box, score):
+    for b, s, h in zip(box, score, hud):
         if b is not None:
             labels.append(b)
             sources.append("box")
+        elif h is not None:
+            labels.append(h)
+            sources.append("hud")
         elif s is not None:
             labels.append(s)
             sources.append("score")
@@ -190,13 +200,16 @@ def agreement(box, score, times):
 
 def to_segments(point, times, labels, sources, step_s=STEP_S):
     """Segments {point, t0, t1, owner, source} d'après les étiquettes par seconde : même propriétaire de suite (les secondes sans étiquette coupent). t1 = instant de la première seconde
-    d'après. La source est « box » si au moins la moitié des secondes du segment viennent de la boîte, sinon « score »."""
+    d'après. La source est « box » si au moins la moitié des secondes du segment viennent de la boîte, sinon la plus fréquente de « hud » et « score » (« hud » à égalité)."""
     out = []
     for a, b, v in _runs(labels):
         if v is None:
             continue
         box_n = sum(1 for s in sources[a:b] if s == "box")
-        out.append({"point": point, "t0": round(float(times[a]), 2), "t1": round(float(times[b - 1]) + step_s, 2), "owner": v, "source": "box" if 2 * box_n >= b - a else "score"})
+        hud_n = sum(1 for s in sources[a:b] if s == "hud")
+        score_n = sum(1 for s in sources[a:b] if s == "score")
+        source = "box" if 2 * box_n >= b - a else ("hud" if hud_n >= score_n else "score")
+        out.append({"point": point, "t0": round(float(times[a]), 2), "t1": round(float(times[b - 1]) + step_s, 2), "owner": v, "source": source})
     return out
 
 
@@ -230,7 +243,8 @@ def _capture(conn, game):
 
 
 def _plan(conn, game):
-    """Où lire à chaque instant : [(point, t0, t1, cadre)] (Outlaw : une plage par boîte vue ; autres cartes : toute la game). Liste vide si la carte n'est pas prise en charge ou sans boîtes."""
+    """Où lire la boîte à chaque instant : [(point, t0, t1, cadre)] (Outlaw : une plage par boîte vue ; autres cartes : toute la game). Liste vide si la carte n'est pas prise en charge ou sans boîtes
+    (cartes à trois points : le propriétaire se lit sur le HUD seulement)."""
     import db
 
     if game["map"] == OUTLAW:
@@ -244,8 +258,9 @@ def _plan(conn, game):
     return [(letter, 0.0, game["end_s"] - game["start_s"], rect)]
 
 
-def _read_plan_entry(entry, frames, capture):
-    """Étiquettes d'un point sur sa plage : (secondes, lecture de la boîte nettoyée, pente, étiquettes finales, sources). Sans image, la grille est celle de la plage et la boîte est illisible partout."""
+def _read_plan_entry(entry, frames, capture, hud_by_time=None):
+    """Étiquettes d'un point sur sa plage : (secondes, lecture de la boîte nettoyée, pente, étiquettes finales, sources, lecture du HUD). Sans image, la grille est celle de la plage et la boîte est
+    illisible partout. `hud_by_time` : {seconde arrondie: étiquette du HUD de ce point} (facultatif)."""
     _, t0, t1, rect = entry
     if frames:
         mine = [(t, im) for t, im in frames if t0 - 1e-6 <= t < t1]
@@ -255,52 +270,100 @@ def _read_plan_entry(entry, frames, capture):
         times = [t0 + k * STEP_S for k in range(int(max(t1 - t0, 0) / STEP_S))]
         box = [None] * len(times)
     score = score_labels(capture, times)
-    labels, sources = merge(box, score)
-    return times, box, score, labels, sources
+    hud = [(hud_by_time or {}).get(round(float(t), 2)) for t in times]
+    labels, sources = merge(box, score, hud)
+    return times, box, score, labels, sources, hud
 
 
-def analyse(conn, game_id, frames=None):
-    """Lit les propriétaires des points d'une game. `frames` : images [(t en secondes de game, image)] à la place de la vidéo (tests). Renvoie {"segments": [...], "stats": {...}}.
-    Sans vidéo (fichier absent) la pente des scores seule donne les segments (source « score », jamais « none »)."""
+def _hud_by_letter(hud):
+    """{lettre: {seconde arrondie: étiquette}} du HUD lu (vide si le HUD n'a rien donné)."""
+    return {k: {round(float(t), 2): v for t, v in zip(hud["times"], labels)} for k, labels in hud["owner"].items()} if hud else {}
+
+
+def _analyse_hud_only(hud, capture):
+    """Cartes à trois points (Atlantis, Engine) : segments du HUD seul, plus l'accord avec la pente des scores. Renvoie {"segments", "active", "stats"}."""
+    stats = {"seconds": len(hud["times"]), "unreadable_final": hud["stats"]["seconds"] - hud["stats"]["readable"], "hud_mode": hud["mode"], "hud_contested": hud["stats"]["contested"]}
+    stats.update({"score_" + k: v for k, v in hud_points.agreement_with_score(hud, capture).items()})
+    return {"segments": hud["owner_segments"], "active": hud["active_segments"], "stats": stats}
+
+
+def analyse(conn, game_id, frames=None, hud_frames=None):
+    """Lit les propriétaires des points d'une game. `frames` : images de la minimap [(t en secondes de game, image)] et `hud_frames` : images du HUD, à la place de la vidéo (tests).
+    Renvoie {"segments": [...], "active": [...], "stats": {...}}. Sans vidéo (fichier absent) la pente des scores seule donne les segments des cartes à un point et d'Outlaw (source « score »,
+    jamais « none ») ; les cartes à trois points n'ont alors aucun segment (le score ne dit pas quel point)."""
     game = _game(conn, game_id)
-    plan = _plan(conn, game) if game else []
-    if not plan:
-        return {"segments": [], "stats": {"seconds": 0}}
+    if not game:
+        return {"segments": [], "active": [], "stats": {"seconds": 0}}
     capture = _capture(conn, game)
+    hud = hud_points.analyse(conn, game_id, frames=hud_frames)  # None : vidéo absente ou carte sans hexagone
+    if game["map"] in MULTI_POINT_MAPS:
+        return _analyse_hud_only(hud, capture) if hud else {"segments": [], "active": [], "stats": {"seconds": 0}}
+    plan = _plan(conn, game)
+    if not plan:
+        return {"segments": [], "active": [], "stats": {"seconds": 0}}
     frames = list(frames) if frames is not None else list(_video_frames(conn, game))
-    segments, stats = [], {"seconds": 0, "unreadable_box": 0, "unreadable_final": 0, "compared": 0, "agree": 0, "compared_calm": 0, "agree_calm": 0}
+    by_letter = _hud_by_letter(hud)
+    segments, stats = [], {"seconds": 0, "unreadable_box": 0, "unreadable_final": 0, "compared": 0, "agree": 0, "compared_calm": 0, "agree_calm": 0,
+                           "hud_compared": 0, "hud_agree": 0, "hud_box_only": 0, "hud_only": 0, "hud_read": bool(hud)}
     for entry in plan:
-        times, box, score, labels, sources = _read_plan_entry(entry, frames, capture)
+        times, box, score, labels, sources, hud_lab = _read_plan_entry(entry, frames, capture, by_letter.get(entry[0]))
         segments += to_segments(entry[0], times, labels, sources)
-        acc = agreement(box, score, times)
+        acc, hacc = agreement(box, score, times), hud_points.agreement_with_box(box, hud_lab)
         stats["seconds"] += len(times)
         stats["unreadable_box"] += sum(1 for b in box if b is None)
         stats["unreadable_final"] += sum(1 for lab in labels if lab is None)
         for k in ("compared", "agree", "compared_calm", "agree_calm"):
             stats[k] += acc[k]
-    return {"segments": segments, "stats": stats}
+        stats["hud_compared"] += hacc["compared"]
+        stats["hud_agree"] += hacc["agree"]
+        stats["hud_box_only"] += hacc["box_only"]
+        stats["hud_only"] += hacc["hud_only"]
+    active = hud["active_segments"] if hud and hud["mode"] == "active_only" and hud["active_segments"] else ([{"point": p, "t0": round(float(a), 2), "t1": round(float(z), 2), "source": "box"} for p, a, z, _ in plan] if game["map"] == OUTLAW else [])
+    return {"segments": segments, "active": active, "stats": stats}
 
 
-def _write(conn, game_id, segments):
-    """Efface puis réécrit les segments de la game et la révision du module. Renvoie le nombre de segments."""
+def _ensure_hud_source(conn):
+    """Les bases créées avant la source « hud » refusent cette valeur (CHECK de point_owner.source) : la table est recréée avec la valeur permise (une seule fois, données conservées)."""
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'point_owner'").fetchone()
+    if not row or "'hud'" in row[0]:
+        return
+    with conn:
+        conn.execute("ALTER TABLE point_owner RENAME TO point_owner_old")
+        conn.execute(
+            "CREATE TABLE point_owner (game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE, point TEXT NOT NULL, t0 REAL NOT NULL, t1 REAL NOT NULL, "
+            "owner TEXT NOT NULL CHECK (owner IN ('A', 'B', 'none')), source TEXT CHECK (source IN ('box', 'score', 'hud')), PRIMARY KEY (game_id, point, t0))"
+        )
+        conn.execute("INSERT INTO point_owner SELECT game_id, point, t0, t1, owner, source FROM point_owner_old")
+        conn.execute("DROP TABLE point_owner_old")
+
+
+def _write(conn, game_id, segments, active=()):
+    """Efface puis réécrit les segments de la game (point_owner), les plages du point actif (point_active) et la révision du module. Renvoie le nombre de segments de point_owner."""
+    _ensure_hud_source(conn)
     with conn:
         conn.execute("DELETE FROM point_owner WHERE game_id = ?", (game_id,))
         conn.executemany(
             "INSERT INTO point_owner (game_id, point, t0, t1, owner, source) VALUES (?, ?, ?, ?, ?, ?)",
             [(game_id, s["point"], s["t0"], s["t1"], s["owner"], s["source"]) for s in segments],
         )
+        conn.execute("DELETE FROM point_active WHERE game_id = ?", (game_id,))
+        conn.executemany(
+            "INSERT INTO point_active (game_id, point, t0, t1, source) VALUES (?, ?, ?, ?, ?)",
+            [(game_id, a["point"], a["t0"], a["t1"], a["source"]) for a in active],
+        )
         conn.execute("INSERT OR REPLACE INTO stats_meta (game_id, module, revision) VALUES (?, ?, ?)", (game_id, MODULE, REVISION))
     return len(segments)
 
 
-def compute(conn, game_id, frames=None):
-    """Contrat des modules Stats : efface puis réécrit les segments de la game (table point_owner) et la révision (stats_meta). Renvoie le nombre de segments écrits.
-    `frames` : voir analyse() (tests)."""
-    return _write(conn, game_id, analyse(conn, game_id, frames)["segments"])
+def compute(conn, game_id, frames=None, hud_frames=None):
+    """Contrat des modules Stats : efface puis réécrit les segments de la game (tables point_owner et point_active) et la révision (stats_meta). Renvoie le nombre de segments de point_owner écrits.
+    `frames`, `hud_frames` : voir analyse() (tests)."""
+    result = analyse(conn, game_id, frames, hud_frames)
+    return _write(conn, game_id, result["segments"], result["active"])
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Calcule le propriétaire de chaque point de capture d'une game (table point_owner).")
+    parser = argparse.ArgumentParser(description="Calcule le propriétaire de chaque point de capture d'une game (tables point_owner et point_active).")
     parser.add_argument("--game", type=int, required=True)
     parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--dry-run", action="store_true", help="lit et affiche sans écrire dans la base")
@@ -310,14 +373,25 @@ def main(argv=None):
     conn = db.connect(args.db)
     result = analyse(conn, args.game)
     if not args.dry_run:
-        _write(conn, args.game, result["segments"])
+        _write(conn, args.game, result["segments"], result["active"])
     s = result["stats"]
-    for seg in result["segments"]:
-        print(f"  point {seg['point']} {seg['t0']:6.1f} s à {seg['t1']:6.1f} s : {seg['owner']} ({seg['source']})")
+    for g in result["segments"]:
+        print(f"  point {g['point']} {g['t0']:6.1f} s à {g['t1']:6.1f} s : {g['owner']} ({g['source']})")
+    for g in result["active"]:
+        print(f"  actif {g['point']} {g['t0']:6.1f} s à {g['t1']:6.1f} s ({g['source']})")
     if s.get("seconds"):
-        print(f"{len(result['segments'])} segments, {s['seconds']} secondes lues, sans couleur lisible : {s['unreadable_box']} (boîte), {s['unreadable_final']} (après la pente des scores)")
-        if s["compared"]:
-            print(f"accord avec la pente des scores : {s['agree']}/{s['compared']}, hors transitions {s['agree_calm']}/{s['compared_calm']}")
+        if "unreadable_box" in s:
+            print(f"{len(result['segments'])} segments, {s['seconds']} secondes lues, sans couleur lisible : {s['unreadable_box']} (boîte), {s['unreadable_final']} (après le HUD et la pente des scores)")
+            if s["compared"]:
+                print(f"accord de la boîte avec la pente des scores : {s['agree']}/{s['compared']}, hors transitions {s['agree_calm']}/{s['compared_calm']}")
+            if s["hud_compared"]:
+                print(f"accord de la boîte avec le HUD : {s['hud_agree']}/{s['hud_compared']} (boîte seule {s['hud_box_only']} s, HUD seul {s['hud_only']} s)")
+        else:
+            print(f"{len(result['segments'])} segments (HUD), {s['seconds']} secondes lues, sans hexagone lisible : {s['unreadable_final']}")
+            if s["score_compared"]:
+                print(f"accord du HUD avec la pente des scores : {s['score_agree']}/{s['score_compared']}, hors transitions {s['score_agree_calm']}/{s['score_compared_calm']}")
+            if s["score_compared_majority"]:
+                print(f"l'équipe dont le score monte tient le plus de points : {s['score_agree_majority']}/{s['score_compared_majority']}")
     else:
         print("carte non prise en charge ou sans point lisible : aucun segment")
     return 0
