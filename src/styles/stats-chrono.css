@@ -1,0 +1,363 @@
+/* Chronologie des vues Retakes et Rotations de l'onglet Stats (PointTimeline, EpisodeMap, StatsRetakes, StatsRotations, RotationWindow) :
+   frise par point, repères des épisodes, plan au curseur, épisode ou rotation choisi, panneau d'une équipe. Couleurs uniquement par les jetons de tokens.css et la palette .pal de stats.css. */
+
+/* Chronologie des points : bandes de propriétaire, périodes actives, repères des épisodes, curseur */
+.ptl {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr);
+  gap: 0 0.5rem;
+  max-width: 1100px;
+  min-width: 0;
+  padding-right: 0.6rem;
+}
+
+.ptl__labels,
+.ptl__tracks {
+  display: grid;
+  grid-auto-rows: 1.7rem;
+  gap: 0.3rem;
+}
+
+.ptl__label {
+  align-self: center;
+  color: var(--c-text-muted);
+  font-size: 0.75rem;
+}
+
+.ptl__tracks {
+  position: relative;
+  min-width: 0;
+}
+
+.ptl__track {
+  position: relative;
+  background: var(--c-surface-deep);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.ptl__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--c-owner-none);
+}
+
+.ptl__band--a {
+  background: var(--c-owner-a);
+}
+
+.ptl__band--b {
+  background: var(--c-owner-b);
+}
+
+.ptl__active {
+  position: absolute;
+  top: 0;
+  height: 4px;
+  background: var(--c-text);
+}
+
+.ptl__nodata {
+  padding-left: 0.4rem;
+  color: var(--c-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.7rem;
+}
+
+.ptl__span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--c-text) 14%, transparent);
+  pointer-events: none;
+}
+
+.ptl__span.is-active {
+  background: color-mix(in srgb, var(--c-text) 30%, transparent);
+}
+
+/* Repères : la forme dit le type (rond plein : réussite, carré : échec, rond vide : sans départ, losange : série de kills, triangle : changement de point actif),
+   la couleur le ton, le contour l'équipe de l'épisode */
+.ptl__mark {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 0.9rem;
+  height: 0.9rem;
+  padding: 0;
+  transform: translate(-50%, -50%) rotate(var(--mark-rot, 0deg)) scale(var(--mark-scale, 1));
+  background: var(--c-warn);
+  border: 2px solid var(--c-bg);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--pal-base, var(--c-text-soft));
+  cursor: pointer;
+}
+
+.ptl__mark.is-active {
+  --mark-scale: 1.35;
+}
+
+.ptl__mark--good {
+  background: var(--c-stats-life);
+}
+
+.ptl__mark--bad {
+  background: var(--c-stats-death);
+}
+
+.ptl__mark--doubt {
+  background: var(--c-warn);
+}
+
+.ptl__mark--fail {
+  border-radius: 2px;
+}
+
+.ptl__mark--nopush {
+  background: var(--c-surface-deep);
+  border-color: var(--c-warn);
+}
+
+.ptl__mark--series {
+  --mark-rot: 45deg;
+  border-radius: 2px;
+}
+
+.ptl__mark--rotation {
+  background: var(--c-text);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.ptl__cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--c-timeline-cursor);
+  pointer-events: none;
+}
+
+.ptl__axis {
+  position: relative;
+  grid-column: 2;
+  height: 1.1rem;
+}
+
+.ptl__tick {
+  position: absolute;
+  top: 0.15rem;
+  transform: translateX(-50%);
+  color: var(--c-text-muted);
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ptl__tick:first-child {
+  transform: none;
+}
+
+/* Exemples de la légende : mêmes formes, hors de la frise */
+.ptl__mark.is-legend,
+.ptl__band.is-legend,
+.ptl__active.is-legend {
+  position: static;
+  flex: none;
+  cursor: default;
+}
+
+.ptl__mark.is-legend {
+  transform: rotate(var(--mark-rot, 0deg));
+}
+
+.ptl__band.is-legend {
+  display: inline-block;
+  width: 1.4rem;
+  height: 0.6rem;
+}
+
+.ptl__active.is-legend {
+  display: inline-block;
+  width: 1.4rem;
+}
+
+/* Plan : points concernés entourés, croix des morts de l'épisode choisi */
+.epmap__ring {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  box-sizing: border-box;
+  border: 2px solid var(--c-text);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.epmap__ring--old {
+  border-style: dashed;
+  border-color: var(--c-text-soft);
+}
+
+.epmap__ring b {
+  margin: 0.1rem 0 0 0.15rem;
+  padding: 0 0.2rem;
+  background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+  border-radius: 3px;
+  color: var(--c-text);
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.epmap__death.pal {
+  color: var(--pal-base);
+}
+
+.epmap__swatch {
+  display: inline-block;
+  flex: none;
+  width: 1.1rem;
+  height: 0.7rem;
+  border: 2px solid var(--c-text);
+  border-radius: 3px;
+}
+
+.epmap__swatch--old {
+  border-style: dashed;
+  border-color: var(--c-text-soft);
+}
+
+/* Épisode ou rotation choisi */
+.eps__chosen {
+  min-width: 0;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+}
+
+.eps__h {
+  margin: 0;
+  padding: 0.6rem 0.8rem 0;
+  color: var(--c-text);
+  font-size: 0.95rem;
+}
+
+.eps__sub {
+  margin: 0.2rem 0 0;
+  padding: 0 0.8rem;
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+}
+
+.eps__hint {
+  margin: 0;
+  color: var(--c-text-muted);
+  font-size: 0.85rem;
+}
+
+/* Panneau d'une équipe : 20 s avant, 20 s après le changement de point actif */
+.rwin__pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
+  gap: 0.8rem;
+  padding: 0.6rem 0.8rem 0.8rem;
+}
+
+.rwin {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-left: 4px solid var(--pal-base);
+  border-radius: 6px;
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+}
+
+.rwin__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+  margin: 0;
+  color: var(--c-text);
+  font-size: 0.9rem;
+}
+
+.rwin__axis {
+  position: relative;
+  height: 1.4rem;
+  background: var(--c-surface-deep);
+  border-radius: 3px;
+}
+
+.rwin__zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-left: 2px solid var(--c-text);
+}
+
+.rwin__mark {
+  position: absolute;
+  top: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  transform: translate(-50%, -50%);
+  background: var(--pal-base);
+  border: 2px solid var(--c-bg);
+  border-radius: 50%;
+}
+
+.rwin__mark--leave {
+  background: var(--c-warn);
+  border-radius: 2px;
+}
+
+.rwin__mark--concentrate {
+  background: var(--c-text);
+}
+
+.rwin__mark--second {
+  outline: 2px solid var(--c-text);
+}
+
+.rwin__mark--death {
+  width: 0.3rem;
+  height: 1.1rem;
+  background: var(--c-stats-death);
+  border: 0;
+  border-radius: 1px;
+}
+
+.rwin__scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--c-text-muted);
+  font-size: 0.7rem;
+}
+
+.rwin__list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+@media (max-width: 600px) {
+  .ptl__tick:nth-child(even) {
+    display: none;
+  }
+
+  .ptl__mark {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+}

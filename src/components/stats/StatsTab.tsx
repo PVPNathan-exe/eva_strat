@@ -1,10 +1,10 @@
 // Onglet Stats : filtres communs (carte, games, équipe suivie par nom, côté, joueur) et une vue à la fois : Parcours, Morts, Présence, Retakes, Rotations, Zones sûres.
 // Par défaut, une seule game est retenue (la plus récente de la carte) ; le menu Games en ajoute. Parcours, Morts et Zones sûres rejouent une game à la fois (sélecteur « Game rejouée »),
-// Présence et les cumuls additionnent les games retenues. Les vues Retakes et Rotations reçoivent les anciennes props (map, games, team, slot) et, en plus, des props facultatives sur l'équipe suivie.
+// Présence et les cumuls additionnent les games retenues. Retakes et Rotations rejouent aussi une game (chronologie des points et des épisodes) ; Rotations garde un mode Cumul sur les games retenues.
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { Flame, Repeat, Route, ShieldCheck, Skull, Swords } from 'lucide-react';
-import { eligibleGames, legacyTeam, pickGames, sideOfTeam, teamNames } from '../../lib/teamFollow';
+import { eligibleGames, pickGames, teamNames } from '../../lib/teamFollow';
 import { StatsFilters, type StatsFilterState } from './StatsFilters';
 import { StatsDeaths } from './StatsDeaths';
 import { StatsPaths } from './StatsPaths';
@@ -16,7 +16,7 @@ import { gameLabel, INITIAL_FILTERS, mapsOf, noticeOf, specOf, useStatsGames } f
 
 type View = 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe';
 
-const REPLAY_VIEWS: View[] = ['parcours', 'morts', 'safe'];
+const REPLAY_VIEWS: View[] = ['parcours', 'morts', 'retakes', 'rotations', 'safe'];
 
 export function StatsTab() {
   const [view, setView] = useState<View>('parcours');
@@ -33,23 +33,10 @@ export function StatsTab() {
   // Games du réglage d'équipe et de côté, puis games retenues (par défaut la plus récente)
   const mapGames = useMemo(() => eligibleGames(mapAll, spec), [mapAll, spec]);
   const selected = useMemo(() => pickGames(mapGames, filters.chosen), [mapGames, filters.chosen]);
-  // Game rejouée par Parcours, Morts et Zones sûres : le choix s'il est retenu, sinon la plus récente retenue
+  // Game rejouée par Parcours, Morts, Retakes, Rotations et Zones sûres : le choix s'il est retenu, sinon la plus récente retenue
   const replay = selected.find((g) => g.id === replayId) ?? pickGames(selected, null)[0] ?? null;
 
   const notice = noticeOf(gamesLoad);
-  const followed = spec.team ? (teams.find((t) => t.key === spec.team)?.label ?? null) : null;
-  // Vues Retakes et Rotations : anciennes props, plus les props facultatives du suivi par nom d'équipe (elles les ignorent pour l'instant)
-  const legacy = map
-    ? {
-        map,
-        games: selected,
-        team: legacyTeam(spec),
-        slot: spec.team ? 0 : spec.slot,
-        teamName: followed,
-        sideFilter: spec.side,
-        sideOf: (gameId: number) => sideOfTeam(selected.find((g) => g.id === gameId) ?? { teamA: null, teamB: null }, spec.team),
-      }
-    : null;
 
   const tab = (id: View, icon: ReactNode, label: string) => (
     <button type="button" role="tab" aria-selected={view === id} className={view === id ? 'is-active' : ''} onClick={() => setView(id)}>
@@ -68,8 +55,8 @@ export function StatsTab() {
         {tab('safe', <ShieldCheck className="ic" />, 'Zones sûres')}
       </div>
       {notice && <p className="stats__empty">{notice}</p>}
-      {!notice && !legacy && <p className="stats__empty">Aucune game avec des positions lues. Lancer l'analyse détaillée d'une vidéo dans l'onglet Analyse (positions), puis calculer les statistiques : `python analysis/stats_run.py --game N`.</p>}
-      {legacy && map && (
+      {!notice && !map && <p className="stats__empty">Aucune game avec des positions lues. Lancer l'analyse détaillée d'une vidéo dans l'onglet Analyse (positions), puis calculer les statistiques : `python analysis/stats_run.py --game N`.</p>}
+      {map && (
         <>
           <StatsFilters maps={maps} map={map} mapGames={mapGames} mapTotal={mapAll.length} selected={selected} teams={teams} state={filters} onChange={setFilters} />
           {selected.length > 1 && REPLAY_VIEWS.includes(view) && (
@@ -95,9 +82,9 @@ export function StatsTab() {
           ) : view === 'presence' ? (
             <StatsPresence map={map} games={selected} spec={spec} />
           ) : view === 'retakes' ? (
-            <StatsRetakes {...legacy} />
+            <StatsRetakes map={map} replay={replay} spec={spec} />
           ) : view === 'rotations' ? (
-            <StatsRotations {...legacy} />
+            <StatsRotations map={map} games={selected} replay={replay} spec={spec} />
           ) : (
             <StatsSafe map={map} replay={replay} spec={spec} />
           )}

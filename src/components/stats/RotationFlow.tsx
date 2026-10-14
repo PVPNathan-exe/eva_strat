@@ -3,10 +3,11 @@
 // Les points sont posés sur une ellipse (la position réelle des boîtes varie d'une game à l'autre). Géométrie calculée ici, agrégat dans lib/episodeFormat.
 
 import { formatSeconds, type FlowArrow, type FlowNode } from '../../lib/episodeFormat';
-import type { TeamSide } from '../../types/stats';
+import type { Palette } from '../../lib/teamFollow';
 
 interface Props {
-  team: TeamSide;
+  /** Palette de l'équipe : « a » équipe suivie (ou de gauche), « b » ses adversaires (ou de droite). */
+  palette: Palette;
   title: string;
   nodes: FlowNode[];
   arrows: FlowArrow[];
@@ -58,10 +59,10 @@ function Arrow({ a, b, ra, rb, width, label }: { a: { x: number; y: number }; b:
   );
 }
 
-export function RotationFlow({ team, title, nodes, arrows, measured }: Props) {
+export function RotationFlow({ palette, title, nodes, arrows, measured }: Props) {
   if (nodes.length === 0) {
     return (
-      <figure className={`rflow rflow--${team}`}>
+      <figure className={`rflow rflow--${palette}`}>
         <figcaption>{title}</figcaption>
         <p className="stats__empty">Aucune rotation pour ce choix.</p>
       </figure>
@@ -74,7 +75,7 @@ export function RotationFlow({ team, title, nodes, arrows, measured }: Props) {
   const radius = (n: FlowNode) => 13 + 22 * Math.sqrt(weight(n) / maxWeight); // surface proportionnelle au poids
   const radii = new Map(nodes.map((n) => [n.point, radius(n)]));
   return (
-    <figure className={`rflow rflow--${team}`}>
+    <figure className={`rflow rflow--${palette}`}>
       <figcaption>{title}</figcaption>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Rotations : ${title}`}>
         {arrows.map((a) => {

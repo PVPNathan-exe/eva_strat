@@ -4,6 +4,7 @@
 
 import type { Episode, PointOwner, TeamSide } from '../types/stats.ts';
 import { numberOfSlot } from './killTimeline.ts';
+import type { Palette } from './teamFollow.ts';
 
 /** Nombre minimal d'épisodes décidés (réussis ou échoués) pour afficher un pourcentage. */
 export const MIN_EPISODES = 5;
@@ -19,7 +20,16 @@ const OUTCOMES: Record<string, { label: string; tone: Tone }> = {
   arrived: { label: 'Arrivés à deux ou plus', tone: 'good' },
   partial: { label: 'Un seul arrivé', tone: 'doubt' },
   not_arrived: { label: 'Personne arrivé', tone: 'bad' },
+  // Séries de 3 ou 4 kills (kill_series.py) : le ton est celui de l'équipe de l'épisode (qui subit la série dans la lecture « victime »)
+  series_fail: { label: 'Série de kills : échec de retake', tone: 'bad' },
+  series_collapse: { label: 'Série de kills : défense effondrée', tone: 'bad' },
+  series_hold: { label: 'Série de kills : la défense tient', tone: 'good' },
+  series_changed: { label: "Série de kills suivie d'une prise du point", tone: 'doubt' },
+  series_neutral: { label: 'Série de kills, point sans propriétaire', tone: 'doubt' },
 };
+
+/** Vrai pour une série de 3 ou 4 kills (épisode retake dont le résultat commence par series_). Une série n'entre pas dans les taux : la même poussée est souvent aussi un échec classique. */
+export const isSeries = (ep: Pick<Episode, 'outcome'>): boolean => (ep.outcome ?? '').startsWith('series_');
 
 /** Libellé et ton (bon, mauvais, à vérifier) d'un résultat d'épisode ; un résultat inconnu reste « à vérifier ». */
 export function outcomeInfo(outcome: string | null): { label: string; tone: Tone } {
@@ -208,8 +218,10 @@ export function filterEpisodes(eps: Episode[], gameIds: number[], teamFilter: Te
 }
 
 export interface RateStats {
-  /** Épisodes pris en compte (ceux que l'utilisateur a jugés faux, verdict ko, sont écartés). */
+  /** Épisodes pris en compte (ceux que l'utilisateur a jugés faux, verdict ko, et les séries de kills sont écartés). */
   total: number;
+  /** Séries de 3 ou 4 kills, comptées à part. */
+  series: number;
   good: number;
   bad: number;
   doubt: number;
@@ -222,13 +234,14 @@ export interface RateStats {
 
 /** Taux de réussite : les épisodes à vérifier ne comptent pas, un verdict ko écarte l'épisode. `verdicts` : jugements posés pendant la session. */
 export function rateOf(eps: Episode[], verdicts: Record<number, 'ok' | 'ko' | null> = {}, min = MIN_EPISODES): RateStats {
-  const kept = eps.filter((e) => (e.id in verdicts ? verdicts[e.id] : e.verdict) !== 'ko');
+  const judged = eps.filter((e) => (e.id in verdicts ? verdicts[e.id] : e.verdict) !== 'ko');
+  const kept = judged.filter((e) => !isSeries(e));
   const count = (tone: Tone) => kept.filter((e) => outcomeInfo(e.outcome).tone === tone).length;
   const good = count('good');
   const bad = count('bad');
   const decided = good + bad;
   const hidden = decided < min;
-  return { total: kept.length, good, bad, doubt: count('doubt'), decided, rate: hidden ? null : good / decided, hidden };
+  return { total: kept.length, series: judged.length - kept.length, good, bad, doubt: count('doubt'), decided, rate: hidden ? null : good / decided, hidden };
 }
 
 export interface PointGroup {
@@ -310,6 +323,7 @@ export function rotationFlow(eps: Episode[]): { nodes: FlowNode[]; arrows: FlowA
 
 /** Instant clé d'un épisode (départ de la poussée, ou apparition de la nouvelle boîte) : le lien vers la vidéo l'ouvre 5 s avant. */
 export function keyInstant(ep: Episode): number {
+  if (isSeries(ep)) return num(Array.isArray(ep.data?.series_t) ? ep.data.series_t[0] : null) ?? ep.t0; // série : le premier kill
   return ep.kind === 'retake' ? (retakeInfo(ep).pushT ?? retakeInfo(ep).changeT ?? ep.t0) : (rotationInfo(ep).switchT ?? ep.t0);
 }
 
@@ -337,17 +351,20 @@ export function pctInWindow(ep: Pick<Episode, 't0' | 't1'>, t: number): number {
 
 export interface BandRow {
   point: string;
-  bands: { left: number; width: number; owner: TeamSide | 'none' }[];
+  /** `tone` : « a » ou « b » (palette de teamFollow, équipe suivie par nom) ou « none » ; par défaut A donne « a » et B donne « b ». */
+  bands: { left: number; width: number; owner: TeamSide | 'none'; tone: Palette | 'none' }[];
 }
 
+const defaultTone = (owner: TeamSide | 'none'): Palette | 'none' => (owner === 'A' ? 'a' : owner === 'B' ? 'b' : 'none');
+
 /** Bandes de propriétaire du ou des points de l'épisode (deux lignes pour une rotation), coupées à la fenêtre de l'épisode, en pourcentages. */
-export function timelineRows(ep: Episode, owners: PointOwner[]): BandRow[] {
+export function timelineRows(ep: Episode, owners: PointOwner[], toneOf: (owner: TeamSide | 'none') => Palette | 'none' = defaultTone): BandRow[] {
   const points = [ep.point, ep.point_to].filter((p): p is string => !!p);
   return points.map((point) => ({
     point,
     bands: owners
       .filter((o) => o.game_id === ep.game_id && o.point === point && o.t1 > ep.t0 && o.t0 < ep.t1)
-      .map((o) => ({ left: pctInWindow(ep, o.t0), width: pctInWindow(ep, o.t1) - pctInWindow(ep, o.t0), owner: o.owner })),
+      .map((o) => ({ left: pctInWindow(ep, o.t0), width: pctInWindow(ep, o.t1) - pctInWindow(ep, o.t0), owner: o.owner, tone: toneOf(o.owner) })),
   }));
 }
 

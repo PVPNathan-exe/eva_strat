@@ -1,10 +1,12 @@
-// Frise du chrono d'un épisode : une ligne par point avec les bandes de propriétaire (orange, bleu, gris), les repères (départ, prise du point),
+// Frise du chrono d'un épisode : une ligne par point avec les bandes de propriétaire (équipe suivie, adversaires, gris), les repères (départ, prise du point),
 // les morts numérotées et un curseur qui suit la souris. Le bouton ouvre la vidéo 5 s avant l'instant clé (analysisStore.openAt : changement d'onglet et déplacement).
 // Temps de game en entrée (secondes depuis le début de la game) : la conversion en temps de vidéo est faite par `videoSeek`.
 
 import { useState, type MouseEvent } from 'react';
 import { Play, X } from 'lucide-react';
 import { causeLabel, episodeMarks, keyInstant, pctInWindow, playerLabel, timelineDeaths, timelineRows, VIDEO_LEAD_S, videoSeek } from '../../lib/episodeFormat';
+import { paletteOfSide, toneOfOwner } from '../../lib/episodeClock';
+import type { FollowSpec } from '../../lib/teamFollow';
 import { formatTime } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Episode, PointOwner } from '../../types/stats';
@@ -14,12 +16,14 @@ interface Props {
   episode: Episode;
   owners: PointOwner[];
   game: StatsGame;
+  /** Réglage d'équipe suivie : les bandes et les morts prennent la couleur de l'équipe par son nom. */
+  spec: FollowSpec;
 }
 
-export function EpisodeTimeline({ episode, owners, game }: Props) {
+export function EpisodeTimeline({ episode, owners, game, spec }: Props) {
   const openAt = useAnalysisStore((s) => s.openAt);
   const [cursor, setCursor] = useState<number | null>(null); // position du curseur en pourcentage de la fenêtre
-  const rows = timelineRows(episode, owners);
+  const rows = timelineRows(episode, owners, (o) => toneOfOwner(game, spec, o));
   const deaths = timelineDeaths(episode);
   const marks = episodeMarks(episode);
   const span = episode.t1 - episode.t0;
@@ -43,7 +47,7 @@ export function EpisodeTimeline({ episode, owners, game }: Props) {
           {rows.map((row) => (
             <div key={row.point} className="eptl__track">
               {row.bands.map((b, i) => (
-                <span key={i} className={`eptl__band eptl__band--${b.owner}`} style={{ left: `${b.left}%`, width: `${b.width}%` }} title={b.owner === 'none' ? 'Point neutre' : `Point à l'équipe ${b.owner === 'A' ? 'orange' : 'bleue'}`} />
+                <span key={i} className={`eptl__band eptl__band--${b.tone}`} style={{ left: `${b.left}%`, width: `${b.width}%` }} title={b.owner === 'none' ? 'Point neutre' : `Point à ${b.owner === 'A' ? (game.teamA ?? "l'équipe orange") : (game.teamB ?? "l'équipe bleue")}`} />
               ))}
               {row.bands.length === 0 && <span className="eptl__nodata">propriétaire non lu</span>}
             </div>
@@ -53,7 +57,7 @@ export function EpisodeTimeline({ episode, owners, game }: Props) {
               <span
                 key={`${d.slot}:${d.t}`}
                 tabIndex={0}
-                className={`eptl__death eptl__death--${d.team}`}
+                className={`eptl__death eptl__death--${paletteOfSide(game, spec, d.team)}`}
                 style={{ left: `${pctInWindow(episode, d.t)}%` }}
                 title={`${formatTime(d.t)} : ${playerLabel(d.slot, nameOf(d.slot))}${d.killer !== null ? `, tué par ${playerLabel(d.killer, nameOf(d.killer))}` : ''} (${causeLabel(d.cause)})`}
                 aria-label={`Mort ${d.n}, ${playerLabel(d.slot, nameOf(d.slot))}, à ${formatTime(d.t)}`}
