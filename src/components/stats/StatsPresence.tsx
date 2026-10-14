@@ -5,17 +5,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { blur, gridFromCells, heatPixels, normalize, totalSeconds } from '../../lib/heatGrid';
 import { formatTime } from '../../lib/timeline';
-import type { TeamSide } from '../../types/stats';
-import { noticeOf, tokenRgb, usePresence, type StatsGame } from './useStats';
+import { presenceGroups, type FollowSpec } from '../../lib/teamFollow';
+import { noticeOf, tokenRgb, usePresenceGroups, type StatsGame } from './useStats';
 import { StatsMapBase } from './StatsMapBase';
 
 const GRID_N = 64; // côté de la grille demandée au serveur
 
 interface Props {
   map: string;
+  /** Games retenues : la présence est additionnée sur toutes. */
   games: StatsGame[];
-  team: TeamSide | 'all';
-  slot: number;
+  spec: FollowSpec;
 }
 
 /** Couche de chaleur : un canevas n par n étiré sur la minimap (le navigateur interpole entre les cases). */
@@ -28,14 +28,14 @@ function HeatLayer({ pixels, n }: { pixels: Uint8ClampedArray; n: number }) {
   return <canvas ref={ref} width={n} height={n} className="stats__heat" />;
 }
 
-export function StatsPresence({ map, games, team, slot }: Props) {
+export function StatsPresence({ map, games, spec }: Props) {
   const [sigma, setSigma] = useState(1.5);
   const [corridors, setCorridors] = useState(false);
   const [stations, setStations] = useState(false);
   const [spawns, setSpawns] = useState(true);
-  const ids = useMemo(() => games.map((g) => g.id), [games]);
-  const query = useMemo(() => ({ map, games: ids, team: team === 'all' ? undefined : team, slot: slot || undefined, n: GRID_N }), [map, ids, team, slot]);
-  const load = usePresence(query);
+  // Une requête par groupe de games qui partagent l'équipe et le joueur demandés (l'équipe suivie change de côté d'une game à l'autre)
+  const groups = useMemo(() => presenceGroups(games, spec), [games, spec]);
+  const load = usePresenceGroups(map, groups, GRID_N);
 
   const view = useMemo(() => {
     if (!load.data) return null;
@@ -67,7 +67,7 @@ export function StatsPresence({ map, games, team, slot }: Props) {
         </details>
         {!notice && view && view.total > 0 && (
           <span className="stats__count">
-            Présence cumulée : {formatTime(view.total)} sur {load.data?.games ?? games.length} games
+            Présence cumulée : {formatTime(view.total)} sur {load.data?.games ?? games.length} game{(load.data?.games ?? games.length) > 1 ? 's' : ''}
           </span>
         )}
         <span className="stats__scale" aria-label="Échelle de la chaleur : de peu à beaucoup de temps passé">
@@ -88,9 +88,9 @@ export function StatsPresence({ map, games, team, slot }: Props) {
       <details className="help">
         <summary>Comment lire la chaleur</summary>
         <p className="help__body">
-          Chaque case de la minimap (grille de {GRID_N} sur {GRID_N}) cumule le temps pendant lequel le joueur ou l'équipe choisis y étaient vivants, sur toutes les games retenues. La couleur est relative à la
+          Chaque case de la minimap (grille de {GRID_N} sur {GRID_N}) cumule le temps pendant lequel le joueur ou l'équipe choisis y étaient vivants, sur toutes les games retenues (une seule par défaut, la plus récente). Avec une équipe suivie, la chaleur est celle de cette équipe (ou de ses adversaires) quel que soit son côté dans chaque game ; le filtre Côté garde les games où elle joue à gauche ou à droite. La couleur est relative à la
           case la plus occupée (les 2 % de cases les plus chaudes sont écrêtées), donc elle montre où on passe, pas combien de temps exactement. Le lissage étale chaque case sur ses voisines pour lire les grandes
-          zones ; à zéro, on voit les cases brutes. Pour comparer deux équipes ou deux joueurs, changer le filtre en haut.
+          zones ; à zéro, on voit les cases brutes. Pour comparer deux équipes ou deux joueurs, changer les filtres en haut.
         </p>
       </details>
     </div>

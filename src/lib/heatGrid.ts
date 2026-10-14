@@ -1,6 +1,8 @@
 // Grille de chaleur de présence : cases [colonne, ligne, secondes] de /api/stats/presence mises en grille, lissées, ramenées à 0..1 et converties en pixels.
 // Fonctions pures (aucune lecture de la page) : les couleurs viennent de tokens.css, lues par l'appelant puis passées en paramètre.
 
+import type { PresenceGrid } from '../types/stats.ts';
+
 export type Rgb = [number, number, number];
 
 /** Remplit une grille n par n (ligne par ligne : indice = ligne * n + colonne) ; les cases hors grille ou non finies sont ignorées, les doublons s'additionnent. */
@@ -82,6 +84,17 @@ export function heatColor(v: number, low: Rgb, high: Rgb, maxAlpha = 0.85): [num
   const t = Math.min(1, Math.max(0, v));
   const mix = (i: number) => Math.round(low[i] + (high[i] - low[i]) * t);
   return [mix(0), mix(1), mix(2), Math.round(255 * maxAlpha * Math.sqrt(t))];
+}
+
+/** Additionne plusieurs grilles de présence de même côté (une par groupe de games) ; une grille d'un autre côté que la première est ignorée. Aucune grille : grille vide de côté 64. */
+export function mergeGrids(grids: PresenceGrid[]): PresenceGrid {
+  if (grids.length === 0) return { n: 64, games: 0, cells: [] };
+  const n = grids[0].n;
+  const usable = grids.filter((g) => g.n === n);
+  const sum = new Map<number, number>();
+  for (const g of usable) for (const [ix, iy, seconds] of g.cells) sum.set(iy * n + ix, (sum.get(iy * n + ix) ?? 0) + seconds);
+  const cells = [...sum.entries()].sort((a, b) => a[0] - b[0]).map(([i, seconds]): [number, number, number] => [i % n, Math.floor(i / n), seconds]);
+  return { n, games: usable.reduce((total, g) => total + g.games, 0), cells };
 }
 
 /** Pixels RGBA (ligne par ligne) d'une grille normalisée n par n, prêts pour un ImageData. */

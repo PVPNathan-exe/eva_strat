@@ -4,11 +4,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { analysisApi } from '../../lib/analysisApi';
 import { toGameTime } from '../../lib/pathCut';
-import { statsApi, StatsUnavailableError, type PresenceQuery } from '../../lib/statsApi';
+import { statsApi, StatsUnavailableError } from '../../lib/statsApi';
 import type { Game, Sample } from '../../types/analysis';
-import { parseHex, type Rgb } from '../../lib/heatGrid';
+import { mergeGrids, parseHex, type Rgb } from '../../lib/heatGrid';
+import type { FollowSpec, PresenceGroup } from '../../lib/teamFollow';
 import type { StatsFilterState } from './StatsFilters';
-import type { KillLink, Life, PresenceGrid, TeamSide } from '../../types/stats';
+import type { KillLink, Life, PresenceGrid } from '../../types/stats';
 
 export interface Loaded<T> {
   data: T | null;
@@ -57,6 +58,7 @@ export interface StatsGame {
   teamA: string | null;
   teamB: string | null;
   startS: number;
+  endS: number;
   players: Game['players'];
 }
 
@@ -68,7 +70,7 @@ export function useStatsGames(): Loaded<StatsGame[]> {
     return perVideo
       .flat()
       .filter((g) => g.map && g.samples > 0)
-      .map((g) => ({ id: g.id, videoId: g.video_id, map: g.map as string, teamA: g.team_a, teamB: g.team_b, startS: g.start_s, players: g.players }))
+      .map((g) => ({ id: g.id, videoId: g.video_id, map: g.map as string, teamA: g.team_a, teamB: g.team_b, startS: g.start_s, endS: g.end_s, players: g.players }))
       .sort((a, b) => a.videoId - b.videoId || a.startS - b.startS);
   });
 }
@@ -97,19 +99,14 @@ export function useSamples(games: StatsGame[], enabled: boolean): Loaded<Map<num
   });
 }
 
-/** Grille de présence agrégée par le serveur ; query null : rien à charger. */
-export function usePresence(query: PresenceQuery | null): Loaded<PresenceGrid> {
-  const key = query && query.games.length ? `presence:${query.map}:${query.games.join(',')}:${query.team ?? ''}:${query.slot ?? ''}:${query.n ?? ''}` : null;
-  return useLoad(key, () => statsApi.presence(query as PresenceQuery));
+/** Présence de plusieurs groupes de games (une requête par groupe, voir presenceGroups), additionnée en une seule grille ; aucun groupe : rien n'est chargé. */
+export function usePresenceGroups(map: string, groups: PresenceGroup[], n: number): Loaded<PresenceGrid> {
+  const key = groups.length ? `presence:${map}:${n}:${groups.map((g) => `${g.games.join('+')}/${g.team ?? ''}/${g.slot ?? ''}`).join(';')}` : null;
+  return useLoad(key, async () => mergeGrids(await Promise.all(groups.map((g) => statsApi.presence({ map, games: g.games, team: g.team, slot: g.slot, n })))));
 }
 
-/** Slots d'une équipe : 1 à 4 pour l'orange (A), 5 à 8 pour la bleue (B). */
-export const slotsOfTeam = (team: TeamSide): number[] => (team === 'A' ? [1, 2, 3, 4] : [5, 6, 7, 8]);
-
-/** Filtre sur l'équipe et le joueur : team 'all' garde les deux ; slot 0 garde tous les joueurs. */
-export function filterBySlot<T extends { slot: number }>(rows: T[], team: TeamSide | 'all', slot: number): T[] {
-  return rows.filter((r) => (team === 'all' || (r.slot <= 4) === (team === 'A')) && (slot === 0 || r.slot === slot));
-}
+/** Durée (s) d'une game pour l'horloge de rejeu : de son début à sa fin dans la vidéo (au moins 1 s). */
+export const durationOf = (g: StatsGame | null): number => (g ? Math.max(1, g.endS - g.startS) : 1);
 
 /** Message à afficher à la place de la vue tant que les données ne sont pas prêtes : chargement, route pas encore branchée (501) ou erreur. null : tout est prêt. */
 export function noticeOf(...loaded: Loaded<unknown>[]): string | null {
@@ -121,7 +118,10 @@ export function noticeOf(...loaded: Loaded<unknown>[]): string | null {
   return null;
 }
 
-export const INITIAL_FILTERS: StatsFilterState = { map: null, excluded: [], team: 'all', slot: 0 };
+/** Réglage d'équipe et de joueur lu dans l'état des filtres. */
+export const specOf = (s: StatsFilterState): FollowSpec => ({ team: s.team, side: s.side, show: s.show, slot: s.slot, player: s.player });
+
+export const INITIAL_FILTERS: StatsFilterState = { map: null, chosen: null, team: null, side: 'both', show: 'both', slot: 0, player: null };
 
 /** Cartes qui ont des games (positions lues, voir useStatsGames), avec leur nombre de games ; la plus fournie en premier. */
 export function mapsOf(games: StatsGame[]): [string, number][] {

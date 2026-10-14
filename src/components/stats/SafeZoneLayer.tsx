@@ -22,9 +22,12 @@ interface Props {
   outlineKind?: 'vue' | 'tir';
   /** Portes de l'instant (Instant.doors) : trait fermé ou ouvert ; absent ou vide : aucune porte dessinée. */
   doors?: DoorState[];
+  /** Palette de l'onglet quand l'équipe suivie est celle de droite : contours et pastilles de la bleue prennent la couleur de l'orange et inversement (les couleurs des zones sont échangées par l'appelant). */
+  swapColors?: boolean;
 }
 
-export function SafeZoneLayer({ result, colors, boxStyle, only = 'all', outlines = false, pins = true, show = 'safe', outlineKind = 'vue', doors = [] }: Props) {
+export function SafeZoneLayer({ result, colors, boxStyle, only = 'all', outlines = false, pins = true, show = 'safe', outlineKind = 'vue', doors = [], swapColors = false }: Props) {
+  const palette = (team: 'A' | 'B') => (swapColors ? (team === 'A' ? 'B' : 'A') : team); // classe de couleur d'un côté
   const canvas = useRef<HTMLCanvasElement>(null);
   const pixels = useMemo(() => zonePixels(result, colors, only, show), [result, colors, only, show]);
   useEffect(() => {
@@ -40,7 +43,7 @@ export function SafeZoneLayer({ result, colors, boxStyle, only = 'all', outlines
       {(lines.length > 0 || doors.length > 0) && (
         <svg className="statsmap__svg" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden>
           {lines.map((o) => (
-            <polygon key={o.slot} points={o.points.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(' ')} className={`safe__view safe__view--${o.team}`} vectorEffect="non-scaling-stroke" />
+            <polygon key={o.slot} points={o.points.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(' ')} className={`safe__view safe__view--${palette(o.team)}`} vectorEffect="non-scaling-stroke" />
           ))}
           {doors.map((d, i) => (
             <line
@@ -57,7 +60,7 @@ export function SafeZoneLayer({ result, colors, boxStyle, only = 'all', outlines
       )}
       {pins &&
         result.shooters.map((s) => (
-          <span key={s.slot} className={`safe__pin safe__pin--${s.team}${s.estimated ? ' is-estimated' : ''}`} style={{ left: `${s.x * 100}%`, top: `${s.y * 100}%` }}>
+          <span key={s.slot} className={`safe__pin safe__pin--${palette(s.team)}${s.estimated ? ' is-estimated' : ''}`} style={{ left: `${s.x * 100}%`, top: `${s.y * 100}%` }}>
             {numberOfSlot(s.slot)}
           </span>
         ))}

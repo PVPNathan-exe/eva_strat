@@ -1,0 +1,179 @@
+/* Chronologie de rejeu de l'onglet Stats : commandes (GameClock), frise des morts (DeathStrip), pions des joueurs et croix de mort (Parcours).
+   Couleurs uniquement par les jetons de tokens.css et la palette .pal de stats.css (--pal-base, --pal). */
+
+.clock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  min-width: 0;
+  max-width: 1100px;
+}
+
+.clock__play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+}
+
+.clock__time {
+  min-width: 5.5rem;
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.clock__range {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.clock__speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+/* Frise des morts : deux couloirs, le curseur et la fenêtre visible */
+.strip {
+  display: grid;
+  gap: 0.2rem;
+  max-width: 1100px;
+  min-width: 0;
+}
+
+.strip__lanes {
+  position: relative;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+
+.strip__lane {
+  position: relative;
+  height: 1.5rem;
+}
+
+.strip__window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--c-text) 8%, transparent);
+  pointer-events: none;
+}
+
+.strip__cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--c-timeline-cursor);
+  pointer-events: none;
+}
+
+.strip__mark {
+  --mark-color: var(--c-owner-a);
+  position: absolute;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--mark-color) 35%, var(--c-bg));
+  border: 2px solid transparent;
+  border-radius: 999px;
+  color: var(--c-text);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.4;
+}
+
+.strip__mark--b {
+  --mark-color: var(--c-owner-b);
+}
+
+.strip__mark.is-shown {
+  background: var(--mark-color);
+  opacity: 1;
+}
+
+.strip__mark.is-trade {
+  border-style: solid;
+  border-color: var(--c-text);
+}
+
+.strip__mark.is-revenge {
+  border-style: dashed;
+  border-color: var(--c-text);
+}
+
+.strip__mark.is-active {
+  z-index: 2;
+  outline: 2px solid var(--c-text);
+}
+
+.strip__axis {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0.6rem;
+  color: var(--c-text-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Parcours : pion du joueur à sa position et croix de mort (disparaît en fondu) */
+.stats__pawn {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  transform: translate(-50%, -50%);
+  background: var(--pal);
+  border: 2px solid var(--c-bg);
+  border-radius: 999px;
+  color: var(--c-bg);
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.stats__cross {
+  stroke: var(--pal-base);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.stats__cross-back {
+  stroke: var(--c-bg);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+@media (max-width: 600px) {
+  .clock__range {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .strip__mark {
+    width: 1.1rem;
+    height: 1.1rem;
+    font-size: 0.6rem;
+  }
+}

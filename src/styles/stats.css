@@ -126,38 +126,45 @@
   fill: var(--c-text-muted);
 }
 
-/* Parcours : une couleur par joueur (nuances de l'équipe), la forme du trait aide à les distinguer */
+/* Palette : « a » est toujours l'équipe suivie (ou l'orange sans suivi), « b » ses adversaires (ou la bleue) ; la nuance --r1 à --r4 vient de la place du joueur dans son équipe */
+.pal {
+  --pal-base: var(--c-owner-a);
+  --pal: var(--pal-base);
+}
+
+.pal--b {
+  --pal-base: var(--c-owner-b);
+}
+
+.pal--r2 {
+  --pal: color-mix(in srgb, var(--pal-base) 55%, var(--c-text));
+}
+
+.pal--r3 {
+  --pal: color-mix(in srgb, var(--pal-base) 60%, var(--c-bg));
+}
+
+.pal--r4 {
+  --pal: color-mix(in srgb, var(--pal-base) 35%, var(--c-text));
+}
+
+/* Parcours : une trace par vie, la forme du trait aide à distinguer les nuances */
 .stats__trace {
-  --trace-base: var(--c-owner-a);
   fill: none;
-  stroke: var(--trace-base);
+  stroke: var(--pal);
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.85;
 }
 
-.stats__trace--s5,
-.stats__trace--s6,
-.stats__trace--s7,
-.stats__trace--s8 {
-  --trace-base: var(--c-owner-b);
-}
-
-.stats__trace--s2,
-.stats__trace--s6 {
-  stroke: color-mix(in srgb, var(--trace-base) 55%, var(--c-text));
-}
-
-.stats__trace--s3,
-.stats__trace--s7 {
-  stroke: color-mix(in srgb, var(--trace-base) 60%, var(--c-bg));
+.pal--r3 .stats__trace,
+.stats__trace.pal--r3 {
   stroke-dasharray: 6 3;
 }
 
-.stats__trace--s4,
-.stats__trace--s8 {
-  stroke: color-mix(in srgb, var(--trace-base) 35%, var(--c-text));
+.pal--r4 .stats__trace,
+.stats__trace.pal--r4 {
   stroke-dasharray: 2 3;
 }
 
@@ -203,14 +210,10 @@
   background: color-mix(in srgb, var(--c-bg) 72%, transparent);
   border: 2px solid transparent;
   border-radius: 999px;
-  color: var(--c-owner-a);
+  color: var(--pal-base);
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1;
-}
-
-.stats__death--B {
-  color: var(--c-owner-b);
 }
 
 .stats__death span {

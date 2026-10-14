@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blur, gridFromCells, heatColor, heatPixels, normalize, parseHex, percentile, totalSeconds } from '../src/lib/heatGrid.ts';
+import { blur, gridFromCells, heatColor, heatPixels, mergeGrids, normalize, parseHex, percentile, totalSeconds } from '../src/lib/heatGrid.ts';
 import { linksOfDeath } from '../src/lib/statsApi.ts';
 import type { KillLink, Life } from '../src/types/stats.ts';
 
@@ -91,4 +91,20 @@ test('linksOfDeath : aucune liaison, vie finie par la fin de game', () => {
   const r = linksOfDeath(life(), []);
   assert.deepEqual(r, { trade: null, avengedBy: null, revengeKill: null });
   assert.deepEqual(linksOfDeath(life({ ended: 'end' }), [link({ t: 50 })]), { trade: null, avengedBy: null, revengeKill: null });
+});
+
+test('mergeGrids : additionne les cases de plusieurs grilles de même côté et le nombre de games', () => {
+  const m = mergeGrids([
+    { n: 4, games: 1, cells: [[0, 0, 2], [1, 2, 3]] },
+    { n: 4, games: 2, cells: [[1, 2, 1.5], [3, 3, 1]] },
+  ]);
+  assert.equal(m.n, 4);
+  assert.equal(m.games, 3);
+  assert.deepEqual(m.cells, [[0, 0, 2], [1, 2, 4.5], [3, 3, 1]]);
+});
+
+test('mergeGrids : une grille d\'un autre côté est ignorée, aucune grille donne une grille vide', () => {
+  const m = mergeGrids([{ n: 4, games: 1, cells: [[0, 0, 1]] }, { n: 8, games: 1, cells: [[5, 5, 9]] }]);
+  assert.deepEqual(m.cells, [[0, 0, 1]]);
+  assert.deepEqual(mergeGrids([]), { n: 64, games: 0, cells: [] });
 });
