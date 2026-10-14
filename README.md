@@ -62,7 +62,7 @@ Sans Windows, d'après le code (**non testé** sur Mac ou Linux) : les pseudos e
 Il faut **Windows 10 ou 11**, [Node.js](https://nodejs.org/) 22 ou plus (version LTS) et [Python](https://www.python.org/downloads/) 3.10 ou plus (coche « Add python.exe to PATH » à l'installation). ffmpeg s'installe tout seul.
 
 1. Installe Node.js et Python.
-2. Télécharge le projet : sur GitHub, choisis la branche `feat/onglet-analyse` puis **Code > Download ZIP**, et dézippe-le où tu veux (par exemple `Documents\eva_strat`). Avec Git : `git clone <adresse>` puis `git checkout feat/onglet-analyse`.
+2. Télécharge le projet : sur GitHub, **Code > Download ZIP** (branche `main`), et dézippe-le où tu veux (par exemple `Documents\eva_strat`). Avec Git : `git clone https://github.com/PVPNathan-exe/eva_strat`.
 3. Ouvre un terminal dans ce dossier (dans l'Explorateur, tape `cmd` dans la barre d'adresse puis Entrée) et lance :
 
 ```bash

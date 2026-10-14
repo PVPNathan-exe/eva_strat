@@ -1,6 +1,6 @@
 # Reprendre le projet sur un autre PC
 
-Tout le code est dans Git (branche `feat/onglet-analyse`). Trois choses n'y sont **pas** et sont à copier à la main : la base de données, les
+Tout le code est dans Git (branche `main`). Trois choses n'y sont **pas** et sont à copier à la main : la base de données, les
 vidéos, et ce qui est enregistré dans le navigateur. Le plus simple pour la base : onglet **Données**, Exporter vers une clé ou un disque, puis Importer sur l'autre PC (voir le README) ; la copie de `data/eva.db` ci-dessous marche aussi.
 
 ## Ce qu'il faut installer
@@ -13,9 +13,8 @@ vidéos, et ce qui est enregistré dans le navigateur. Le plus simple pour la ba
 | Windows 10 ou 11 | 11 | la reconnaissance de texte (pseudos, killfeed) utilise celle de Windows par PowerShell (`analysis/ocr_win.ps1`) ; sans Windows, ces étapes échouent proprement (`OcrUnavailable`), le reste fonctionne |
 
 ```bash
-git clone <adresse du dépôt> eva_strat
+git clone https://github.com/PVPNathan-exe/eva_strat eva_strat
 cd eva_strat
-git checkout feat/onglet-analyse
 npm start        # installe ce qui manque (npm, Python, ffmpeg) puis lance le site
 ```
 
