@@ -10,7 +10,9 @@ grises (`none`) entre deux propriétaires différents ne comptent pas comme un p
   engagés meurent en `FAIL_WINDOW_S` et aucun survivant n'est à moins de `R_RETREAT` à la fin.
 Une poussée qui ne remplit pas ces conditions (un seul mort, survivants sur le point) n'est pas écrite : elle est comptée dans `measure`.
 Temps en secondes depuis le début de la game (voir episode_common), distances en mètres sur la minimap (31 m x 16,5 m : les distances au point vont de 0 à 12 à 16 m, d'où des seuils
-bien plus petits que les 15 m et 25 m du plan, qui dépassent l'arène). Atlantis et Engine : pas de `point_owner`, aucun épisode.
+bien plus petits que les 15 m et 25 m du plan, qui dépassent l'arène). Atlantis et Engine : épisodes seulement si `point_owner` a des lignes pour la game (un point par lettre), sinon aucun.
+- `series_*` : séries de 3 ou 4 kills autour du point (kill_series.py : définition, QUESTION OUVERTE sur l'équipe qui fait les kills, constante SERIES_VIEW, schéma de `data`). Elles sont écrites avec les retakes
+  (kind retake) : `series_fail` (échec de retake), `series_collapse` (défense effondrée), `series_hold`, `series_changed` (suivie d'un changement de main, déjà dans les réussites), `series_neutral`.
 Causes automatiques de chaque mort d'attaquant : tueur, arme, distance du tueur au point, nombre de défenseurs vivants près du point, arrivée décalée des attaquants.
 Contrat commun des modules Stats : `compute(conn, game_id) -> int` (idempotent), `stats_meta` (module `retakes`, révision REVISION)."""
 
@@ -19,9 +21,10 @@ import json
 import sys
 
 import episode_common as ec
+import kill_series
 
 MODULE = "retakes"
-REVISION = 1
+REVISION = 2  # 2 : séries de kills, cartes à plusieurs points avec point_owner, instances Outlaw fondues
 # Valeurs étalonnées sur 10 games (Polaris 16, 22, 26 ; The Cliff 25, 37 ; Reef Point 27, 34 ; Silva 28 ; Artefact 36 ; Outlaw 32 : 36 changements de propriétaire du même point). Les 15 m et 25 m du plan
 # dépassent l'arène (31 m x 16,5 m, un joueur est au plus à 12 à 16 m d'un point) : balayage R_PUSH 3 à 6 m et R_RETREAT 5 à 9 m, voir le rapport de mesure.
 R_PUSH = 4.0  # « au point » : à moins de 4 m du cadre. 3 m : 2 changements sur 36 sans départ ; 4 m : 1 sur 36 ; 6 m : 0 mais 62 poussées candidates écartées contre 14 (le point est dans la zone de passage)
@@ -270,6 +273,10 @@ def find_episodes(game, stats=None):
                 continue
             if out and any(o["outcome"] == "fail" and o["point"] == ep["point"] and o["team"] == ep["team"] and abs(o["data"]["push_t"] - s) < FAIL_WINDOW_S for o in out):
                 continue
+            out.append(ep)
+        for ep in kill_series.find_series(game, inst, lambda t, tl=timeline: holder_at(tl, t), changes):
+            first, last = ep["data"]["series_t"]
+            ep["data"]["overlaps_fail"] = any(o["outcome"] == "fail" and o["point"] == ep["point"] and first - FAIL_WINDOW_S <= o["data"]["push_t"] <= last for o in out)
             out.append(ep)
     return sorted(out, key=lambda e: e["t0"])
 
