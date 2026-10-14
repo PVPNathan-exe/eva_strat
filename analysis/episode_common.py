@@ -1,4 +1,4 @@
-"""Outils communs aux épisodes de retake, de série de kills et de rotation (retakes.py, kill_series.py, rotations.py) : chargement d'une game, positions, vivants, distances au point, fenêtres, photos d'équipe.
+"""Outils communs aux épisodes de retake (par vagues : waves.py, kill_series.py, retakes.py) et de rotation (rotations.py) : chargement d'une game, positions, vivants, distances au point, tenant d'un point (`holder_timeline`, `captures`), fenêtres, photos d'équipe.
 
 Temps : secondes depuis le début de la game (les `samples`, `kills` et `capture_state` sont en temps de vidéo : on retranche `games.start_s`). Positions en fractions de la minimap,
 distances en mètres (`ARENA_M`). Un point est un cadre (x0, y0, x1, y1) en fractions de la minimap ; la distance à un point est la distance au cadre (0 dedans).
@@ -21,6 +21,9 @@ TEAMS = ("A", "B")
 VERDICT_MATCH_S = 3.0  # un épisode recalculé reprend le verdict d'un ancien du même point et de la même équipe dont le début est à 3 s au plus
 STEP_S = 0.5  # pas de balayage des positions
 MERGE_GAP_S = 6.0  # deux segments du même point séparés de moins de 6 s sont un seul segment (boîte perdue un instant, clignotement du HUD)
+NONE_GAP_S = 30.0  # un point gris reste « tenu » par le dernier propriétaire pendant 30 s au plus (Outlaw redevient gris quand il est contesté)
+ADJ_S = 3.0  # deux périodes de propriétaire séparées de moins de 3 s sont voisines
+MIN_OWNER_S = 2.0  # un propriétaire lu moins de 2 s est un accident de lecture
 POINTS_FILE = Path(__file__).resolve().parent / "map_capture_points.json"  # cadres des 5 points d'Outlaw (boîtes vues)
 
 
@@ -62,6 +65,63 @@ def dist_rect_m(p, rect):
 
 def rect_center(rect):
     return ((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2)
+
+
+# ---------------------------------------------------------------- propriétaire tenu
+
+def holder_timeline(segs):
+    """Périodes de propriétaire d'un point : [(t0, t1, X)] avec X = A ou B, les périodes grises comblées par le dernier propriétaire (au plus NONE_GAP_S), sinon X = None.
+    Les périodes de moins de MIN_OWNER_S sont ignorées."""
+    segs = [s for s in segs if s[1] - s[0] >= MIN_OWNER_S]
+    out, last, last_end = [], None, None
+    for a, b, owner in segs:
+        if owner in TEAMS:
+            out.append((a, b, owner))
+            last, last_end = owner, b
+            continue
+        fill_end = a if last is None else min(b, last_end + NONE_GAP_S)
+        if last is not None and fill_end > a:
+            out.append((a, fill_end, last))
+        if fill_end < b:
+            out.append((max(a, fill_end), b, None))
+    return out
+
+
+def owner_changes(timeline):
+    """Changements de propriétaire d'une équipe à l'autre : [(t, ancien, nouveau)] à l'instant où le nouveau commence (la première prise d'un point neutre n'en est pas un)."""
+    out, prev = [], None
+    for a, _b, x in timeline:
+        if x is None:
+            continue
+        if prev is not None and x != prev:
+            out.append((a, prev, x))
+        prev = x
+    return out
+
+
+def captures(timeline):
+    """Prises de point observées : [(t, ancien, nouveau)] ; ancien = le dernier propriétaire lu, None pour la première prise d'un point lu neutre (gris) juste avant : prise initiale, pas un retake.
+    Une première lecture d'un propriétaire sans période grise voisine avant elle (lecture manquante) n'est pas une prise : on ne sait pas d'où le point vient."""
+    out, last, prev_end = [], None, None
+    for a, b, x in timeline:
+        if x is not None and x != last:
+            if last is not None or (prev_end is not None and a - prev_end <= ADJ_S):
+                out.append((a, last, x))
+            last = x
+        prev_end = b
+    return out
+
+
+def known_at(timeline, t):
+    """Vrai si une période de propriétaire (même grise) couvre l'instant t (à ADJ_S près) : sinon le tenant du point est inconnu."""
+    return any(a - ADJ_S <= t <= b + ADJ_S for a, b, _x in timeline)
+
+
+def holder_at(timeline, t):
+    for a, b, x in timeline:
+        if a - 1e-6 <= t < b:
+            return x
+    return None
 
 
 # ---------------------------------------------------------------- chargement
@@ -294,13 +354,13 @@ def _family(outcome):
     return "series" if (outcome or "").startswith("series_") else "other"
 
 
-def write_episodes(conn, game_id, kind, episodes, module, revision):
+def write_episodes(conn, game_id, kind, episodes, module, revision, match_s=VERDICT_MATCH_S):
     """Efface les épisodes de ce type pour cette game puis écrit les nouveaux ; écrit stats_meta. Renvoie le nombre d'épisodes.
-    Les verdicts posés par l'utilisateur sont conservés : un nouvel épisode du même point et de la même équipe (et de la même famille), dont le début est à VERDICT_MATCH_S d'un ancien, reprend son verdict."""
+    Les verdicts posés par l'utilisateur sont conservés : un nouvel épisode du même point et de la même équipe (et de la même famille), dont le début est à `match_s` (défaut VERDICT_MATCH_S) d'un ancien, reprend son verdict."""
     old = [tuple(r) for r in conn.execute("SELECT point, team, t0, verdict, outcome FROM episodes WHERE game_id = ? AND kind = ? AND verdict IS NOT NULL", (game_id, kind))]
     conn.execute("DELETE FROM episodes WHERE game_id = ? AND kind = ?", (game_id, kind))
     for e in episodes:
-        verdict = next((v for p, team, t0, v, o in old if p == e["point"] and team == e["team"] and abs(t0 - e["t0"]) <= VERDICT_MATCH_S and _family(o) == _family(e["outcome"])), None)
+        verdict = next((v for p, team, t0, v, o in old if p == e["point"] and team == e["team"] and abs(t0 - e["t0"]) <= match_s and _family(o) == _family(e["outcome"])), None)
         conn.execute(
             "INSERT INTO episodes (game_id, kind, point, point_to, team, t0, t1, outcome, data, verdict) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (game_id, kind, e["point"], e.get("point_to"), e["team"], e["t0"], e["t1"], e["outcome"], json.dumps(e["data"], ensure_ascii=False), verdict),

@@ -1,37 +1,30 @@
-"""Séries de 3 ou 4 kills autour d'un point (épisodes `retake`, outcome `series_...`), appelées par retakes.py. Pas de ligne de commande : `python analysis/retakes.py --game N` les écrit avec les retakes.
+"""Teamfights et duels : séries de kills entre les deux équipes (module `kill_series`, appelé par waves.py et retakes.py ; pas de ligne de commande, pas d'écriture dans la base).
 
-Demande de l'utilisateur : en plus du changement de propriétaire d'un même point (référence du retake), compter les séries de 3 ou 4 kills autour du point, qui sont des échecs de retake (une tentative qui
-ne change pas le propriétaire). Pour chaque série : 20 s de déplacements avant, puis le repositionnement de l'équipe adverse 5 à 10 s après les kills.
-**Série** : au moins SERIES_MIN (3) et au plus SERIES_MAX (4) victimes distinctes de la MÊME équipe, tuées en au plus WIPE_S secondes par l'autre équipe, à moins de NEAR_M mètres du cadre du point.
-**QUESTION OUVERTE (l'utilisateur n'a pas dit quelle équipe fait les kills)** : « 3 ou 4 kills de l'équipe qui n'a pas le point » ? Les deux attributions sont toujours enregistrées dans `data`
-(killer_team, victim_team, holder_team, changed_hands) et `outcome_by_view` donne le résultat selon les deux lectures. Constante unique SERIES_VIEW pour choisir celle qui est écrite :
-- `victim` (défaut) : la série est classée selon l'équipe qui la SUBIT. Subie par l'équipe qui attaque le point tenu par l'autre : `series_fail` (échec de retake, `team` = l'attaquante). Subie par l'équipe
-  qui tient le point : `series_collapse` (défense effondrée, `team` = le tenant ; elle précède souvent un retake réussi : `changed_hands`).
-- `killer` (inverse) : classée selon l'équipe qui la FAIT. Faite par l'équipe qui n'a pas le point : `series_fail` si le point ne change pas de main dans les SUCCESS_S (elle a tué 3 ou 4 joueurs
-  sans reprendre le point, `team` = l'attaquante), sinon `series_changed`. Faite par le tenant : `series_hold` (la défense tient, `team` = le tenant).
-Dans les deux lectures, une série suivie d'un changement de propriétaire dans les SUCCESS_S est `series_changed` quand elle serait un échec (déjà comptée dans les retakes réussis) ; propriétaire inconnu
-(point gris plus de 30 s) : `series_neutral`.
-Schéma de `data` (JSON, en plus des clés des retakes lues par le site : push_t, window, from_team, to_team, attackers, defenders, deaths, first_death) :
- series_t [premier kill, dernier kill], killer_team, victim_team, holder_team (None si inconnu), changed_hands, changed_to, changed_dt_s, view, outcome_by_view {victim, killer}, team_by_view {victim, killer},
- kills [{t, killer, victim, weapon, kind, victim_dist_m, killer_dist_m}], before {A, B} : photos des équipes à -20, -15, -10, -5 et 0 s du premier kill, after {A, B} : photos à 0, 5 et 10 s du dernier kill,
- adverse_team (l'équipe opposée à `team`), reposition {A, B} : décalage du centre de l'équipe (m) 5 s et 10 s après le dernier kill et nombre de joueurs près du point, overlaps_fail (la même poussée est aussi
- un épisode `fail` du retake classique).
-Photo d'équipe (episode_common.snapshot) : {alive, centroid, players: [{slot, pos, d: {point: m}}], near: {point: joueurs à moins de SNAP_RADIUS_M}}, avec l'instant en secondes relatif dans la liste `t`."""
+Retour de l'utilisateur du 14 octobre 2026 (docs/PLAN_STATS_AGENTS.md, section 11) : les « séries de 3 ou 4 kills » de la révision 2 sont des TEAMFIGHTS PERDUS de l'équipe qui les subit ; un retake est un
+teamfight GAGNÉ suivi de la capture du point. Les épisodes `series_*` disparaissent : ce module décrit un teamfight, il ne produit plus d'épisode.
+
+**Série de kills** : suite maximale de kills entre équipes, chacun à `WIPE_S` secondes au plus du précédent, où que ce soit (pas de filtre de lieu : le teamfight se tient souvent au
+milieu de la carte, 50 à 60 % du chemin entre les deux spawns, plus avancé si la défense tient des positions hautes, ce que le programme ne sait pas modéliser ; la fraction réelle est mesurée : `axis_frac`).
+Les kills viennent de `game["kills"]` (killfeed, équipes adverses seulement).
+**Teamfight ou duel** (précision de l'utilisateur) : un duel 1 contre 1 ou 1 contre 2 n'est pas un teamfight quand le joueur est seul, loin de ses coéquipiers, sans aide possible ; c'est un teamfight si l'aide
+peut arriver vite OU si l'autre côté de la carte se bat en même temps. Opérationnalisation : les kills de la fenêtre (suite maximale de kills séparés d'au plus WIPE_S, qui contient le kill de départ de la vague) sont regroupés en
+foyers (chaînage simple : une victime à moins de `HELP_R` d'un kill du foyer en fait partie) ; engagés d'un foyer = tueurs et victimes du foyer + joueurs vivants à moins de `HELP_R` du centre du foyer (moyenne des
+positions de mort) à l'un des instants de ses kills. Teamfight (`kind`) si les DEUX équipes ont au moins `ENGAGED_MIN` (2) engagés dans un foyer, OU s'il y a au moins deux foyers dans la fenêtre (une autre action
+ailleurs en même temps), ET au moins `FIGHT_MIN_KILLS` (2) kills ; sinon `duel`. `HELP_R` 10 m : un joueur en marche va à 1,3 m/s (médiane, 75 % : 1,9, 90 % : 2,6, mesuré sur les games 26, 27, 28 et 32), l'aide
+« vite » est à 5 à 6 s de marche, soit 8 à 10 m. Les tyroliennes (aide instantanée de loin) ne sont pas modélisées : un coéquipier près d'une station éloignée n'est pas compté.
+**Gagnant** (pertes comptées sur toute la série) : l'équipe qui perd le moins de joueurs ; à égalité, celle qui garde le plus de vivants `ALIVE_AFTER_S` après le dernier kill ;
+sinon `None` (égalité). Un duel a aussi un gagnant calculé mais il n'est jamais compté comme teamfight gagné ou perdu.
+Schéma du dict (`fight_from`) : i0, i1 (indices dans game["kills"]), t_first, t_last, n_kills, losses {A, B}, alive_end {A, B}, winner, kind (`teamfight` ou `duel`), foyers (nombre), engaged {A, B} (plus grand
+foyer), center (moyenne des positions de mort du foyer du kill de départ), kills [{t, killer, victim, weapon, kind}]."""
 
 import episode_common as ec
 
-WIPE_S = 10.0  # les kills d'une série tombent dans une fenêtre de 10 s
-SERIES_MIN = 3
-SERIES_MAX = 4
-NEAR_M = 7.0  # une victime est « près du point » à moins de 7 m du cadre (même valeur que R_RETREAT des retakes)
-SUCCESS_S = 15.0  # un changement de propriétaire dans les 15 s qui suivent la série la rend « suivie d'un changement »
-SERIES_VIEW = "victim"  # lecture écrite dans outcome et team : "victim" (défaut) ou "killer" ; voir la question ouverte ci-dessus
-PRE_S = 20.0  # fenêtre de l'épisode : 20 s avant le premier kill
-POST_S = 10.0  # et 10 s après le dernier
-BEFORE_OFFSETS = (-20.0, -15.0, -10.0, -5.0, 0.0)  # photos avant, relatives au premier kill
-AFTER_OFFSETS = (0.0, 5.0, 10.0)  # photos après, relatives au dernier kill
-SNAP_RADIUS_M = 4.0  # « au point » dans les photos (même valeur que R_PUSH des retakes)
-KILLER_NEAR_M = 4.0  # tueur « sur le point »
+WIPE_S = 10.0  # deux kills d'une même série sont espacés de 10 s au plus
+FIGHT_MIN_KILLS = 2  # un teamfight a au moins 2 kills
+ENGAGED_MIN = 2  # chaque équipe a au moins 2 joueurs engagés dans un foyer
+HELP_R = 10.0  # une aide est à 10 m au plus du centre du combat (5 à 6 s de marche)
+ALIVE_AFTER_S = 2.5  # survivants comptés 2,5 s après le dernier kill (la fin d'une vie tombe à 2 s du kill, voir lives.KILL_MATCH_S)
+NEAR_M = 7.0  # « près du point » : à moins de 7 m du cadre
 DEATH_MATCH_S = 2.0  # la position de mort d'une victime vient de la vie qui finit à 2 s du kill
 
 
@@ -43,137 +36,125 @@ def death_pos(game, victim, t):
     return ec.pos_at(game, victim, t, max_gap=3.0)
 
 
-def near_kills(game, inst):
-    """Kills de la plage de l'instance dont la victime est morte à moins de NEAR_M du cadre : [{t, killer, victim, weapon, kind, vpos, victim_dist_m}] triés par temps."""
+def chain_end(kills, i0, wipe_s=WIPE_S):
+    """Indice du dernier kill de la série qui commence à l'indice i0 (kills triés par temps)."""
+    j = i0
+    while j + 1 < len(kills) and kills[j + 1][0] - kills[j][0] <= wipe_s:
+        j += 1
+    return j
+
+
+def chain_start(kills, i0, wipe_s=WIPE_S):
+    """Indice du premier kill de la fenêtre qui contient le kill i0 (kills précédents séparés d'au plus wipe_s)."""
+    j = i0
+    while j > 0 and kills[j][0] - kills[j - 1][0] <= wipe_s:
+        j -= 1
+    return j
+
+
+def winner_of(losses, alive_end):
+    """Équipe gagnante (A, B) : moins de pertes, puis plus de survivants ; None si égalité."""
+    for key in (lambda t: losses[t], lambda t: -alive_end[t]):
+        a, b = key("A"), key("B")
+        if a != b:
+            return "A" if a < b else "B"
+    return None
+
+
+# ---------------------------------------------------------------- foyers et engagés
+
+def _mean(points):
+    pts = [p for p in points if p is not None]
+    return None if not pts else (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+
+def foci(game, idxs, help_r=HELP_R):
+    """Foyers de kills : liste de listes d'indices de game["kills"] (chaînage simple : la position de mort de la victime à moins de help_r d'un kill du foyer). Un kill sans position va avec le foyer précédent."""
+    kills = game["kills"]
+    pos = {i: death_pos(game, kills[i][2], kills[i][0]) for i in idxs}
     out = []
-    for k in game["kills"]:
-        if not inst["t0"] - 1 <= k[0] <= inst["t1"] + 1:
+    for i in idxs:
+        home = next((f for f in out if pos[i] is None or any(pos[j] is not None and ec.dist_m(pos[i], pos[j]) <= help_r for j in f)), None)
+        if home is None:
+            out.append([i])
+        else:
+            home.append(i)
+    return out
+
+
+def engaged(game, focus, help_r=HELP_R):
+    """Joueurs engagés d'un foyer : ({A: slots, B: slots}, centre). Tueurs et victimes, plus les vivants à moins de help_r du centre (moyenne des positions de mort) à l'un des instants des kills."""
+    kills = game["kills"]
+    center = _mean(death_pos(game, kills[i][2], kills[i][0]) for i in focus)
+    out = {t: set() for t in ec.TEAMS}
+    for i in focus:
+        for s in (kills[i][1], kills[i][2]):
+            out[ec.team_of(s)].add(s)
+        if center is None:
             continue
-        pos = death_pos(game, k[2], k[0])
-        d = ec.dist_rect_m(pos, inst["rect"])
-        if d is not None and d <= NEAR_M:
-            out.append({"t": k[0], "killer": k[1], "victim": k[2], "weapon": k[3], "kind": k[4], "vpos": pos, "victim_dist_m": d})
-    return sorted(out, key=lambda x: x["t"])
+        for s in range(1, 9):
+            if ec.alive_at(game, s, kills[i][0]):
+                d = ec.dist_m(ec.pos_at(game, s, kills[i][0]), center)
+                if d is not None and d <= help_r:
+                    out[ec.team_of(s)].add(s)
+    return out, center
 
 
-def group_series(kills):
-    """Séries de victimes d'une même équipe : liste de listes de kills (SERIES_MIN à SERIES_MAX victimes distinctes en WIPE_S), sans chevauchement, triées par temps."""
-    out = []
-    for vteam in ec.TEAMS:
-        ks = [k for k in kills if ec.team_of(k["victim"]) == vteam]
-        i = 0
-        while i < len(ks):
-            grp, seen = [], set()
-            for k in ks[i:]:
-                if k["t"] - ks[i]["t"] > WIPE_S:
-                    break
-                if k["victim"] not in seen:
-                    grp.append(k)
-                    seen.add(k["victim"])
-            if len(grp) >= SERIES_MIN:
-                grp = grp[:SERIES_MAX]
-                out.append(grp)
-                i += len([k for k in ks[i:] if k["t"] <= grp[-1]["t"] + 1e-6])
-            else:
-                i += 1
-    return sorted(out, key=lambda g: g[0]["t"])
+def kind_of(game, i0, help_r=HELP_R, wipe_s=WIPE_S):
+    """(`teamfight` ou `duel`, nombre de foyers, engagés du foyer du kill i0, centre de ce foyer) pour la fenêtre de kills qui contient le kill i0."""
+    kills = game["kills"]
+    a, b = chain_start(kills, i0, wipe_s), chain_end(kills, i0, wipe_s)
+    fs = foci(game, list(range(a, b + 1)), help_r)
+    mine = next(f for f in fs if i0 in f)
+    eng, center = engaged(game, mine, help_r)
+    best = {t: len(eng[t]) for t in ec.TEAMS}
+    for f in fs:
+        e, _c = engaged(game, f, help_r)
+        if min(len(e["A"]), len(e["B"])) >= ENGAGED_MIN:
+            best, eng = {t: len(e[t]) for t in ec.TEAMS}, e
+            break
+    ok = min(best.values()) >= ENGAGED_MIN or len(fs) >= 2
+    return ("teamfight" if ok and b - a + 1 >= FIGHT_MIN_KILLS else "duel"), len(fs), best, center
 
 
-def label(view, victim_team, holder, changed):
-    """(outcome, équipe de l'épisode) d'une série selon la lecture `view` ; voir la question ouverte en tête de module."""
-    killer_team = ec.other_team(victim_team)
-    actor = victim_team if view == "victim" else killer_team
-    if holder is None:
-        return "series_neutral", actor
-    if view == "victim":
-        if holder == killer_team:  # l'attaquant du point tenu par l'autre subit la série
-            return ("series_changed" if changed else "series_fail"), victim_team
-        return "series_collapse", victim_team  # le tenant subit la série
-    if holder == victim_team:  # le tenant subit : l'autre équipe, qui n'a pas le point, fait la série
-        return ("series_changed" if changed else "series_fail"), killer_team
-    return "series_hold", killer_team  # le tenant fait la série
-
-
-def _kill_info(game, k, rect, killer_team):
-    """Fiche d'un kill de la série : victime, tueur, arme, distances au point."""
-    kd = ec.dist_rect_m(ec.pos_at(game, k["killer"], k["t"]), rect)
-    return {"t": round(k["t"], 1), "killer": k["killer"], "victim": k["victim"], "weapon": k["weapon"], "kind": k["kind"],
-            "victim_dist_m": round(k["victim_dist_m"], 1), "killer_dist_m": None if kd is None else round(kd, 1)}
-
-
-def _death(game, k, rect, t_first, killer_team):
-    """Mort d'une victime au format des retakes (lu par le site) : slot, t, dt_push, tueur, arme, distance du tueur, défenseurs proches, cause, position."""
-    kd = ec.dist_rect_m(ec.pos_at(game, k["killer"], k["t"]), rect)
-    cause = "tue_sur_le_point" if kd is not None and kd <= KILLER_NEAR_M else "tue_a_distance"
-    p = k["vpos"]
-    return {"slot": k["victim"], "t": round(k["t"], 1), "dt_push": round(k["t"] - t_first, 1), "killer": k["killer"], "weapon": k["weapon"],
-            "killer_dist_m": None if kd is None else round(kd, 1), "defenders_near": len(ec.team_near(game, killer_team, rect, k["t"], NEAR_M)),
-            "cause": cause, "pos": None if p is None else [round(p[0], 4), round(p[1], 4)], "team": ec.team_of(k["victim"])}
-
-
-def _photos(game, rects, t_ref, offsets):
-    """{A: [photos], B: [photos]} aux instants t_ref + offset ; chaque photo porte `t` (relatif) en plus de la photo d'équipe."""
-    out = {}
-    for team in ec.TEAMS:
-        out[team] = [dict(ec.snapshot(game, team, t_ref + o, rects, SNAP_RADIUS_M), t=o) for o in offsets if 0 <= t_ref + o <= game["duration"]]
-    return out
-
-
-def _shift_m(after, team, offset):
-    """Décalage (m) du centre de l'équipe entre la photo à 0 s et la photo à `offset` s après le dernier kill, None si une photo manque."""
-    by = {p["t"]: p for p in after[team]}
-    a, b = by.get(0.0), by.get(offset)
-    if not a or not b or not a["centroid"] or not b["centroid"]:
+def fight_from(game, i, help_r=HELP_R, wipe_s=WIPE_S):
+    """Série de kills qui contient le kill d'indice i de game["kills"] (fenêtre maximale de kills séparés d'au plus wipe_s : dict, voir l'en-tête), None si l'indice est hors liste."""
+    kills = game["kills"]
+    if i is None or not 0 <= i < len(kills):
         return None
-    return round(ec.dist_m(a["centroid"], b["centroid"]), 1)
+    i0, i1 = chain_start(kills, i, wipe_s), chain_end(kills, i, wipe_s)
+    chain = kills[i0:i1 + 1]
+    losses = {t: sum(1 for k in chain if ec.team_of(k[2]) == t) for t in ec.TEAMS}
+    t_last = chain[-1][0]
+    alive_end = {t: sum(1 for s in ec.team_slots(t) if ec.alive_at(game, s, t_last + ALIVE_AFTER_S)) for t in ec.TEAMS}
+    kind, n_foci, eng, center = kind_of(game, i, help_r, wipe_s)
+    return {"i0": i0, "i1": i1, "t_first": round(chain[0][0], 1), "t_last": round(t_last, 1), "n_kills": len(chain), "losses": losses, "alive_end": alive_end,
+            "winner": winner_of(losses, alive_end), "kind": kind, "foyers": n_foci, "engaged": eng, "center": None if center is None else [round(center[0], 4), round(center[1], 4)],
+            "kills": [{"t": round(k[0], 1), "killer": k[1], "victim": k[2], "weapon": k[3], "kind": k[4]} for k in chain]}
 
 
-def _reposition(after):
-    """Repositionnement de chaque équipe après la série : décalage du centre à 5 s et 10 s, joueurs près du point à 10 s."""
-    out = {}
-    for team in ec.TEAMS:
-        last = after[team][-1] if after[team] else None
-        out[team] = {"shift_5_m": _shift_m(after, team, 5.0), "shift_10_m": _shift_m(after, team, 10.0), "near_point_end": None if last is None else last["near"]["point"]}
-    return out
+# ---------------------------------------------------------------- lieu du combat
+
+def victims_near_share(game, fight, rect):
+    """Part des victimes du teamfight mortes à moins de NEAR_M du cadre du point (None sans position) : mesure de l'écart entre « autour du point » et « tout affrontement »."""
+    dists = [ec.dist_rect_m(death_pos(game, k["victim"], k["t"]), rect) for k in fight["kills"]]
+    dists = [d for d in dists if d is not None]
+    return None if not dists else round(sum(1 for d in dists if d <= NEAR_M) / len(dists), 2)
 
 
-def build_episode(game, inst, grp, holder, changes):
-    """Épisode d'une série (grp : liste de kills) pour un point tenu par `holder` (A, B ou None) ; `changes` : [(t, ancien, nouveau)] changements de propriétaire de l'instance."""
-    rect = inst["rect"]
-    t_first, t_last = grp[0]["t"], grp[-1]["t"]
-    v_team = ec.team_of(grp[0]["victim"])
-    k_team = ec.other_team(v_team)
-    hit = [c for c in changes if t_first - 1e-6 <= c[0] <= t_last + SUCCESS_S]
-    changed = bool(hit)
-    by_view = {v: label(v, v_team, holder, changed) for v in ("victim", "killer")}
-    outcome, team = by_view[SERIES_VIEW]
-    attack = ec.other_team(holder) if holder else v_team
-    rects = {"point": rect}
-    after = _photos(game, rects, t_last, AFTER_OFFSETS)
-    lo, hi = max(0.0, t_first - PRE_S), min(game["duration"], t_last + POST_S)
-    data = {
-        "push_t": round(t_first, 1), "series_t": [round(t_first, 1), round(t_last, 1)], "window": [round(lo, 2), round(hi, 2)],
-        "from_team": holder, "to_team": attack, "killer_team": k_team, "victim_team": v_team, "holder_team": holder,
-        "changed_hands": changed, "changed_to": hit[0][2] if hit else None, "changed_dt_s": round(hit[0][0] - t_last, 1) if hit else None,
-        "view": SERIES_VIEW, "outcome_by_view": {v: o for v, (o, _t) in by_view.items()}, "team_by_view": {v: tt for v, (_o, tt) in by_view.items()},
-        "kills": [_kill_info(game, k, rect, k_team) for k in grp],
-        "attackers": [_player(game, s, rect, t_first) for s in ec.team_slots(attack) if ec.alive_at(game, s, t_first)],
-        "defenders": [_player(game, s, rect, t_first) for s in ec.team_slots(ec.other_team(attack)) if ec.alive_at(game, s, t_first)],
-        "before": _photos(game, rects, t_first, BEFORE_OFFSETS), "after": after,
-        "adverse_team": ec.other_team(team), "reposition": _reposition(after), "overlaps_fail": False,
-    }
-    deaths = [_death(game, k, rect, t_first, k_team) for k in grp]
-    data["deaths"], data["first_death"] = deaths, deaths[0]
-    return {"point": inst["point"], "team": team, "t0": round(lo, 2), "t1": round(hi, 2), "outcome": outcome, "data": data}
+def team_spawn_centre(game, team):
+    """Centre des apparitions (x0, y0 des vies) de l'équipe dans la game : position du spawn fixe, valable aussi pour les départs neutres d'Outlaw. None sans vie."""
+    pts = [(v["x0"], v["y0"]) for s in ec.team_slots(team) for v in game["lives"].get(s, []) if v.get("x0") is not None]
+    return _mean(pts)
 
 
-def _player(game, slot, rect, t):
-    """Fiche d'un joueur à l'instant t : slot, position, distance au point en mètres."""
-    p = ec.pos_at(game, slot, t)
-    d = ec.dist_rect_m(p, rect)
-    return {"slot": slot, "pos": None if p is None else [round(p[0], 4), round(p[1], 4)], "dist_m": None if d is None else round(d, 1)}
-
-
-def find_series(game, inst, holder_of, changes):
-    """Épisodes de série d'une instance de point. holder_of(t) : propriétaire tenu (A, B ou None) ; changes : [(t, ancien, nouveau)]."""
-    return [build_episode(game, inst, grp, holder_of(grp[0]["t"]), changes) for grp in group_series(near_kills(game, inst))]
+def axis_frac(game, center, team):
+    """Fraction du trajet entre le spawn de `team` (0) et celui de l'adversaire (1) où se trouve `center` (projection, en mètres ; peut sortir de [0, 1]) ; None si une position manque."""
+    a, b = team_spawn_centre(game, team), team_spawn_centre(game, ec.other_team(team))
+    if center is None or a is None or b is None:
+        return None
+    ux, uy = (b[0] - a[0]) * ec.ARENA_M[0], (b[1] - a[1]) * ec.ARENA_M[1]
+    n2 = ux * ux + uy * uy
+    if n2 < 1e-9:
+        return None
+    return round(((center[0] - a[0]) * ec.ARENA_M[0] * ux + (center[1] - a[1]) * ec.ARENA_M[1] * uy) / n2, 2)

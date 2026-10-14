@@ -1,287 +1,176 @@
-"""Épisodes de retake (retakes.py, episode_common.py) : base en mémoire, game de Polaris synthétique (un seul point, cadre de map_capture.json)."""
+"""Épisodes de retake par vagues (retakes.py, REVISION 3) : parties synthétiques de Polaris (un seul point, cadre de map_capture.json), voir test_waves.py pour le montage."""
 
 import json
-import sqlite3
-from pathlib import Path
 
 import episode_common as ec
-import kill_series
-import point_owner
 import retakes
+from test_waves import A_SPAWN, B_SPAWN, DURATION, MID, game_of, leave, make_conn, stay, team_a_leaves
 
-SCHEMA = (Path(__file__).resolve().parent.parent / "schema.sql").read_text(encoding="utf-8")
-START = 100.0  # début de la game dans la vidéo : les samples sont en temps de vidéo
-DURATION = 100.0
-AT_POINT = (0.485, 0.54)  # dans le cadre du point de Polaris
-FAR = (0.2, 0.2)  # loin du point (plus de 7 m)
+B_HOLDS = [(0, 5, "none"), (5, 100, "B")]  # B tient le point depuis la 5e seconde
+WAVE_A = team_a_leaves([20.0, 22.0, 24.0], arrive_after=8.0)  # 1, 2, 3 quittent le spawn et arrivent au point vers 30 s
+WAVE_B_AT_POINT = {s: [(0.0, DURATION, "end", stay(MID))] for s in (5, 6, 7)}  # les défenseurs sont au point
 
 
-def make_conn(owners, tracks, lives, map_name="Polaris"):
-    """owners : [(t0, t1, 'A'|'B'|'none')] ; tracks : {slot: fonction t -> (x, y)} (défaut : loin du point) ; lives : {slot: [(t0, t1, ended, killer)]} (défaut : vivant toute la game).
-    Les lignes de samples sont posées toutes les 0,5 s pendant les vies, en temps de vidéo."""
-    conn = sqlite3.connect(":memory:")
-    conn.executescript(SCHEMA)
-    conn.execute("INSERT INTO videos (id, path, duration_s, fps, width, height) VALUES (1, 'v.mp4', 300, 30, 1920, 1080)")
-    conn.execute("INSERT INTO games (id, video_id, start_s, end_s, map) VALUES (1, 1, ?, ?, ?)", (START, START + DURATION, map_name))
-    for o in owners:
-        conn.execute("INSERT INTO point_owner (game_id, point, t0, t1, owner, source) VALUES (1, 'A', ?, ?, ?, 'box')", o)
-    frame = 0
-    for slot in range(1, 9):
-        spans = lives.get(slot, [(0.0, DURATION, "end", None)])
-        for idx, (t0, t1, ended, killer) in enumerate(spans):
-            conn.execute("INSERT INTO lives (game_id, slot, idx, t0, t1, ended, killer_slot) VALUES (1, ?, ?, ?, ?, ?, ?)", (slot, idx, t0, t1, ended, killer))
-            t = t0
-            while t <= t1 + 1e-9:
-                x, y = tracks.get(slot, lambda _t: FAR)(t)
-                conn.execute("INSERT INTO samples (game_id, frame, t, slot, team, x, y, alive) VALUES (1, ?, ?, ?, ?, ?, ?, 1)", (frame, START + t, slot, ec.team_of(slot), x, y))
-                frame += 1
-                t += 0.5
-    return conn
+def dying(slot, t_death, path, then=None):
+    """Vies d'un joueur : mort à t_death (chemin donné), puis réapparition au spawn de son équipe 17 s plus tard."""
+    spawn = A_SPAWN if slot <= 4 else B_SPAWN
+    out = [(0.0, t_death, "death", path)]
+    out.append((t_death + 17.0, DURATION, "end", then or stay(spawn)))
+    return out
 
 
 def episodes(conn, kind="retake"):
-    return [dict(zip(("point", "team", "t0", "t1", "outcome", "data", "verdict"), r[:6] + (r[6],))) | {"data": json.loads(r[5])}
+    return [dict(zip(("point", "team", "t0", "t1", "outcome", "data", "verdict"), r[:5] + (json.loads(r[5]), r[6])))
             for r in conn.execute("SELECT point, team, t0, t1, outcome, data, verdict FROM episodes WHERE game_id = 1 AND kind = ? ORDER BY t0", (kind,))]
 
 
-def arrive(t_in, t_out=1e9):
-    """Joueur au point entre t_in et t_out, loin sinon."""
-    return lambda t: AT_POINT if t_in <= t < t_out else FAR
-
-
-# ---------------------------------------------------------------- succès
-
-def test_succes_defenseurs_morts_ou_recules_depart_a_deux_attaquants():
-    owners = [(0, 5, "none"), (5, 40, "A"), (40, 100, "B")]
-    tracks = {1: arrive(5, 38), 2: arrive(5, 1e9), 5: arrive(30), 6: arrive(30), 7: arrive(35)}
-    lives = {2: [(0.0, 36.0, "death", 5), (60.0, 100.0, "end", None)]}
-    conn = make_conn(owners, tracks, lives)
-    assert retakes.compute(conn, 1) == 1
-    [e] = episodes(conn)
-    assert (e["point"], e["team"], e["outcome"]) == ("A", "B", "success")
-    d = e["data"]
-    assert d["change_t"] == 40.0 and abs(d["push_t"] - 30.0) <= 0.5
-    assert [a["slot"] for a in d["attackers"]] == [5, 6]  # engagés au départ (le 7 arrive 5 s plus tard)
-    fates = {x["slot"]: x["fate"] for x in d["defenders"]}
-    assert fates[2] == "mort" and fates[1] == "recule" and fates[3] == "recule"
-    assert d["first_death"]["slot"] == 2 and d["first_death"]["cause"] == "tue_sur_le_point"  # le 5 tue depuis le point
-    assert e["t0"] == 20.0 and e["t1"] == 50.0  # 20 s avant, 10 s après
-
-
-def test_premiere_prise_dun_point_neutre_nest_pas_un_retake():
-    conn = make_conn([(0, 5, "none"), (5, 100, "A")], {5: arrive(10), 6: arrive(10)}, {})
-    assert retakes.compute(conn, 1) == 0
-
-
-def test_point_gris_entre_deux_proprietaires_compte_comme_un_changement():
-    owners = [(0, 5, "none"), (5, 40, "A"), (40, 50, "none"), (50, 100, "B")]
-    conn = make_conn(owners, {5: arrive(38), 6: arrive(38)}, {})
-    [e] = [x for x in episodes_of(conn) if x["outcome"] != "fail"]
-    assert e["team"] == "B" and e["data"]["change_t"] == 50.0
-
-
-def episodes_of(conn):
+def run(players, kills, owners):
+    conn = make_conn(players, kills, owners)
     retakes.compute(conn, 1)
-    return episodes(conn)
+    return conn, episodes(conn)
 
 
-def test_changement_sans_deux_attaquants_est_no_push():
-    owners = [(0, 5, "none"), (5, 40, "A"), (40, 100, "B")]
-    conn = make_conn(owners, {5: arrive(35)}, {})
-    [e] = episodes_of(conn)
-    assert e["outcome"] == "no_push" and e["data"]["push_t"] is None
+def players_for(extra):
+    base = dict(WAVE_A)
+    base.update(WAVE_B_AT_POINT)
+    base.update(extra)
+    return base
 
 
-def test_fenetre_coupee_au_changement_voisin():
-    assert ec.clip_window(40.0, 20.0, 10.0, [30.0, 40.0, 47.0], 100.0) == (30.0, 47.0)
-    assert ec.clip_window(5.0, 20.0, 10.0, [], 100.0) == (0.0, 15.0)
-    assert ec.clip_window(95.0, 20.0, 10.0, [], 100.0) == (75.0, 100.0)
+# ---------------------------------------------------------------- issues
+
+def test_retake_reussi_teamfight_gagne_puis_prise_du_point():
+    owners = [(0, 5, "none"), (5, 45, "B"), (45, 100, "A")]
+    kills = [(31.0, 1, 5), (33.0, 2, 6), (34.0, 7, 3), (36.0, 1, 7)]
+    players = players_for({3: dying(3, 34.0, leave(A_SPAWN, 24.0, 32.0)), 5: dying(5, 31.0, stay(MID)), 6: dying(6, 33.0, stay(MID)), 7: dying(7, 36.0, stay(MID))})
+    _conn, eps = run(players, kills, owners)
+    [e] = [x for x in eps if x["team"] == "A"]
+    assert (e["point"], e["outcome"]) == ("A", "success")
+    w = e["data"]["wave"]
+    assert w["size"] == 3 and w["kind"] == "teamfight" and w["tf_result"] == "won"
+    assert w["holder_before"] == "B" and w["holder_after"] == "A" and w["captured_t"] == 45.0 and w["capture_from"] == "B"
+    assert w["t_start"] <= 26.0 and w["t_contact"] == 31.0 and w["t_end"] == 45.0 and w["duration_s"] > 15
+    assert e["t0"] == w["t_start"] and e["t1"] == w["t_end"] and e["data"]["change_t"] == 45.0 and e["data"]["push_t"] == w["t_start"]
+    assert w["fight"]["losses"] == {"A": 1, "B": 3} and w["fight"]["winner"] == "A" and w["axis_frac"] is not None
+    assert [d["slot"] for d in e["data"]["deaths"]] == [5, 6, 3, 7]
+    assert {m["slot"] for m in w["members"]} == {1, 2, 3} and w["members"][2]["t_death"] == 34.0
 
 
-# ---------------------------------------------------------------- échec
+def test_retake_rate_teamfight_perdu_sans_prise():
+    kills = [(31.0, 5, 1), (33.0, 6, 2), (35.0, 5, 3)]
+    players = players_for({s: dying(s, t, leave(A_SPAWN, 20.0 + 2 * (s - 1), 28.0 + 2 * (s - 1))) for s, t in ((1, 31.0), (2, 33.0), (3, 35.0))})
+    _conn, eps = run(players, kills, B_HOLDS)
+    [e] = [x for x in eps if x["team"] == "A"]
+    assert e["outcome"] == "fail" and e["data"]["wave"]["tf_result"] == "lost" and e["data"]["wave"]["captured_t"] is None
+    assert e["data"]["wave"]["fight"]["losses"]["A"] == 3 and e["data"]["from_team"] == "B"
+    assert e["t1"] == 35.0  # fin = dernier kill du teamfight
 
-def test_echec_trois_attaquants_morts_et_survivant_recule():
+
+def test_prise_initiale_sur_point_neutre_nest_pas_un_retake():
+    owners = [(0, 30, "none"), (30, 100, "A")]
+    kills = [(31.0, 1, 5), (33.0, 2, 6), (34.0, 1, 7)]
+    players = players_for({5: dying(5, 31.0, stay(MID)), 6: dying(6, 33.0, stay(MID)), 7: dying(7, 34.0, stay(MID))})
+    _conn, eps = run(players, kills, owners)
+    [e] = [x for x in eps if x["team"] == "A"]
+    assert e["outcome"] == "initial" and e["data"]["wave"]["holder_before"] is None and e["data"]["wave"]["opening"] is True
+
+
+def test_teamfight_perdu_sur_point_neutre_est_initial_lost():
+    kills = [(31.0, 5, 1), (33.0, 6, 2), (35.0, 5, 3)]
+    players = players_for({s: dying(s, t, leave(A_SPAWN, 20.0 + 2 * (s - 1), 28.0 + 2 * (s - 1))) for s, t in ((1, 31.0), (2, 33.0), (3, 35.0))})
+    _conn, eps = run(players, kills, [(0, 60, "none"), (60, 100, "B")])
+    [e] = [x for x in eps if x["team"] == "A"]
+    assert e["outcome"] == "initial_lost" and e["data"]["from_team"] is None
+
+
+def test_teamfight_gagne_sans_prise_est_won_no_capture():
+    kills = [(31.0, 1, 5), (33.0, 2, 6), (34.0, 7, 3), (36.0, 1, 7)]
+    players = players_for({3: dying(3, 34.0, leave(A_SPAWN, 24.0, 32.0)), 5: dying(5, 31.0, stay(MID)), 6: dying(6, 33.0, stay(MID)), 7: dying(7, 36.0, stay(MID))})
+    _conn, eps = run(players, kills, B_HOLDS)
+    [e] = [x for x in eps if x["team"] == "A"]
+    assert e["outcome"] == "won_no_capture" and e["data"]["wave"]["tf_result"] == "won"
+
+
+def test_vague_sans_kill_est_no_contact():
+    _conn, eps = run(team_a_leaves([20.0, 22.0]), [], B_HOLDS)
+    [e] = eps
+    assert e["outcome"] == "no_contact" and e["data"]["wave"]["speed"] is None and e["data"]["wave"]["fight"] is None
+    assert e["t1"] > e["t0"]
+
+
+def test_un_seul_kill_isole_est_un_duel_jamais_un_retake():
+    players = {1: [(0.0, DURATION, "end", leave(A_SPAWN, 20.0, 28.0, (0.45, 0.05)))], 2: [(0.0, DURATION, "end", leave(A_SPAWN, 22.0, 30.0, (0.45, 0.05)))],
+               5: [(0.0, DURATION, "end", stay((0.45, 0.05)))]}
+    _conn, eps = run(players, [(35.0, 1, 5)], B_HOLDS)
+    [e] = [x for x in eps if x["team"] == "A"]
+    assert e["outcome"] == "duel" and e["data"]["wave"]["kind"] == "duel" and e["data"]["wave"]["tf_result"] == "duel"
+
+
+def test_vague_de_lequipe_qui_tient_le_point_est_une_defense_non_ecrite():
     owners = [(0, 5, "none"), (5, 100, "A")]
-    tracks = {5: arrive(50, 53), 6: arrive(50, 55), 7: arrive(50, 56)}
-    lives = {
-        5: [(0.0, 53.0, "death", 1), (70.0, 100.0, "end", None)],
-        6: [(0.0, 55.0, "death", 1), (70.0, 100.0, "end", None)],
-        7: [(0.0, 56.0, "death", 2), (70.0, 100.0, "end", None)],
-    }
-    conn = make_conn(owners, tracks, lives)
-    [e] = episodes_of(conn)
-    assert (e["team"], e["outcome"]) == ("B", "fail")
-    d = e["data"]
-    assert [x["slot"] for x in d["deaths"]] == [5, 6, 7]
-    assert d["first_death"]["slot"] == 5 and d["first_death"]["killer"] == 1
-    assert abs(d["push_t"] - 50.0) <= 0.5 and d["stagger_s"] == 0.0
+    kills = [(31.0, 1, 5), (33.0, 2, 6), (36.0, 1, 7)]
+    players = players_for({5: dying(5, 31.0, stay(MID)), 6: dying(6, 33.0, stay(MID)), 7: dying(7, 36.0, stay(MID))})
+    game = game_of(make_conn(players, kills, owners))
+    stats = {}
+    assert retakes.find_episodes(game, stats) == []
+    assert stats == {"defense": 1}
 
 
-def test_poussee_repoussee_a_un_seul_mort_nest_pas_ecrite():
-    owners = [(0, 5, "none"), (5, 100, "A")]
-    tracks = {5: arrive(50, 53), 6: arrive(50, 70), 7: arrive(50, 70)}
-    lives = {5: [(0.0, 53.0, "death", 1), (70.0, 100.0, "end", None)]}
-    conn = make_conn(owners, tracks, lives)
+def test_point_dont_le_proprietaire_nest_jamais_lu_donne_zero_episode():
+    owners = [(0, 100, "none")]
+    kills = [(31.0, 1, 5), (33.0, 2, 6)]
+    conn = make_conn(players_for({}), kills, owners)
     assert retakes.compute(conn, 1) == 0
 
 
-def test_poussee_dont_les_survivants_restent_sur_le_point_nest_pas_un_echec():
-    owners = [(0, 5, "none"), (5, 100, "A")]
-    tracks = {5: arrive(50, 53), 6: arrive(50, 55), 7: arrive(50)}
-    lives = {5: [(0.0, 53.0, "death", 1)], 6: [(0.0, 55.0, "death", 1)]}
-    conn = make_conn(owners, tracks, lives)
+def test_carte_sans_zone_de_depart_donne_zero_episode():
+    conn = make_conn(WAVE_A, [], B_HOLDS, map_name="Carte inconnue")
     assert retakes.compute(conn, 1) == 0
 
 
-def test_poussee_trop_courte_ne_compte_pas():
-    owners = [(0, 5, "none"), (5, 100, "A")]
-    tracks = {5: arrive(50, 50.5), 6: arrive(50, 50.5)}
-    lives = {5: [(0.0, 51.0, "death", 1)], 6: [(0.0, 52.0, "death", 1)]}
-    conn = make_conn(owners, tracks, lives)
-    assert retakes.compute(conn, 1) == 0
+def test_prise_donnee_a_une_seule_vague():
+    owners = [(0, 5, "none"), (5, 45, "B"), (45, 100, "A")]
+    players = team_a_leaves([20.0, 22.0, 30.0, 33.0], arrive_after=8.0)  # deux vagues de A, la prise de 45 s revient à la première
+    kills = [(26.0, 1, 5), (28.0, 2, 6), (29.0, 1, 7)]
+    game = game_of(make_conn(players, kills, owners))
+    outcomes = [(w["t_start"] < 28, o) for w, o, _e in retakes.classified_waves(game) if w["team"] == "A"]
+    assert sum(1 for _, o in outcomes if o == "success") == 1
 
 
 # ---------------------------------------------------------------- contrat
 
-def test_carte_sans_point_owner_ni_cadre_donne_zero_episode():
-    conn = make_conn([], {}, {}, map_name="Atlantis")
-    assert retakes.compute(conn, 1) == 0
+def test_compute_est_idempotent_garde_les_verdicts_et_ne_touche_pas_aux_rotations():
+    owners = [(0, 5, "none"), (5, 45, "B"), (45, 100, "A")]
+    kills = [(31.0, 1, 5), (33.0, 2, 6), (36.0, 1, 7)]
+    players = players_for({5: dying(5, 31.0, stay(MID)), 6: dying(6, 33.0, stay(MID)), 7: dying(7, 36.0, stay(MID))})
+    conn = make_conn(players, kills, owners)
+    conn.execute("INSERT INTO episodes (game_id, kind, point, team, t0, t1, outcome, data) VALUES (1, 'rotation', 'A', 'A', 10, 20, 'arrived', '{}')")
+    n = retakes.compute(conn, 1)
+    assert n >= 1
+    conn.execute("UPDATE episodes SET verdict = 'ok' WHERE game_id = 1 AND kind = 'retake' AND team = 'A'")
+    assert retakes.compute(conn, 1) == n
+    assert conn.execute("SELECT COUNT(*), COUNT(verdict) FROM episodes WHERE game_id = 1 AND kind = 'retake'").fetchone() == (n, 1)
+    assert conn.execute("SELECT COUNT(*) FROM episodes WHERE game_id = 1 AND kind = 'rotation'").fetchone()[0] == 1
+    assert conn.execute("SELECT revision FROM stats_meta WHERE game_id = 1 AND module = 'retakes'").fetchone()[0] == retakes.REVISION == 3
 
 
-def test_compute_est_idempotent_et_garde_les_verdicts():
-    owners = [(0, 5, "none"), (5, 40, "A"), (40, 100, "B")]
-    conn = make_conn(owners, {5: arrive(30), 6: arrive(30)}, {})
-    assert retakes.compute(conn, 1) == 1
-    conn.execute("UPDATE episodes SET verdict = 'ok' WHERE game_id = 1")
-    assert retakes.compute(conn, 1) == 1
-    assert conn.execute("SELECT COUNT(*), MAX(verdict) FROM episodes WHERE game_id = 1").fetchone() == (1, "ok")
-    assert conn.execute("SELECT revision FROM stats_meta WHERE game_id = 1 AND module = 'retakes'").fetchone()[0] == retakes.REVISION
-
-
-def test_ne_touche_pas_aux_rotations_de_la_game():
-    owners = [(0, 5, "none"), (5, 40, "A"), (40, 100, "B")]
-    conn = make_conn(owners, {5: arrive(30), 6: arrive(30)}, {})
-    conn.execute("INSERT INTO episodes (game_id, kind, point, team, t0, t1, outcome, data) VALUES (1, 'rotation', 'C', 'A', 1, 2, 'arrived', '{}')")
+def test_verdict_repris_si_le_depart_bouge_de_moins_de_cinq_secondes():
+    owners = [(0, 5, "none"), (5, 45, "B"), (45, 100, "A")]
+    kills = [(31.0, 1, 5), (33.0, 2, 6), (36.0, 1, 7)]
+    base = {5: dying(5, 31.0, stay(MID)), 6: dying(6, 33.0, stay(MID)), 7: dying(7, 36.0, stay(MID))}
+    conn = make_conn(players_for(base), kills, owners)
     retakes.compute(conn, 1)
-    assert conn.execute("SELECT COUNT(*) FROM episodes WHERE kind = 'rotation'").fetchone()[0] == 1
+    conn.execute("UPDATE episodes SET verdict = 'ko' WHERE game_id = 1 AND team = 'A'")
+    shifted = dict(base)
+    shifted.update(team_a_leaves([23.0, 25.0, 27.0], arrive_after=8.0))
+    ec.write_episodes(conn, 1, "retake", retakes.find_episodes(game_of(make_conn(players_for(shifted), kills, owners))), "retakes", 3, retakes.MATCH_S)
+    assert conn.execute("SELECT verdict FROM episodes WHERE game_id = 1 AND team = 'A'").fetchone()[0] == "ko"
 
 
-def test_distance_au_cadre():
-    rect = point_owner.point_rects("Polaris")["A"]
-    assert ec.dist_rect_m(AT_POINT, rect) == 0.0
-    assert abs(ec.dist_rect_m((rect[2] + 0.1, 0.54), rect) - 3.1) < 0.01  # 0,1 de largeur de minimap = 3,1 m
-    assert ec.dist_rect_m(None, rect) is None
-
-
-# ---------------------------------------------------------------- séries de 3 ou 4 kills
-
-def add_kills(conn, kills):
-    """kills : [(t, tueur, victime)] en secondes de game (la table est en temps de vidéo)."""
-    for t, k, v in kills:
-        conn.execute("INSERT INTO kills (game_id, t, killer_slot, victim_slot, weapon, kind) VALUES (1, ?, ?, ?, 'AR', 'kill')", (START + t, k, v))
-
-
-def series_of(conn):
-    retakes.compute(conn, 1)
-    return [e for e in episodes(conn) if e["outcome"].startswith("series_")]
-
-
-def wipe_of_attackers(n=3, view=None):
-    """L'équipe A tient le point (propriétaire A) ; les attaquants B (5, 6, 7, 8) meurent sur le point en moins de 10 s, tués par A."""
-    owners = [(0, 5, "none"), (5, 100, "A")]
-    slots = (5, 6, 7, 8)[:n]
-    deaths = {5: 53.0, 6: 54.0, 7: 56.0, 8: 57.0}
-    tracks = {x: arrive(50, deaths[x] + 0.1) for x in slots}  # sur le point jusqu'à la dernière ligne vivante
-    lives = {x: [(0.0, deaths[x], "death", x - 4), (70.0, 100.0, "end", None)] for x in slots}
-    conn = make_conn(owners, tracks, lives)
-    add_kills(conn, [(deaths[x], x - 4, x) for x in slots])
-    return conn
-
-
-def test_serie_subie_par_lattaquant_du_point_tenu_est_un_echec_de_retake():
-    conn = wipe_of_attackers()
-    [e] = series_of(conn)
-    d = e["data"]
-    assert (e["team"], e["outcome"]) == ("B", "series_fail")
-    assert (d["killer_team"], d["victim_team"], d["holder_team"], d["changed_hands"]) == ("A", "B", "A", False)
-    assert d["outcome_by_view"] == {"victim": "series_fail", "killer": "series_hold"} and d["team_by_view"] == {"victim": "B", "killer": "A"}
-    assert d["series_t"] == [53.0, 56.0] and [k["victim"] for k in d["kills"]] == [5, 6, 7] and d["push_t"] == 53.0
-    assert [x["slot"] for x in d["deaths"]] == [5, 6, 7] and d["first_death"]["slot"] == 5
-    assert e["t0"] == 33.0 and e["t1"] == 66.0  # 20 s avant le premier kill, 10 s après le dernier
-    assert [p["t"] for p in d["before"]["B"]] == [-20.0, -15.0, -10.0, -5.0, 0.0] and [p["t"] for p in d["after"]["A"]] == [0.0, 5.0, 10.0]
-    assert d["adverse_team"] == "A" and set(d["reposition"]) == {"A", "B"}
-    assert d["overlaps_fail"] is True  # la même poussée est aussi un échec du retake classique
-
-
-def test_serie_de_quatre_kills():
-    [e] = series_of(wipe_of_attackers(4))
-    assert [k["victim"] for k in e["data"]["kills"]] == [5, 6, 7, 8]
-
-
-def test_deux_kills_ne_font_pas_une_serie():
-    assert series_of(wipe_of_attackers(2)) == []
-
-
-def test_kills_trop_espaces_ou_loin_du_point_ne_font_pas_une_serie():
-    owners = [(0, 5, "none"), (5, 100, "A")]
-    lives = {5: [(0.0, 50.0, "death", 1)], 6: [(0.0, 61.0, "death", 2)], 7: [(0.0, 72.0, "death", 3)]}
-    conn = make_conn(owners, {x: arrive(40) for x in (5, 6, 7)}, lives)
-    add_kills(conn, [(50.0, 1, 5), (61.0, 2, 6), (72.0, 3, 7)])  # 11 s entre deux kills : pas de fenêtre de 10 s avec trois
-    assert series_of(conn) == []
-    conn = wipe_of_attackers()
-    conn.execute("UPDATE samples SET x = 0.2, y = 0.2")  # tous les morts sont loin du point
-    conn.execute("UPDATE lives SET x1 = 0.2, y1 = 0.2")
-    assert series_of(conn) == []
-
-
-def test_serie_subie_par_le_tenant_est_une_defense_effondree_puis_changement_de_main():
-    owners = [(0, 5, "none"), (5, 60, "B"), (60, 100, "A")]
-    deaths = {5: 50.0, 6: 52.0, 7: 55.0}
-    lives = {x: [(0.0, t, "death", x - 4)] for x, t in deaths.items()}
-    conn = make_conn(owners, {x: arrive(30, t + 0.1) for x, t in deaths.items()} | {1: arrive(58), 2: arrive(58)}, lives)
-    add_kills(conn, [(t, x - 4, x) for x, t in deaths.items()])
-    [e] = series_of(conn)
-    d = e["data"]
-    assert (e["team"], e["outcome"]) == ("B", "series_collapse") and d["holder_team"] == "B"
-    assert d["changed_hands"] is True and d["changed_to"] == "A" and d["changed_dt_s"] == 5.0
-    assert d["outcome_by_view"] == {"victim": "series_collapse", "killer": "series_changed"}
-
-
-def test_lecture_inverse_par_la_constante(monkeypatch):
-    monkeypatch.setattr(kill_series, "SERIES_VIEW", "killer")
-    [e] = series_of(wipe_of_attackers())
-    assert (e["team"], e["outcome"]) == ("A", "series_hold")  # le tenant fait la série
-    assert e["data"]["view"] == "killer" and e["data"]["outcome_by_view"]["victim"] == "series_fail"
-
-
-def test_lecture_inverse_serie_du_non_tenant_sans_changement_est_un_echec():
-    owners = [(0, 5, "none"), (5, 100, "B")]
-    deaths = {5: 50.0, 6: 52.0, 7: 55.0}
-    lives = {x: [(0.0, t, "death", x - 4)] for x, t in deaths.items()}
-    conn = make_conn(owners, {x: arrive(30, t + 0.1) for x, t in deaths.items()}, lives)
-    add_kills(conn, [(t, x - 4, x) for x, t in deaths.items()])
-    [e] = series_of(conn)
-    assert e["data"]["outcome_by_view"] == {"victim": "series_collapse", "killer": "series_fail"} and e["data"]["team_by_view"]["killer"] == "A"
-
-
-def test_serie_sans_proprietaire_connu_est_neutre():
-    conn = wipe_of_attackers()
-    conn.execute("DELETE FROM point_owner")
-    [e] = series_of(conn)
-    assert e["outcome"] == "series_neutral" and e["data"]["holder_team"] is None
-
-
-def test_verdict_dun_retake_nest_pas_repris_par_une_serie():
-    conn = make_conn([], {}, {})
-    base = {"point": "A", "team": "B", "t0": 30.0, "t1": 40.0, "data": {}}
-    ec.write_episodes(conn, 1, "retake", [dict(base, outcome="success")], "retakes", 2)
-    conn.execute("UPDATE episodes SET verdict = 'ok'")
-    ec.write_episodes(conn, 1, "retake", [dict(base, outcome="series_fail"), dict(base, outcome="success")], "retakes", 2)
-    assert sorted(conn.execute("SELECT outcome, verdict FROM episodes").fetchall(), key=lambda r: r[0]) == [("series_fail", None), ("success", "ok")]
-
-
-def test_carte_a_plusieurs_points_avec_point_owner_donne_des_episodes():
-    owners = [(0, 5, "none"), (5, 40, "A"), (40, 100, "B")]
-    conn = make_conn(owners, {}, {}, map_name="Atlantis")
-    assert retakes.compute(conn, 1) == 1
-    assert episodes(conn)[0]["outcome"] == "no_push"
+def test_fonctions_de_proprietaire_restent_disponibles_pour_rotations():
+    tl = retakes.holder_timeline([(0, 5, "none"), (5, 40, "A"), (40, 100, "B")])
+    assert retakes.holder_at(tl, 10) == "A" and retakes.holder_at(tl, 50) == "B"
+    assert retakes.owner_changes(tl) == [(40, "A", "B")]
+    assert ec.captures(tl) == [(5, None, "A"), (40, "A", "B")]
+    assert ec.captures(ec.holder_timeline([(30, 60, "A")])) == []  # première lecture sans période grise avant : pas une prise
+    assert ec.known_at(tl, 10) and not ec.known_at(tl, 500)

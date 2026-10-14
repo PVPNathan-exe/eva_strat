@@ -1,20 +1,32 @@
-"""Épisodes de retake (table `episodes`, kind = retake) : `python analysis/retakes.py --game N [--db chemin] [--dry-run] [--sheet]`.
+"""Épisodes de retake, REVISION 3 (table `episodes`, kind = retake) : `python analysis/retakes.py --game N [--db chemin] [--dry-run] [--sheet]`.
 
-Définition figée (docs/PLAN_STATS_AGENTS.md, section 2). Un **retake** est un point (le MÊME point) qui passe d'une équipe à l'autre (`point_owner`). Un propriétaire à la fois : les périodes
-grises (`none`) entre deux propriétaires différents ne comptent pas comme un propriétaire, mais le point reste « tenu » par le dernier propriétaire pendant au plus `NONE_GAP_S`
-(Outlaw redevient gris quand il est contesté). La première prise d'un point neutre n'est pas un retake. Épisodes écrits :
-- `success` : le point change de propriétaire. Fenêtre de 20 s avant à 10 s après le changement, coupée aux changements voisins. Départ (`push_t`) : début de la dernière période où au moins
-  2 attaquants (équipe qui prend) sont à moins de `R_PUSH` du point. Défenseurs au départ classés morts, reculés (au-delà de `R_RETREAT` 3 s après le changement) ou restés.
-- `no_push` : le point change de propriétaire sans 2 attaquants à moins de `R_PUSH` dans la fenêtre (prise par un seul joueur, ou position illisible) : à valider, pas un retake sûr.
-- `fail` : au moins 2 attaquants à moins de `R_PUSH` du point tenu par l'autre équipe pendant `PUSH_MIN_S`, le point ne change pas de main dans les `SUCCESS_S` qui suivent, 2 à 4 des attaquants
-  engagés meurent en `FAIL_WINDOW_S` et aucun survivant n'est à moins de `R_RETREAT` à la fin.
-Une poussée qui ne remplit pas ces conditions (un seul mort, survivants sur le point) n'est pas écrite : elle est comptée dans `measure`.
-Temps en secondes depuis le début de la game (voir episode_common), distances en mètres sur la minimap (31 m x 16,5 m : les distances au point vont de 0 à 12 à 16 m, d'où des seuils
-bien plus petits que les 15 m et 25 m du plan, qui dépassent l'arène). Atlantis et Engine : épisodes seulement si `point_owner` a des lignes pour la game (un point par lettre), sinon aucun.
-- `series_*` : séries de 3 ou 4 kills autour du point (kill_series.py : définition, QUESTION OUVERTE sur l'équipe qui fait les kills, constante SERIES_VIEW, schéma de `data`). Elles sont écrites avec les retakes
-  (kind retake) : `series_fail` (échec de retake), `series_collapse` (défense effondrée), `series_hold`, `series_changed` (suivie d'un changement de main, déjà dans les réussites), `series_neutral`.
-Causes automatiques de chaque mort d'attaquant : tueur, arme, distance du tueur au point, nombre de défenseurs vivants près du point, arrivée décalée des attaquants.
-Contrat commun des modules Stats : `compute(conn, game_id) -> int` (idempotent), `stats_meta` (module `retakes`, révision REVISION)."""
+Refonte autour de la VAGUE (docs/PLAN_STATS_AGENTS.md, section 11 ; waves.py détecte les vagues, kill_series.py décrit les séries de kills). Une **vague** est un départ du spawn (au moins 2 joueurs d'une équipe
+sortent de leur zone de départ en `WAVE_JOIN_S`). Chaque vague de l'équipe qui n'a PAS le point (ou d'un point neutre) est un épisode ; la vague de l'équipe qui TIENT le point (renfort, défense) est classée
+`defense` mais n'est pas écrite. Une vague dont le point n'est pas exploitable (propriétaire jamais lu : Ceres ; pas de lecture à cet instant) n'est pas classée.
+**Teamfight** (kill_series.py, précision de l'utilisateur du 14 octobre 2026) : suite de kills des deux équipes (≤ `WIPE_S` entre deux kills, où que ce soit sur la carte : la position n'est pas filtrée, `axis_frac` et
+`near_point` la mesurent) qui contient le premier kill d'un membre de la vague. Teamfight si les deux équipes ont au moins 2 engagés (vivants à moins de `HELP_R` du centre du combat) ou si une autre action a lieu ailleurs
+en même temps ; sinon `duel` (1 contre 1 ou 1 contre 2 sans aide possible : jamais gagné ni perdu, jamais un retake). Gagnant = l'équipe qui perd le moins de joueurs, puis qui garde le plus de survivants.
+**Issues** (`outcome`) :
+- `initial` : prise initiale, l'équipe de la vague prend un point lu neutre (premier propriétaire d'un point ou d'une instance d'Outlaw) dans [départ, fin de la série + SUCCESS_S] : PAS un retake. `data.wave.opening`
+  marque la première prise de la game.
+- `success` : retake réussi, le point passe de l'autre équipe à l'équipe de la vague dans la même fenêtre. Une prise vaut même si la série est perdue ou si elle n'a pas eu lieu (`data.wave.tf_result` : won, draw, lost, duel
+  ou none) : le propriétaire lu sur la minimap prime sur le décompte des morts ; ces cas sont comptés dans `measure` comme douteux.
+- `fail` : retake raté, point tenu par l'autre équipe, teamfight perdu (ou à égalité) avec au moins `FAIL_MIN_DEAD` morts (2) de l'équipe de la vague (série entière), sans prise. `initial_lost` : la même chose sur un
+  point neutre (teamfight d'ouverture perdu).
+- `won_no_capture` : teamfight gagné sans prise du point dans la fenêtre. `duel` : la série n'est pas un teamfight. `indecis` : égalité avec moins de 2 morts. `no_contact` : aucun kill d'un membre de la vague avant sa limite.
+- `defense` (jamais écrite) : l'équipe de la vague tient déjà le point à son premier kill.
+Correspondance des issues de la révision 2 (le site les lisait) : `success` -> `success` (ou `initial` si le point était neutre) ; `no_push` (changement sans 2 attaquants au point) -> plus d'épisode si aucune vague ne l'explique
+(prise hors vague, comptée dans `measure`, la prise reste dans les bandes de propriétaire) ; `fail` -> `fail` (plus d'exigence de survivants repliés : `data.wave.survivors_retreated` les compte) ; `series_fail` -> `fail` ;
+`series_changed` -> `success` ; `series_collapse` (le tenant subit la série) -> `success` ou `won_no_capture` de la vague adverse ; `series_hold` -> `defense` (non écrit) ; `series_neutral` -> `initial`, `initial_lost`
+ou `won_no_capture`. Nouvelles issues sans équivalent : `initial`, `initial_lost`, `won_no_capture`, `duel`, `indecis`, `no_contact`.
+Temps en secondes depuis le début de la game ; distances en mètres. Épisode : `team` = équipe de la vague, `point` = point visé (celui pris, sinon le plus proche du barycentre au premier kill, Outlaw : le point actif),
+`t0` = départ du spawn (`t_start`), `t1` = résolution (`t_end` : dernier kill du teamfight, ou instant de la prise s'il est plus tard ; sans kill, fin de suivi de la vague).
+Schéma de `data` : clés lues par le site (révision 2, remplies avec les valeurs de la vague) : change_t (instant de la prise, sinon None), push_t (= t_start), window [t0 - 5 s, t1 + 5 s], from_team (tenant avant),
+to_team (équipe de la vague), attackers [{slot, pos, dist_m}] (membres, au premier kill), defenders [{slot, pos, dist_m, fate, death_t}] (ennemis vivants au premier kill ; fate mort, recule, reste), first_death, deaths
+[{slot, t, dt_push, killer, weapon, killer_dist_m, defenders_near, cause, pos, team}] (victimes du teamfight), stagger_s (écart de sortie des deux premiers joueurs), survivors (membres vivants 3 s après le teamfight).
+Nouveau : `wave` {team, t_start, t_full, t_contact (premier kill d'un membre), t_end, duration_s, to_contact_s, to_fight_s, kind (teamfight, duel ou None), n_fights, axis_frac (0 au spawn de la vague, 1 à celui de l'adversaire ; None sur Outlaw), size, speed (rapide, progressif ou None sans contact), n_stops, stop_s, mean_speed_ms, path_m, point, holder_before, holder_after,
+tf_result, captured_t, capture_from, opening (première prise de la game), survivors_retreated, members [{slot, life_idx, t_exit, t_death}], fight {t_first, t_last, n_kills, losses, alive_end, winner, kind, foyers, engaged {A, B}, center, near_point}}.
+Idempotent, verdicts conservés au recalcul si l'épisode correspond (même équipe, même point, début à 5 s près). Contrat commun des modules Stats : `compute(conn, game_id) -> int`, `stats_meta` (module `retakes`, révision REVISION)."""
 
 import argparse
 import json
@@ -22,283 +34,239 @@ import sys
 
 import episode_common as ec
 import kill_series
+import waves as waves_mod
 
 MODULE = "retakes"
-REVISION = 2  # 2 : séries de kills, cartes à plusieurs points avec point_owner, instances Outlaw fondues
-# Valeurs étalonnées sur 10 games (Polaris 16, 22, 26 ; The Cliff 25, 37 ; Reef Point 27, 34 ; Silva 28 ; Artefact 36 ; Outlaw 32 : 36 changements de propriétaire du même point). Les 15 m et 25 m du plan
-# dépassent l'arène (31 m x 16,5 m, un joueur est au plus à 12 à 16 m d'un point) : balayage R_PUSH 3 à 6 m et R_RETREAT 5 à 9 m, voir le rapport de mesure.
-R_PUSH = 4.0  # « au point » : à moins de 4 m du cadre. 3 m : 2 changements sur 36 sans départ ; 4 m : 1 sur 36 ; 6 m : 0 mais 62 poussées candidates écartées contre 14 (le point est dans la zone de passage)
-R_RETREAT = 7.0  # « reculé » : à plus de 7 m du point (médiane des distances de tous les joueurs au point : 4,6 à 9 m selon la carte). 5 à 9 m donnent 18 à 15 échecs avec R_PUSH 4 m, pas de cassure nette
-PRE_S = 20.0  # fenêtre d'un retake : 20 s avant le changement
-POST_S = 10.0  # et 10 s après
-PUSH_MIN_S = 1.5  # deux attaquants au point au moins 1,5 s de suite pour parler de poussée
-FAIL_WINDOW_S = 10.0  # les morts d'un échec tombent dans les 10 s qui suivent le début de la poussée
-SUCCESS_S = 15.0  # un changement de propriétaire dans les 15 s qui suivent le début d'une poussée en fait un succès, pas un échec
-RETREAT_AFTER_S = 3.0  # un défenseur est dit reculé à 3 s après le changement
-NONE_GAP_S = 30.0  # un point gris reste « tenu » par le dernier propriétaire pendant 30 s au plus
-MIN_OWNER_S = 2.0  # un propriétaire lu moins de 2 s est un accident de lecture
-STEP_S = 0.5  # pas de balayage des positions
-FAIL_PRE_S = 5.0  # fenêtre d'un échec : 5 s avant le début de la poussée
-FAIL_POST_S = 15.0  # et 15 s après
-STAGGER_S = 3.0  # attaquants arrivés à plus de 3 s d'écart : arrivée décalée
+REVISION = 3  # 3 : refonte autour des vagues (initial, success, fail, won_no_capture, no_contact), plus de séries de kills ; 2 : séries de kills ; 1 : poussée au point
+SUCCESS_S = 15.0  # une prise dans les 15 s qui suivent la fin du teamfight (ou le départ, sans kill) fait partie de la vague
+FAIL_MIN_DEAD = 2  # un teamfight perdu : au moins 2 morts de la vague
+R_RETREAT = 7.0  # « reculé » : à plus de 7 m du point, 3 s après le teamfight
+RETREAT_AFTER_S = 3.0
 KILLER_NEAR_M = 4.0  # tueur « sur le point » à moins de 4 m
+PAD_S = 5.0  # la fenêtre d'un épisode déborde de 5 s de chaque côté
+MATCH_S = 5.0  # un épisode recalculé reprend le verdict d'un ancien de la même équipe et du même point dont le début est à 5 s au plus
+
+# Fonctions de propriétaire déplacées dans episode_common (rotations.py les appelle par ce module).
+holder_timeline, owner_changes, holder_at = ec.holder_timeline, ec.owner_changes, ec.holder_at
 
 
-# ---------------------------------------------------------------- propriétaire tenu
+# ---------------------------------------------------------------- contexte des points
 
-def holder_timeline(segs):
-    """Périodes de propriétaire d'un point : [(t0, t1, X)] avec X = A ou B, les périodes grises comblées par le dernier propriétaire (au plus NONE_GAP_S), sinon X = None.
-    Les périodes de moins de MIN_OWNER_S sont ignorées."""
-    segs = [s for s in segs if s[1] - s[0] >= MIN_OWNER_S]
-    out, last, last_end = [], None, None
-    for a, b, owner in segs:
-        if owner in ec.TEAMS:
-            out.append((a, b, owner))
-            last, last_end = owner, b
+def instance_contexts(game):
+    """Une entrée par instance de point : {inst, timeline, caps}. Une instance sans aucune période de propriétaire lue (carte sans point_owner) est ignorée plus loin."""
+    out = []
+    for inst in game["instances"]:
+        segs = [s for s in game["owners"].get(inst["point"], []) if inst["t0"] - 1 <= (s[0] + s[1]) / 2 <= inst["t1"] + 1]
+        tl = ec.holder_timeline(segs)
+        if not any(x is not None for _a, _b, x in tl):  # aucune équipe n'a jamais été lue propriétaire : le propriétaire n'est pas lu sur cette carte (Ceres), on ne sait rien
+            tl = []
+        out.append({"inst": inst, "timeline": tl, "caps": ec.captures(tl)})
+    return out
+
+
+def _live(c, lo, hi):
+    """L'instance a des lectures de propriétaire et recouvre [lo, hi]."""
+    return bool(c["timeline"]) and c["inst"]["t1"] >= lo - 1 and c["inst"]["t0"] <= hi + 1
+
+
+def pick_target(game, wave, ctxs, hi, used):
+    """(indice de l'instance, prise) visées par la vague : la première prise de l'équipe de la vague dans [t_start, hi] (une prise n'est donnée qu'à une vague), sinon (instance la plus proche du
+    barycentre au premier kill ou au départ, None) ; (None, None) sans instance exploitable."""
+    team, lo = wave["team"], wave["t_start"]
+    best = None
+    for ci, c in enumerate(ctxs):
+        if not _live(c, lo, hi):
             continue
-        fill_end = a if last is None else min(b, last_end + NONE_GAP_S)
-        if last is not None and fill_end > a:
-            out.append((a, fill_end, last))
-        if fill_end < b:
-            out.append((max(a, fill_end), b, None))
-    return out
+        for cap in c["caps"]:
+            if cap[2] == team and lo <= cap[0] <= hi and (ci, cap[0]) not in used and (best is None or cap[0] < best[1][0]):
+                best = (ci, cap)
+    if best:
+        return best
+    t_ref = wave["t_contact"] if wave["t_contact"] is not None else lo
+    cands = [ci for ci, c in enumerate(ctxs) if ec.known_at(c["timeline"], t_ref) and c["inst"]["t0"] - 1 <= t_ref <= c["inst"]["t1"] + 1]
+    if not cands:
+        return None, None
+    cen = waves_mod.centroid_of(game, wave["members"], t_ref)
+    key = (lambda ci: ec.dist_rect_m(cen, ctxs[ci]["inst"]["rect"])) if cen else (lambda ci: 0)
+    return min(cands, key=key), None
 
 
-def owner_changes(timeline):
-    """Changements de propriétaire : [(t, ancien, nouveau)] à l'instant où le nouveau commence."""
-    out, prev = [], None
-    for a, _b, x in timeline:
-        if x is None:
-            continue
-        if prev is not None and x != prev:
-            out.append((a, prev, x))
-        prev = x
-    return out
+# ---------------------------------------------------------------- classement
+
+def tf_result(wave):
+    """Résultat du teamfight pour l'équipe de la vague : won, lost, draw, duel (la série n'est pas un teamfight : jamais gagnée ni perdue) ou none (aucun kill)."""
+    f = wave["fight"]
+    if f is None:
+        return "none"
+    if f["kind"] == "duel":
+        return "duel"
+    return "won" if f["winner"] == wave["team"] else "draw" if f["winner"] is None else "lost"
 
 
-def holder_at(timeline, t):
-    for a, b, x in timeline:
-        if a - 1e-6 <= t < b:
-            return x
-    return None
+def classify(wave, holder, cap, result):
+    """Issue d'une vague (voir l'en-tête). `holder` : tenant avant (A, B ou None) ; `cap` : prise de la vague (t, ancien, nouveau) ou None ; `result` : tf_result."""
+    team = wave["team"]
+    if cap is not None:
+        return "initial" if cap[1] is None else "success"
+    if holder == team:
+        return "defense"
+    if result == "none":
+        return "no_contact"
+    lost_n = wave["fight"]["losses"][team]
+    if result == "duel":
+        return "duel"
+    if result == "won":
+        return "won_no_capture"
+    if lost_n >= FAIL_MIN_DEAD:
+        return "initial_lost" if holder is None else "fail"
+    return "indecis"
 
 
-# ---------------------------------------------------------------- balayage des attaquants
-
-def push_flags(game, rect, team, lo, hi):
-    """[(t, joueurs de l'équipe à moins de R_PUSH du point)] toutes les STEP_S de lo à hi."""
-    out, t = [], lo
-    while t <= hi + 1e-9:
-        out.append((round(t, 3), [s for s, _d in ec.team_near(game, team, rect, t, R_PUSH)]))
-        t += STEP_S
-    return out
-
-
-def push_runs(flags):
-    """Périodes où au moins 2 attaquants sont au point : [(début, fin)] (fin = dernier instant vrai)."""
-    runs, start, prev = [], None, None
-    for t, near in flags:
-        if len(near) >= 2:
-            if start is None:
-                start = t
-            prev = t
-        elif start is not None:
-            runs.append((start, prev))
-            start = None
-    if start is not None:
-        runs.append((start, prev))
-    return runs
+def wave_end(wave, cap):
+    """Résolution : dernier kill du teamfight, ou prise si elle est plus tardive ; sans kill, fin de suivi de la vague (dernier mort des membres, sinon limite)."""
+    f = wave["fight"]
+    if f is not None:
+        t = f["t_last"]
+    else:
+        t = min(wave["limit"], max(m["life_end"] for m in wave["members"]))
+    return round(max(t, cap[0]) if cap else t, 2)
 
 
-def _death(game, slot, t_from, t_to):
-    """Mort du joueur entre t_from et t_to : dict de sa vie, sinon None."""
-    for v in game["lives"].get(slot, []):
-        if v["ended"] == "death" and t_from - 1e-6 <= v["t1"] <= t_to + 1e-6:
-            return v
-    return None
-
+# ---------------------------------------------------------------- données de l'épisode
 
 def _fmt_pos(p):
     return None if p is None else [round(p[0], 4), round(p[1], 4)]
 
 
 def _player(game, slot, rect, t):
-    """Fiche d'un joueur à l'instant t : slot, position, distance au point."""
     p = ec.pos_at(game, slot, t)
     d = ec.dist_rect_m(p, rect)
     return {"slot": slot, "pos": _fmt_pos(p), "dist_m": None if d is None else round(d, 1)}
 
 
-def _death_info(game, slot, v, rect, def_team, push_t):
-    """Mort d'un attaquant et cause automatique : tueur, arme, distance du tueur au point, défenseurs vivants près du point."""
-    killer = v.get("killer_slot")
-    kd = ec.dist_rect_m(ec.pos_at(game, killer, v["t1"]), rect) if killer else None
-    near_def = len(ec.team_near(game, def_team, rect, v["t1"], R_RETREAT))
-    if killer is None:
-        cause = "sans_tueur"
-    elif ec.team_of(killer) != def_team:
-        cause = "autre"
-    elif kd is not None and kd <= KILLER_NEAR_M:
-        cause = "tue_sur_le_point"
-    else:
-        cause = "tue_a_distance"
-    return {"slot": slot, "t": round(v["t1"], 1), "dt_push": round(v["t1"] - push_t, 1), "killer": killer, "weapon": v.get("weapon"),
-            "killer_dist_m": None if kd is None else round(kd, 1), "defenders_near": near_def, "cause": cause,
-            "pos": _fmt_pos((v["x1"], v["y1"]) if v.get("x1") is not None else None)}
+def _death_row(game, k, rect, t_start):
+    """Mort d'une victime du teamfight au format des retakes : slot, t, tueur, arme, distance du tueur au point, tueurs proches, cause, position."""
+    kd = ec.dist_rect_m(ec.pos_at(game, k["killer"], k["t"]), rect)
+    p = kill_series.death_pos(game, k["victim"], k["t"])
+    return {"slot": k["victim"], "t": k["t"], "dt_push": round(k["t"] - t_start, 1), "killer": k["killer"], "weapon": k["weapon"], "killer_dist_m": None if kd is None else round(kd, 1),
+            "defenders_near": len(ec.team_near(game, ec.team_of(k["killer"]), rect, k["t"], R_RETREAT)),
+            "cause": "tue_sur_le_point" if kd is not None and kd <= KILLER_NEAR_M else "tue_a_distance", "pos": _fmt_pos(p), "team": ec.team_of(k["victim"])}
 
 
-def _stagger(game, flags, push_t):
-    """Écart (s) entre l'arrivée du premier et du deuxième attaquant au point, depuis le début de la poussée : None si inconnu."""
-    first = {}
-    for t, near in flags:
-        if t < push_t - 10:
+def _defenders(game, team, rect, t_ref, fight, t_after):
+    """Ennemis vivants à t_ref : fiche, et sort (mort dans le teamfight, recule, reste) à la fin."""
+    dead = {k["victim"]: k["t"] for k in (fight["kills"] if fight else [])}
+    out = []
+    for s in ec.team_slots(ec.other_team(team)):
+        if not ec.alive_at(game, s, t_ref):
             continue
-        for s in near:
-            first.setdefault(s, t)
-    ts = sorted(first.values())
-    return round(ts[1] - ts[0], 1) if len(ts) >= 2 else None
+        d_after = ec.dist_rect_m(ec.pos_at(game, s, t_after), rect)
+        fate = "mort" if s in dead else "recule" if d_after is not None and d_after > R_RETREAT else "reste"
+        out.append(dict(_player(game, s, rect, t_ref), fate=fate, death_t=dead.get(s)))
+    return out
+
+
+def build_data(game, wave, ctxs, ci, cap, holder, result, outcome, t_end, opening):
+    """`data` de l'épisode (voir l'en-tête)."""
+    team, f = wave["team"], wave["fight"]
+    inst = ctxs[ci]["inst"]
+    rect = inst["rect"]
+    t_ref = wave["t_contact"] if wave["t_contact"] is not None else wave["t_start"]
+    t_after = (f["t_last"] if f else t_end) + RETREAT_AFTER_S
+    members = wave["members"]
+    survivors = [m["slot"] for m in members if ec.alive_at(game, m["slot"], t_after)]
+    retreated = sum(1 for s in survivors if (ec.dist_rect_m(ec.pos_at(game, s, t_after), rect) or 0) > R_RETREAT)
+    deaths = [_death_row(game, k, rect, wave["t_start"]) for k in (f["kills"] if f else [])]
+    after = ec.holder_at(ctxs[ci]["timeline"], t_end + 1.0)
+    slots = sorted(m["slot"] for m in members)
+    exits = sorted(m["t_exit"] for m in members)
+    w = {"team": team, "t_start": wave["t_start"], "t_full": wave["t_full"], "t_contact": wave["t_contact"], "t_end": t_end, "duration_s": round(t_end - wave["t_start"], 1),
+         "to_contact_s": wave["to_contact_s"], "size": wave["size"], "speed": wave["speed"] if wave["t_contact"] is not None else None, "n_stops": wave["n_stops"], "stop_s": wave["stop_s"],
+         "mean_speed_ms": wave["mean_speed_ms"], "path_m": wave["path_m"], "point": inst["point"], "holder_before": holder, "holder_after": after, "tf_result": result,
+         "captured_t": None if cap is None else round(cap[0], 1), "capture_from": None if cap is None else cap[1], "opening": opening, "survivors_retreated": retreated,
+         "members": [{k: m[k] for k in ("slot", "life_idx", "t_exit", "t_death")} for m in members],
+         "kind": None if f is None else f["kind"], "to_fight_s": wave["to_fight_s"], "n_fights": wave["n_fights"], "axis_frac": wave["axis_frac"],
+         "fight": None if f is None else {k: f[k] for k in ("t_first", "t_last", "n_kills", "losses", "alive_end", "winner", "kind", "foyers", "engaged", "center")} | {"near_point": kill_series.victims_near_share(game, f, rect)}}
+    return {"change_t": None if cap is None else round(cap[0], 1), "push_t": wave["t_start"], "window": [round(max(0.0, wave["t_start"] - PAD_S), 2), round(min(game["duration"], t_end + PAD_S), 2)],
+            "from_team": holder, "to_team": team,
+            "attackers": [_player(game, s, rect, t_ref) for s in slots], "defenders": _defenders(game, team, rect, t_ref, f, t_after),
+            "first_death": deaths[0] if deaths else None, "deaths": deaths, "stagger_s": round(exits[1] - exits[0], 1) if len(exits) > 1 else None,
+            "survivors": survivors, "wave": w}
 
 
 # ---------------------------------------------------------------- épisodes
 
-def _success(game, inst, change, others, att, dfn):
-    """Épisode d'un changement de propriétaire (t, ancien, nouveau) ; outcome success ou no_push."""
-    t, _old, _new = change
-    rect, duration = inst["rect"], game["duration"]
-    lo, hi = ec.clip_window(t, PRE_S, POST_S, others, duration)
-    flags = push_flags(game, rect, att, lo, min(hi, t + 2.0))
-    runs = [r for r in push_runs(flags) if r[0] <= t + 2.0 and r[1] >= lo]
-    outcome = "success" if runs else "no_push"
-    push_t = runs[-1][0] if runs else None
-    ref = push_t if push_t is not None else max(lo, t - 5.0)
-    engaged = engaged_players(game, rect, att, ref) or [s for s in ec.team_slots(att) if ec.alive_at(game, s, ref)]
-    defenders = []
-    for s in ec.team_slots(dfn):
-        if not ec.alive_at(game, s, ref):
+def classified_waves(game):
+    """Toutes les vagues de la game avec leur issue : [(vague, issue, épisode ou None)] triées par départ ; `defense` et les vagues sans point exploitable n'ont pas d'épisode (issue None sans point)."""
+    ctxs = instance_contexts(game)
+    out, used, first_cap = [], set(), True
+    for w in waves_mod.find_waves(game):
+        f = w["fight"]
+        hi = (f["t_last"] if f else w["limit"]) + SUCCESS_S
+        ci, cap = pick_target(game, w, ctxs, hi, used)
+        if ci is None:
+            out.append((w, None, None))
             continue
-        v = _death(game, s, ref, t + POST_S)
-        d_after = ec.dist_rect_m(ec.pos_at(game, s, t + RETREAT_AFTER_S), rect)
-        if v is not None and v["t1"] <= t + RETREAT_AFTER_S:
-            fate = "mort"
-        elif d_after is not None and d_after > R_RETREAT:
-            fate = "recule"
-        elif v is not None:
-            fate = "mort_apres"
-        else:
-            fate = "reste"
-        info = _player(game, s, rect, ref)
-        info.update({"fate": fate, "death_t": None if v is None else round(v["t1"], 1)})
-        defenders.append(info)
-    deaths = [dict(_death_info(game, s, v, rect, dfn, ref), team=att) for s in engaged for v in [_death(game, s, ref, t + POST_S)] if v is not None]
-    deaths += [dict(_death_info(game, d["slot"], _death(game, d["slot"], ref, t + POST_S), rect, att, ref), team=dfn) for d in defenders if d["death_t"] is not None and d["fate"] in ("mort", "mort_apres")]
-    deaths.sort(key=lambda d: d["t"])
-    data = {
-        "change_t": round(t, 1), "push_t": push_t, "window": [lo, hi], "from_team": dfn, "to_team": att,
-        "attackers": [_player(game, s, rect, ref) for s in engaged], "defenders": defenders,
-        "first_death": deaths[0] if deaths else None, "deaths": deaths,
-        "stagger_s": _stagger(game, flags, push_t) if push_t is not None else None,
-        "defenders_left": sum(1 for d in defenders if d["fate"] == "reste"),
-    }
-    return {"point": inst["point"], "team": att, "t0": lo, "t1": hi, "outcome": outcome, "data": data}
-
-
-def _fail_candidates(game, inst, timeline, changes_t):
-    """Poussées sans changement de propriétaire : [(début de la poussée, attaquants, flags)] sur la plage de l'instance."""
-    rect = inst["rect"]
-    out = []
-    for a, b, holder in timeline:
-        if holder is None:
+        if cap is not None:
+            used.add((ci, cap[0]))
+        t_ref = w["t_contact"] if w["t_contact"] is not None else w["t_start"]
+        holder = cap[1] if cap is not None else ec.holder_at(ctxs[ci]["timeline"], t_ref)
+        result = tf_result(w)
+        outcome = classify(w, holder, cap, result)
+        if outcome == "defense":
+            out.append((w, outcome, None))
             continue
-        att = ec.other_team(holder)
-        flags = push_flags(game, rect, att, max(a, inst["t0"]), min(b, inst["t1"]))
-        for s, e in push_runs(flags):
-            if e - s + STEP_S < PUSH_MIN_S:
-                continue
-            if any(s - 1e-6 <= c <= s + SUCCESS_S for c in changes_t):
-                continue
-            out.append((s, e, att, holder, flags))
+        t_end = wave_end(w, cap)
+        opening = bool(cap is not None and cap[1] is None and first_cap)
+        first_cap = first_cap and cap is None
+        data = build_data(game, w, ctxs, ci, cap, holder, result, outcome, t_end, opening)
+        ep = {"point": ctxs[ci]["inst"]["point"], "team": w["team"], "t0": w["t_start"], "t1": t_end, "outcome": outcome, "data": data}
+        out.append((w, outcome, ep))
     return out
-
-
-def engaged_players(game, rect, team, t):
-    """Joueurs vivants de l'équipe à moins de R_RETREAT du point à l'instant t : ceux qui prennent part à la poussée."""
-    out = []
-    for x in ec.team_slots(team):
-        d = ec.dist_rect_m(ec.pos_at(game, x, t), rect) if ec.alive_at(game, x, t) else None
-        if d is not None and d <= R_RETREAT:
-            out.append(x)
-    return out
-
-
-def classify_push(game, inst, s, att, dfn, flags):
-    """Épisode `fail` d'une poussée qui commence en s, ou (None, raison) : morts des attaquants engagés et survivants."""
-    rect = inst["rect"]
-    engaged = engaged_players(game, rect, att, s)
-    t_end = s + FAIL_WINDOW_S
-    dead = [(x, _death(game, x, s, t_end)) for x in engaged]
-    dead = [(x, v) for x, v in dead if v is not None]
-    if not 2 <= len(dead) <= 4:
-        return None, "morts"
-    for x in engaged:
-        if any(x == d[0] for d in dead):
-            continue
-        d_end = ec.dist_rect_m(ec.pos_at(game, x, t_end), rect)
-        if d_end is not None and d_end <= R_RETREAT:
-            return None, "survivants"
-    deaths = sorted((dict(_death_info(game, x, v, rect, dfn, s), team=att) for x, v in dead), key=lambda d: d["t"])
-    lo, hi = max(0.0, s - FAIL_PRE_S), min(game["duration"], s + FAIL_POST_S)
-    data = {
-        "push_t": round(s, 1), "window": [lo, hi], "from_team": dfn, "to_team": att,
-        "attackers": [_player(game, x, rect, s) for x in engaged], "defenders": [_player(game, x, rect, s) for x in ec.team_slots(dfn) if ec.alive_at(game, x, s)],
-        "first_death": deaths[0], "deaths": deaths, "stagger_s": _stagger(game, flags, s),
-        "survivors": [x for x in engaged if all(x != d[0] for d in dead)],
-    }
-    return {"point": inst["point"], "team": att, "t0": round(lo, 2), "t1": round(hi, 2), "outcome": "fail", "data": data}, None
 
 
 def find_episodes(game, stats=None):
-    """Tous les épisodes de retake d'une game chargée (episode_common.load_game), triés par temps. `stats` (dict) : compte les poussées écartées par raison."""
-    out = []
-    for inst in game["instances"]:
-        segs = [s for s in game["owners"].get(inst["point"], []) if inst["t0"] - 1 <= (s[0] + s[1]) / 2 <= inst["t1"] + 1]
-        timeline = holder_timeline(segs)
-        changes = owner_changes(timeline)
-        for c in changes:
-            out.append(_success(game, inst, c, [x[0] for x in changes], c[2], c[1]))
-        for s, _e, att, holder, flags in _fail_candidates(game, inst, timeline, [c[0] for c in changes]):
-            ep, why = classify_push(game, inst, s, att, holder, flags)
-            if ep is None:
-                if stats is not None:
-                    stats[why] = stats.get(why, 0) + 1
-                continue
-            if out and any(o["outcome"] == "fail" and o["point"] == ep["point"] and o["team"] == ep["team"] and abs(o["data"]["push_t"] - s) < FAIL_WINDOW_S for o in out):
-                continue
-            out.append(ep)
-        for ep in kill_series.find_series(game, inst, lambda t, tl=timeline: holder_at(tl, t), changes):
-            first, last = ep["data"]["series_t"]
-            ep["data"]["overlaps_fail"] = any(o["outcome"] == "fail" and o["point"] == ep["point"] and first - FAIL_WINDOW_S <= o["data"]["push_t"] <= last for o in out)
-            out.append(ep)
-    return sorted(out, key=lambda e: e["t0"])
+    """Épisodes de retake d'une game chargée (episode_common.load_game), triés par temps. `stats` (dict) : compte les vagues par issue, y compris `defense` et `sans_point`."""
+    eps = []
+    for _w, outcome, ep in classified_waves(game):
+        if stats is not None:
+            key = outcome or "sans_point"
+            stats[key] = stats.get(key, 0) + 1
+        if ep is not None:
+            eps.append(ep)
+    return sorted(eps, key=lambda e: e["t0"])
+
+
+def measure(game):
+    """Chiffres de contrôle d'une game : vagues par issue (`defense` et `sans_point` compris), prises de point (changements de main et prises initiales), prises hors vague (aucune vague ne les explique),
+    prises douteuses (retake ou prise initiale avec un teamfight perdu), vagues par vitesse."""
+    cw = classified_waves(game)
+    issues, speeds = {}, {}
+    for w, outcome, _ep in cw:
+        issues[outcome or "sans_point"] = issues.get(outcome or "sans_point", 0) + 1
+        if w["t_contact"] is not None:
+            speeds[w["speed"]] = speeds.get(w["speed"], 0) + 1
+    taken = {(e["point"], e["data"]["wave"]["captured_t"]) for _w, _o, e in cw if e and e["data"]["wave"]["captured_t"] is not None}
+    caps = [(c["inst"]["point"], round(cap[0], 1)) for c in instance_contexts(game) for cap in c["caps"]]
+    doubtful = sum(1 for _w, _o, e in cw if e and e["data"]["wave"]["captured_t"] is not None and e["data"]["wave"]["tf_result"] == "lost")
+    return {"vagues": len(cw), "issues": issues, "vitesse": speeds, "prises": len(caps), "prises_hors_vague": sum(1 for c in caps if c not in taken), "prises_avec_teamfight_perdu": doubtful}
 
 
 def compute(conn, game_id):
     """Efface puis réécrit les épisodes de retake de la game ; renvoie leur nombre. Écrit aussi stats_meta."""
     game = ec.load_game(conn, game_id)
     episodes = find_episodes(game) if game else []
-    return ec.write_episodes(conn, game_id, "retake", episodes, MODULE, REVISION)
+    return ec.write_episodes(conn, game_id, "retake", episodes, MODULE, REVISION, MATCH_S)
 
 
 def sheet_rows(conn, game_id, episodes):
-    """Lignes Markdown de la feuille de validation : game, instant dans la vidéo (s et m:ss), type, résultat, joueurs."""
+    """Lignes Markdown de la feuille de validation : game, instant dans la vidéo (s et m:ss), issue, vitesse, équipe."""
     start = conn.execute("SELECT start_s FROM games WHERE id = ?", (game_id,)).fetchone()[0]
     rows = []
     for e in episodes:
-        d = e["data"]
-        t_ref = d.get("push_t") if d.get("push_t") is not None else d.get("change_t", e["t0"])
-        vt = start + t_ref
-        who = f"attaque {e['team']} : " + ", ".join(str(a["slot"]) for a in d["attackers"])
-        fd = d.get("first_death")
-        rows.append(f"| {game_id} | {vt:.0f} s ({ec.mmss(vt)}) | retake point {e['point']} | {e['outcome']} | {who}" + (f" ; premier mort le {fd['slot']} a {fd['t']:.0f} s de jeu" if fd else "") + " |")
+        w = e["data"]["wave"]
+        vt = start + e["t0"]
+        rows.append(f"| {game_id} | {vt:.0f} s ({ec.mmss(vt)}) | équipe {e['team']}, {w['size']} joueurs | point {e['point']} | {e['outcome']} | {w['speed'] or '-'} | contact {w['to_contact_s']} s, fin {w['duration_s']} s |")
     return rows
 
 
@@ -306,7 +274,7 @@ def main(argv=None):
     import db
     import paths
 
-    parser = argparse.ArgumentParser(description="Calcule les épisodes de retake d'une game.")
+    parser = argparse.ArgumentParser(description="Calcule les épisodes de retake (vagues) d'une game.")
     parser.add_argument("--game", type=int, required=True)
     parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--dry-run", action="store_true", help="Calcule et affiche les chiffres sans rien écrire")
@@ -317,13 +285,7 @@ def main(argv=None):
     if args.dry_run or args.sheet:
         stats = {}
         episodes = find_episodes(game, stats) if game else []
-        if args.sheet:
-            print("\n".join(sheet_rows(conn, args.game, episodes)))
-        else:
-            counts = {}
-            for e in episodes:
-                counts[e["outcome"]] = counts.get(e["outcome"], 0) + 1
-            print(json.dumps({MODULE: len(episodes), "par_resultat": counts, "poussees_ecartees": stats}, ensure_ascii=False))
+        print("\n".join(sheet_rows(conn, args.game, episodes)) if args.sheet else json.dumps({MODULE: len(episodes), "vagues_par_issue": stats, "mesure": measure(game) if game else None}, ensure_ascii=False))
         return 0
     print(json.dumps({MODULE: compute(conn, args.game)}, ensure_ascii=False))
     return 0
