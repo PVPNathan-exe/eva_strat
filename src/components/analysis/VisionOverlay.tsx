@@ -4,21 +4,26 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { analysisApi } from '../../lib/analysisApi';
+import { statsApi } from '../../lib/statsApi';
 import { formatTime } from '../../lib/timeline';
 import type { VisionLayers } from '../../lib/vision';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game, Sample, Zone, Zones } from '../../types/analysis';
+import type { LifeLoadoutAt } from '../../types/stats';
 import { ZONE_LABELS } from '../../types/analysis';
 import { flagKey, observedAt, unconfirmedSet, zoneCells } from '../../lib/replayFlags';
 import { useGameFlags } from './useGameFlags';
 
 const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
 const KILLFEED = { x: 0.78, y: 0.19, w: 0.22, h: 0.3 }; // même zone que analysis/killfeed.py
+// Géométrie des bandeaux d'une équipe : les 4 ne sont pas des quarts égaux (mesurée, voir analysis/loadout.py : BANNER_PITCH, BANNER_WIDTH, BOXES), cases relatives à un bandeau.
+const BANNER_PITCH = 0.2548;
+const BANNER_WIDTH = 0.2377;
 const ICON_BOXES = {
-  arme1: { x: 0.3, w: 0.24, y: 0.33, h: 0.17 },
-  arme2: { x: 0.53, w: 0.27, y: 0.33, h: 0.17 },
-  gadget: { x: 0.8, w: 0.16, y: 0.33, h: 0.17 },
-} as const; // mêmes cases que analysis/loadout.py (relatives à un bandeau)
+  arme1: { x: 0.3, w: 0.26, y: 0.26, h: 0.24 },
+  arme2: { x: 0.56, w: 0.26, y: 0.26, h: 0.24 },
+  gadget: { x: 0.84, w: 0.15, y: 0.26, h: 0.24 },
+} as const;
 const number = (slot: number) => (slot <= 4 ? slot : slot + 1);
 
 function nearest(times: number[], t: number): number | null {
@@ -76,6 +81,18 @@ export function VisionOverlay({ width, height, layers }: { width: number; height
 
   const { flags, reliability } = useGameFlags(gameId ?? -1, game?.map ?? null, game?.samples ?? 0);
   const unconfirmed = useMemo(() => unconfirmedSet(flags), [flags]);
+  const [lifeLoadouts, setLifeLoadouts] = useState<LifeLoadoutAt[]>([]);
+  useEffect(() => {
+    if (gameId === null || !hasSamples) return;
+    let alive = true;
+    statsApi
+      .lifeLoadouts(gameId)
+      .then((rows) => alive && setLifeLoadouts(rows))
+      .catch(() => alive && setLifeLoadouts([])); // tables Stats pas calculées : on garde l'équipement de la game
+    return () => {
+      alive = false;
+    };
+  }, [gameId, hasSamples]);
   const cells = useMemo(() => zoneCells(reliability), [reliability]);
 
   const byTime = useMemo(() => {
@@ -89,6 +106,12 @@ export function VisionOverlay({ width, height, layers }: { width: number; height
   const rect = (z: Zone) => ({ x: z.x * width, y: z.y * height, w: z.w * width, h: z.h * height });
   const nameOf = new Map((game?.players ?? []).map((p) => [p.slot, p.name]));
   const weaponName = (id: string | null) => (id ? (weapons?.find((w) => w.id === id)?.name || id) : '?');
+  // Équipement de la vie en cours (lu par vie : il change à chaque réapparition) ; à défaut, celui de la game.
+  const gameTime = game ? time - game.start_s : 0;
+  const equipmentOf = (slot: number): LifeLoadoutAt | null => {
+    const lives = lifeLoadouts.filter((l) => l.slot === slot && l.game_id === gameId);
+    return lives.filter((l) => l.t0 <= gameTime).at(-1) ?? lives[0] ?? null;
+  };
 
   const t = nearest(times, time);
   const marks = t !== null && Math.abs(t - time) < 0.6 ? (byTime.get(t) ?? []) : [];
@@ -118,8 +141,9 @@ export function VisionOverlay({ width, height, layers }: { width: number; height
           return [0, 1, 2, 3].map((i) => {
             const slot = side * 4 + i + 1;
             const p = game?.players.find((q) => q.slot === slot);
-            const bx = r.x + (r.w / 4) * i;
-            const bw = r.w / 4;
+            const bx = r.x + r.w * BANNER_PITCH * i;
+            const bw = r.w * BANNER_WIDTH;
+            const equipment = equipmentOf(slot);
             return (
               <g key={slot}>
                 <rect x={bx} y={r.y} width={bw} height={r.h} className="vision__banner" />
@@ -132,7 +156,7 @@ export function VisionOverlay({ width, height, layers }: { width: number; height
                 </text>
                 {(['weapon1', 'weapon2', 'gadget'] as const).map((field, line) => (
                   <text key={field} x={bx + 3} y={r.y + r.h + 24 + line * 12} className={`vision__label vision__eq vision__eq--${line}`}>
-                    {p ? weaponName(p[field]) : '?'}
+                    {equipment ? weaponName(equipment[field]) : p ? weaponName(p[field]) : '?'}
                   </text>
                 ))}
               </g>

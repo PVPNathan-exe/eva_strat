@@ -53,6 +53,12 @@ export interface LifeLoadout {
   source: string | null;
 }
 
+/** Équipement d'une vie avec les bornes de la vie (réponse de /api/stats/life-loadouts). */
+export interface LifeLoadoutAt extends LifeLoadout {
+  t0: number;
+  t1: number;
+}
+
 export type EpisodeKind = 'retake' | 'rotation';
 
 /** Épisode de retake ou de rotation ; `data` est le JSON décodé (positions de départ, joueurs, morts, causes automatiques). */

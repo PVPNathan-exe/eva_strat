@@ -2,7 +2,7 @@
 
 import type { ApiContext, ApiResult } from './api.ts';
 import { listEpisodes, putVerdict, teamAggregate } from './statsEpisodes.ts';
-import { listLinks, listLives } from './statsLives.ts';
+import { listLifeLoadouts, listLinks, listLives } from './statsLives.ts';
 import { listOwners } from './statsOwners.ts';
 import { presence } from './statsPresence.ts';
 
@@ -10,6 +10,7 @@ import { presence } from './statsPresence.ts';
 const GET_ROUTES: Record<string, (ctx: ApiContext, query: URLSearchParams) => ApiResult> = {
   '/api/stats/lives': listLives,
   '/api/stats/links': listLinks,
+  '/api/stats/life-loadouts': listLifeLoadouts,
   '/api/stats/presence': presence,
   '/api/stats/owners': listOwners,
   '/api/stats/episodes': listEpisodes,

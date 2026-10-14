@@ -291,3 +291,14 @@ CREATE TABLE IF NOT EXISTS stats_meta (
   revision INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (game_id, module)
 );
+
+-- Point de capture ACTIF au cours de la game (celui qui clignote sous le chrono, ou dont la boîte est dessinée sur la minimap) : un segment par période, en secondes depuis le début de la game.
+-- Sur Outlaw et les cartes à plusieurs points, c'est le calendrier des rotations de points (docs/PLAN_STATS_AGENTS.md).
+CREATE TABLE IF NOT EXISTS point_active (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  point TEXT NOT NULL,
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  source TEXT CHECK (source IN ('hud', 'box', 'schedule')),
+  PRIMARY KEY (game_id, point, t0)
+);

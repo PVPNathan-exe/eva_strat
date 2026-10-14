@@ -26,6 +26,18 @@ export function listLives(ctx: ApiContext, query: URLSearchParams): ApiResult {
   return reply(200, rows);
 }
 
+/** L'équipement de chaque vie d'une game avec les bornes de la vie : [{ game_id, slot, life_idx, weapon1, weapon2, gadget, held, source, t0, t1 }] (identifiants d'icônes, temps en secondes depuis le début de la game). */
+export function listLifeLoadouts(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = gameParam(query);
+  if (typeof gameId === 'string') return fail(gameId);
+  const rows = ctx.db
+    .prepare(
+      'SELECT l.game_id, l.slot, l.life_idx, l.weapon1, l.weapon2, l.gadget, l.held, l.source, v.t0, v.t1 FROM life_loadouts l JOIN lives v ON v.game_id = l.game_id AND v.slot = l.slot AND v.idx = l.life_idx WHERE l.game_id = ? ORDER BY l.slot, l.life_idx',
+    )
+    .all(gameId);
+  return reply(200, rows);
+}
+
 /** Les trades et revenges d'une game, dans l'ordre du temps : [{ game_id, t, victim_slot, kind, other_slot, dt, dist_m }]. */
 export function listLinks(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const gameId = gameParam(query);
