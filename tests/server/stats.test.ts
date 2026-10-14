@@ -164,9 +164,9 @@ test('lives et links : paramètre game manquant ou invalide, 400 clair', () => {
   }
 });
 
-test('routes Stats : méthode autre que GET refusée, route pas encore branchée en 501', () => {
+test('routes Stats : méthode autre que GET refusée, route inconnue en 501', () => {
   const ctx = testContext();
   assert.equal(handleApi(ctx, 'POST', '/api/stats/lives', q('game=1'), {}).status, 405);
   assert.equal(handleApi(ctx, 'PUT', '/api/stats/presence', q(), {}).status, 405);
-  assert.equal(get(ctx, '/api/stats/owners', 'game=1').status, 501);
+  assert.equal(get(ctx, '/api/stats/inconnue', '').status, 501);
 });
