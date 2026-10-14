@@ -9,6 +9,7 @@
     "comparer": "node scripts/maj/cli.mjs comparer",
     "contribuer": "node scripts/maj/cli.mjs contribuer",
     "reset": "node scripts/maj/cli.mjs reset",
+    "stats": "node scripts/py.mjs analysis/stats_run.py",
     "start": "node scripts/setup.mjs --run",
     "dev": "vite",
     "build": "tsc -b && vite build",
