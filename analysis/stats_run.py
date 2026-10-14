@@ -12,7 +12,7 @@ import db
 import paths
 
 # (nom, module) dans l'ordre de calcul.
-STEPS = [("lives", "lives"), ("kill_links", "kill_links"), ("point_owner", "point_owner"), ("retakes", "retakes"), ("rotations", "rotations")]
+STEPS = [("lives", "lives"), ("loadout_life", "loadout_life"), ("kill_links", "kill_links"), ("point_owner", "point_owner"), ("retakes", "retakes"), ("rotations", "rotations")]
 
 
 def run(conn, game_id, only=None):

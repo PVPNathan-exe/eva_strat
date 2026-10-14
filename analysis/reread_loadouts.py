@@ -4,7 +4,11 @@
 
 Utile après une amélioration de la lecture des bandeaux (fond, boîte de lecture, images nettes seulement) : les équipements déjà en base ont été lus avec
 l'ancien code. Les kills et les positions ne sont pas touchés. Sont retirées seulement les icônes qui n'ont pas de nom, ne sont ni verrouillées ni
-signalées, n'ont pas de nom deviné, et que plus aucun équipement ni kill n'utilise : une icône nommée par l'utilisateur est toujours gardée."""
+signalées, n'ont pas de nom deviné, et que plus aucun équipement (de la game ou d'une vie : life_loadouts) ni kill n'utilise : une icône nommée par l'utilisateur
+est toujours gardée.
+
+Cette lecture de la game est celle de `loadout.read_loadouts` (cases placées à la vraie géométrie des bandeaux, arme tenue par comparaison des deux cases) ; l'équipement de
+chaque vie se recalcule à part par `python analysis/loadout_life.py --game N`."""
 
 import argparse
 import json
@@ -60,6 +64,7 @@ def main(argv=None):
     if not args.keep_icons:
         used = {v for r in conn.execute("SELECT weapon1, weapon2, gadget FROM loadouts") for v in r if v}
         used |= {r[0] for r in conn.execute("SELECT DISTINCT weapon FROM kills WHERE weapon IS NOT NULL")}
+        used |= {v for r in conn.execute("SELECT weapon1, weapon2, gadget, held FROM life_loadouts") for v in r if v}  # équipement par vie (loadout_life.py)
         names = weapons.display_names()
         reviews_path = weapons.ICON_DIR / "reviews.json"
         reviews = json.loads(reviews_path.read_text(encoding="utf-8")) if reviews_path.exists() else {}

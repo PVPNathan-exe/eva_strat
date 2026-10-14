@@ -92,11 +92,7 @@ def read_candidates(conn, icon_id, root=None, frames=FRAMES_PER_SOURCE, limit=MA
             crop = names._grab(g["path"], t, zones[key], g["width"], g["height"])
             if crop is None:
                 continue
-            h, w = crop.shape[:2]
-            bw = w / 4
-            banner = crop[:, int(index * bw) : int((index + 1) * bw)]
-            a, b, c, d = loadout.BOXES[field]
-            piece = banner[int(c * h) : int(d * h), int(a * bw) : int(b * bw)]
+            piece = loadout.box_piece(crop, index, field)  # géométrie réelle des bandeaux (les 4 ne sont pas des quarts égaux)
             shape, tone = loadout._shape(piece), loadout._dark(piece)
             if int(shape.sum()) < weapons.MIN_PIXELS or (field != "gadget" and not loadout.usable_weapon_read(shape, tone)):
                 continue  # arme rangée (pâle), forme trop petite ou fond mal séparé : on passe à une autre image
