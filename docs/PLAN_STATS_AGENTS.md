@@ -116,11 +116,12 @@ Chaque fiche : fichiers possédés (créer ou modifier), tâche, mesure attendue
 
 ### P4 : épisodes de retake et de rotation (Python, base seulement)
 - **Possède** : `analysis/retakes.py`, `analysis/rotations.py`, `analysis/episode_common.py` (fenêtres, distances au point, joueurs vivants), `analysis/tests/test_retakes.py`, `analysis/tests/test_rotations.py`.
+- **Acquis de la vague 1 à respecter** : `point_owner` n'existe que pour les cartes à un seul point et Outlaw (Atlantis : seul le point actif est lisible, Engine : la couleur ne change pas, voir CLAUDE.md « Stats : propriétaire des points ») : retakes sur les cartes à un point et Outlaw seulement, **rotations sur Outlaw seulement** (point actif lisible par `capture_boxes`) ; Atlantis et Engine signalées comme non couvertes dans le rapport. Les tables `lives`, `kill_links`, `point_owner` sont en SECONDES DEPUIS LE DÉBUT DE LA GAME ; `samples.t` et `kills.t` sont en temps de vidéo : soustraire `games.start_s`.
 - **Tâche** : à partir de `point_owner`, `lives`, `samples`, `map_capture.json`, `map_spawns.json`. Retake : changements de propriétaire du même point ; rotation : propriétaire différent du point précédent, ou changement de point actif (Outlaw) ; écrire `episodes` avec `data` JSON (positions de départ, joueurs, premier mort, morts, causes automatiques, résultat). Étalonner `R_PUSH` (environ 15 m), `R_RETREAT` (environ 25 m) et les fenêtres sur les 3 games.
 - **Mesure** : nombre d'épisodes par game et par type, part de réussites ; une feuille de 15 à 20 épisodes (instant, lien vidéo) pour validation par l'utilisateur dans `episodes.verdict`. Rien n'est « corrigé » avant cette validation.
 
 ### S2 : API épisodes (TypeScript serveur)
-- **Possède** : `server/statsEpisodes.ts` (liste, filtre par carte et type, `PUT` du verdict), `server/statsOwners.ts`, `tests/server/stats-episodes.test.ts`.
+- **Possède** : `server/statsEpisodes.ts` (liste, filtre par carte et type, `PUT` du verdict), `server/statsOwners.ts`, `tests/server/stats-episodes.test.ts`, et `server/statsApi.ts` (S1 a terminé : S2 y branche ses routes dans la table `GET_ROUTES` et une branche pour le `PUT`, sans toucher aux routes existantes).
 - **Tâche** : le chef de chantier ajoute une ligne de répartition dans `statsApi.ts` (fichier de S1, plus modifié ensuite par un agent).
 
 ### F2 : vues Retakes et Rotations
