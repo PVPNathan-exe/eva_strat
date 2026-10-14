@@ -28,6 +28,7 @@ import observed_name
 import ocr
 import positions
 import segments
+import stats_run
 import superpose
 import timer
 import tracking
@@ -311,6 +312,15 @@ def extract_kills(conn, video_id, path, meta, emit, control=None, only=None):
     return done, None
 
 
+def compute_stats(conn, game_id):
+    """Tables Stats d'une game (vies, liens de kills, propriétaire des points : analysis/stats_run.py). Jamais bloquant : renvoie le message d'erreur, ou None."""
+    try:
+        stats_run.run(conn, game_id)
+    except Exception as exc:  # noqa: BLE001 - un module Stats en échec ne doit pas faire échouer l'analyse
+        return str(exc)
+    return None
+
+
 def extract_positions(conn, video_id, path, meta, emit, control=None, step_s=positions.STEP_S, only=None):
     """Positions des joueurs des games qui n'en ont pas encore. Chaque game est enregistrée d'un seul bloc."""
     todo = only_games(db.games_without_samples(conn, video_id, step_s, tracking.PARAMS_VERSION, use_kills=True), only)
@@ -399,6 +409,9 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
             problems.append(f"killfeed non lu ({kills_error})")
         positions_read += extract_positions(conn, video_id, path, meta, tag, control, step_s=step_s, only=[gid])
         infer_killers(conn, video_id, path, meta, tag, control, only=[gid])
+        stats_error = compute_stats(conn, gid)
+        if stats_error:
+            problems.append(f"stats non calculées ({stats_error})")
     db.confirm_clean_games(conn, video_id, only=order)
     text = f"positions lues sur {positions_read} game(s) sur {len(order)}" if positions_read else "tout est déjà à jour : rien à relire"
     emit({"event": "done", "video_id": video_id, "message": " · ".join(dict.fromkeys(problems + [text]))})

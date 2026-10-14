@@ -13,6 +13,7 @@ import sys
 import db
 import evaluate
 import observed_name
+import stats_run
 import superpose
 import tracking
 import weapons
@@ -39,6 +40,10 @@ def resolve_game(conn, game_id):
         superpose.store_flags(conn, g, g["path"], g["width"], g["height"], step_s, data["states"])
     except Exception as error:  # noqa: BLE001 - vidéo absente ou illisible : les positions sont enregistrées, seul le contrôle manque
         print(f"contrôle à la vraie minimap non refait : {error}", file=sys.stderr)
+    try:  # les vies et les liens de kills dépendent des positions : on les refait (le propriétaire des points lit la vidéo et ne dépend pas des positions : non refait ici)
+        stats_run.run(conn, game_id, only={"lives", "kill_links"})
+    except Exception as error:  # noqa: BLE001 - tables dérivées : l'échec ne doit pas perdre les positions enregistrées
+        print(f"tables Stats non refaites : {error}", file=sys.stderr)
     return len(rows)
 
 
