@@ -23,3 +23,11 @@ export function listOwners(ctx: ApiContext, query: URLSearchParams): ApiResult {
     .all(gameId);
   return reply(200, rows);
 }
+
+/** Les périodes où chaque point est ACTIF (clignote sous le chrono, ou dont la boîte est dessinée) : [{ game_id, point, t0, t1, source }], dans l'ordre temps puis point (temps en secondes depuis le début de la game). */
+export function listActive(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = gameParam(query);
+  if (typeof gameId === 'string') return fail(gameId);
+  const rows = ctx.db.prepare('SELECT game_id, point, t0, t1, source FROM point_active WHERE game_id = ? ORDER BY t0, point').all(gameId);
+  return reply(200, rows);
+}

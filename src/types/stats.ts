@@ -53,6 +53,15 @@ export interface LifeLoadout {
   source: string | null;
 }
 
+/** Période où un point est actif (clignote sous le chrono ou boîte dessinée) ; réponse de /api/stats/active. */
+export interface PointActive {
+  game_id: number;
+  point: string;
+  t0: number;
+  t1: number;
+  source: 'hud' | 'box' | 'schedule' | null;
+}
+
 /** Équipement d'une vie avec les bornes de la vie (réponse de /api/stats/life-loadouts). */
 export interface LifeLoadoutAt extends LifeLoadout {
   t0: number;

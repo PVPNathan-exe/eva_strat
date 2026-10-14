@@ -3,7 +3,7 @@
 import type { ApiContext, ApiResult } from './api.ts';
 import { listEpisodes, putVerdict, teamAggregate } from './statsEpisodes.ts';
 import { listLifeLoadouts, listLinks, listLives } from './statsLives.ts';
-import { listOwners } from './statsOwners.ts';
+import { listActive, listOwners } from './statsOwners.ts';
 import { presence } from './statsPresence.ts';
 
 /** Routes en lecture seule (GET). */
@@ -13,6 +13,7 @@ const GET_ROUTES: Record<string, (ctx: ApiContext, query: URLSearchParams) => Ap
   '/api/stats/life-loadouts': listLifeLoadouts,
   '/api/stats/presence': presence,
   '/api/stats/owners': listOwners,
+  '/api/stats/active': listActive,
   '/api/stats/episodes': listEpisodes,
   '/api/stats/teams': teamAggregate,
 };

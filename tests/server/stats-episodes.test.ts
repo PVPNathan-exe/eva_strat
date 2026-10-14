@@ -263,3 +263,17 @@ test('teams : paramètres manquants ou trop longs, 400 clair', () => {
   bad(`map=${'x'.repeat(65)}&team=NCT`, /map/);
   bad(`map=Polaris&team=${'x'.repeat(61)}`, /team/);
 });
+
+test('active : périodes du point actif d'une game, une autre game ignorée', () => {
+  const ctx = testContext();
+  const g = insertGame(ctx, 'Outlaw');
+  const other = insertGame(ctx, 'Outlaw');
+  const ins = ctx.db.prepare('INSERT INTO point_active (game_id, point, t0, t1, source) VALUES (?, ?, ?, ?, ?)');
+  ins.run(g, 'A', 90, 150, 'hud');
+  ins.run(g, 'C', 0, 90, 'hud');
+  ins.run(other, 'B', 0, 10, 'box');
+  const res = get(ctx, '/api/stats/active', `game=${g}`);
+  assert.equal(res.status, 200);
+  assert.deepEqual((res.json as { point: string }[]).map((x) => x.point), ['C', 'A']);
+  assert.equal(get(ctx, '/api/stats/active', '').status, 400);
+});
