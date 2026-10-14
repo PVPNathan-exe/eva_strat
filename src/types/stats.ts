@@ -62,6 +62,16 @@ export interface PointActive {
   source: 'hud' | 'box' | 'schedule' | null;
 }
 
+/** Niveau d'un joueur pendant une période (Atlantis et The Cliff) ; réponse de /api/stats/levels. */
+export interface PlayerLevel {
+  game_id: number;
+  slot: number;
+  t0: number;
+  t1: number;
+  level: 'etage' | 'dessous';
+  source: 'default' | 'tp' | 'zone' | 'grey' | null;
+}
+
 /** Équipement d'une vie avec les bornes de la vie (réponse de /api/stats/life-loadouts). */
 export interface LifeLoadoutAt extends LifeLoadout {
   t0: number;

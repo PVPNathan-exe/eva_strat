@@ -2,7 +2,7 @@
 // Une route pas encore branchée côté serveur répond 501 : StatsUnavailableError, que l'interface affiche comme un message clair.
 
 import { jsonInit, parse } from './analysisApi.ts';
-import type { Episode, EpisodeKind, KillLink, Life, LifeLoadoutAt, PointActive, PointOwner, PresenceGrid, TeamAggregate } from '../types/stats.ts';
+import type { Episode, EpisodeKind, KillLink, Life, LifeLoadoutAt, PlayerLevel, PointActive, PointOwner, PresenceGrid, TeamAggregate } from '../types/stats.ts';
 
 /** La route existe mais le calcul n'est pas encore disponible (réponse 501). */
 export class StatsUnavailableError extends Error {
@@ -36,6 +36,7 @@ export const statsApi = {
   links: (gameId: number) => getJson<KillLink[]>(`/api/stats/links?game=${gameId}`),
   lifeLoadouts: (gameId: number) => getJson<LifeLoadoutAt[]>(`/api/stats/life-loadouts?game=${gameId}`),
   owners: (gameId: number) => getJson<PointOwner[]>(`/api/stats/owners?game=${gameId}`),
+  levels: (gameId: number) => getJson<PlayerLevel[]>(`/api/stats/levels?game=${gameId}`),
   active: (gameId: number) => getJson<PointActive[]>(`/api/stats/active?game=${gameId}`),
   presence: async (q: PresenceQuery): Promise<PresenceGrid> => {
     const params = new URLSearchParams({ map: q.map, games: list(q.games) });

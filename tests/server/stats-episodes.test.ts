@@ -277,3 +277,17 @@ test("active : périodes du point actif d'une game, une autre game ignorée", ()
   assert.deepEqual((res.json as { point: string }[]).map((x) => x.point), ['C', 'A']);
   assert.equal(get(ctx, '/api/stats/active', '').status, 400);
 });
+
+test("levels : niveau des joueurs d'une game, une autre game ignorée", () => {
+  const ctx = testContext();
+  const g = insertGame(ctx, 'Atlantis');
+  const other = insertGame(ctx, 'Atlantis');
+  const ins = ctx.db.prepare('INSERT INTO player_levels (game_id, slot, t0, t1, level, source) VALUES (?, ?, ?, ?, ?, ?)');
+  ins.run(g, 5, 180, 240, 'etage', 'tp');
+  ins.run(g, 5, 0, 180, 'dessous', 'default');
+  ins.run(other, 1, 0, 10, 'dessous', 'default');
+  const res = get(ctx, '/api/stats/levels', `game=${g}`);
+  assert.equal(res.status, 200);
+  assert.deepEqual((res.json as { level: string }[]).map((x) => x.level), ['dessous', 'etage']);
+  assert.equal(get(ctx, '/api/stats/levels', '').status, 400);
+});

@@ -24,6 +24,14 @@ export function listOwners(ctx: ApiContext, query: URLSearchParams): ApiResult {
   return reply(200, rows);
 }
 
+/** Le niveau de chaque joueur au cours d'une game (Atlantis et The Cliff seulement) : [{ game_id, slot, t0, t1, level, source }], temps en secondes depuis le début de la game. */
+export function listLevels(ctx: ApiContext, query: URLSearchParams): ApiResult {
+  const gameId = gameParam(query);
+  if (typeof gameId === 'string') return fail(gameId);
+  const rows = ctx.db.prepare('SELECT game_id, slot, t0, t1, level, source FROM player_levels WHERE game_id = ? ORDER BY slot, t0').all(gameId);
+  return reply(200, rows);
+}
+
 /** Les périodes où chaque point est ACTIF (clignote sous le chrono, ou dont la boîte est dessinée) : [{ game_id, point, t0, t1, source }], dans l'ordre temps puis point (temps en secondes depuis le début de la game). */
 export function listActive(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const gameId = gameParam(query);
