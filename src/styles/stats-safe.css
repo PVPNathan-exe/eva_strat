@@ -1,0 +1,100 @@
+/* Vue Zones sûres (StatsSafe, SafeZoneLayer). Les couleurs viennent de tokens.css (--c-owner-*, --c-text-*, --c-border). */
+
+.safe__time {
+  min-width: 12rem;
+  max-width: 100%;
+  flex: 1 1 12rem;
+}
+
+.safe__time input {
+  width: 100%;
+}
+
+.safe__legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.9rem;
+  color: var(--c-text-muted);
+  font-size: 0.78rem;
+}
+
+.safe__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.safe__key::before {
+  width: 0.8rem;
+  height: 0.8rem;
+  background: var(--c-owner-none);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  content: '';
+}
+
+.safe__key--A::before {
+  background: var(--c-owner-a);
+}
+
+.safe__key--B::before {
+  background: var(--c-owner-b);
+}
+
+/* Contour de vue d'un joueur */
+.safe__view {
+  fill: none;
+  stroke: var(--c-owner-none);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.safe__view--A {
+  stroke: var(--c-owner-a);
+}
+
+.safe__view--B {
+  stroke: var(--c-owner-b);
+}
+
+/* Pastille numérotée d'un joueur (pointillée quand sa portée est estimée) */
+.safe__pin {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  background: var(--c-surface);
+  border: 2px solid var(--c-owner-none);
+  border-radius: 50%;
+  color: var(--c-text);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+}
+
+.safe__pin--A {
+  border-color: var(--c-owner-a);
+}
+
+.safe__pin--B {
+  border-color: var(--c-owner-b);
+}
+
+.safe__pin.is-estimated {
+  border-style: dashed;
+}
+
+.safe__ranges {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+@media (max-width: 600px) {
+  .safe__pin {
+    width: 1rem;
+    height: 1rem;
+    font-size: 0.6rem;
+  }
+}

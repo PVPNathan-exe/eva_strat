@@ -1,15 +1,16 @@
-// Onglet Stats : filtres communs (carte, games, équipe, joueur) et une vue à la fois : Parcours, Morts, Présence.
+// Onglet Stats : filtres communs (carte, games, équipe, joueur) et une vue à la fois : Parcours, Morts, Présence, Zones sûres.
 // Les vues Retakes et Rotations s'ajoutent ici quand elles sont livrées (docs/PLAN_STATS_AGENTS.md).
 
 import { useMemo, useState } from 'react';
-import { Flame, Route, Skull } from 'lucide-react';
+import { Flame, Route, ShieldCheck, Skull } from 'lucide-react';
 import { StatsFilters, type StatsFilterState } from './StatsFilters';
 import { StatsDeaths } from './StatsDeaths';
 import { StatsPaths } from './StatsPaths';
 import { StatsPresence } from './StatsPresence';
+import { StatsSafe } from './StatsSafe';
 import { INITIAL_FILTERS, mapsOf, noticeOf, useStatsGames } from './useStats';
 
-type View = 'parcours' | 'morts' | 'presence';
+type View = 'parcours' | 'morts' | 'presence' | 'safe';
 
 export function StatsTab() {
   const [view, setView] = useState<View>('parcours');
@@ -37,6 +38,9 @@ export function StatsTab() {
         <button type="button" role="tab" aria-selected={view === 'presence'} className={view === 'presence' ? 'is-active' : ''} onClick={() => setView('presence')}>
           <Flame className="ic" /> Présence
         </button>
+        <button type="button" role="tab" aria-selected={view === 'safe'} className={view === 'safe' ? 'is-active' : ''} onClick={() => setView('safe')}>
+          <ShieldCheck className="ic" /> Zones sûres
+        </button>
       </div>
       {notice && <p className="stats__empty">{notice}</p>}
       {!notice && !common && <p className="stats__empty">Aucune game avec des positions lues. Lancer l'analyse détaillée d'une vidéo dans l'onglet Analyse (positions), puis calculer les statistiques : `python analysis/stats_run.py --game N`.</p>}
@@ -49,8 +53,10 @@ export function StatsTab() {
             <StatsPaths {...common} />
           ) : view === 'morts' ? (
             <StatsDeaths {...common} />
-          ) : (
+          ) : view === 'presence' ? (
             <StatsPresence {...common} />
+          ) : (
+            <StatsSafe {...common} />
           )}
         </>
       )}
