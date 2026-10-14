@@ -179,3 +179,13 @@ Demandes, dans l'ordre où elles sont traitées. Les agents lisent seulement leu
 - **Constat** : sous le chrono, le HUD affiche un hexagone par point (lettres A, B, C ; zone `capture_points`, par défaut x 0,47 y 0,125 w 0,06 h 0,07) coloré orange, bleu ou gris selon le propriétaire. Sur Engine les trois hexagones montrent leur propriétaire en permanence (la couleur de la boîte de la minimap ne bouge pas : voir CLAUDE.md, « Stats : propriétaire des points »). Sur Atlantis un seul semble coloré à la fois. Outlaw a une zone plus large (5 points).
 - **Tâche** : lire les hexagones une fois par seconde (couleur par lettre, ordre gauche à droite des lettres lu ou appris, état actif ou qui clignote), écrire `point_owner` (source `hud`) et `point_active` (source `hud`) pour toutes les cartes à plusieurs points et, en recoupement, les cartes à un point et Outlaw.
 - **Mesure** : Outlaw, calendrier connu des changements de point (11:25, 9:55, 8:25, 6:55, 5:25, 3:55, 2:25, 0:55 du chrono) ; accord avec la couleur de boîte de `point_owner` (Polaris 26, Outlaw 32) ; Engine game 30 et Atlantis game 31 : secondes lisibles, accord avec la pente des scores.
+
+## 11. Nouvelles définitions des retakes (retour de l'utilisateur du 14 octobre 2026, soir)
+
+Ce qui était découpé comme « retake » sont en fait des **teamfights perdus** ; un **retake est un teamfight GAGNÉ suivi de la capture du point**.
+
+- **Déroulé d'une game** : une équipe prend le point après le teamfight d'ouverture (**prise initiale**, pas un retake) ; ensuite, « retake sur retake » : l'équipe qui n'a pas le point essaie de le reprendre, chaque tentative est réussie ou ratée.
+- **Vague** : à chaque fois qu'une équipe part du spawn (au moins 2 joueurs vivants sortent de leur zone de départ dans une courte fenêtre après réapparition), c'est une tentative. Certaines sont **rapides** (départ, contact, résolution en quelques secondes, comme sur NCT contre SNV), d'autres **longues** (les joueurs avancent petit à petit, par étapes).
+- **Teamfight** : série de kills entre les deux équipes autour du point ou de la ligne d'engagement ; **gagné** par l'équipe qui perd le moins de joueurs et reste en place, **perdu** pour l'autre.
+- **Retake réussi** = vague de l'équipe qui n'a pas le point + teamfight gagné + changement de propriétaire du point peu après. **Retake raté** = **teamfight perdu** de l'équipe attaquante (les 3 ou 4 kills subis par l'attaquant : c'est `SERIES_VIEW = victim`, le choix par défaut de P7 est donc le bon), survivants repliés. Un teamfight gagné sans capture est à nommer à part.
+- **À mesurer** : durée du départ du spawn à la résolution (rapide ou progressif : seuil à mesurer sur les games), nombre de vagues par game et par équipe, part des vagues réussies.
