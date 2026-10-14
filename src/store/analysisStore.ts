@@ -71,11 +71,15 @@ interface AnalysisState {
   closeWeaponPrompt: () => void;
   loadVideos: () => Promise<void>;
   selectVideo: (id: number | null) => Promise<void>;
-  refreshGames: () => Promise<void>;
+  /** Relit les games de la vidéo. applyTeams (par défaut) : applique ensuite les noms d'équipe connus (écrit dans la base) ; false : lecture seule. */
+  refreshGames: (applyTeams?: boolean) => Promise<void>;
   /** Version des données d'une game : change après un recalcul des positions, ce qui fait relire positions, contrôles et kills partout où la game est affichée. */
   dataVersion: number;
   bumpData: () => Promise<void>;
   selectGame: (id: number | null) => void;
+  /** Game sur laquelle la frise est zoomée (null : toute la vidéo). Suit la game choisie tant que la frise est zoomée. */
+  zoomGameId: number | null;
+  zoomGame: (id: number | null) => void;
   setCurrentTime: (t: number) => void;
   setPendingStart: (t: number | null) => void;
   requestSeek: (t: number) => void;
@@ -98,14 +102,16 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
   const watchJob = (jobId: string) =>
     subscribeJob(jobId, (e: JobEvent) => {
       if (e.event === 'progress') {
-        const previous = get().job.gameIndex;
+        const { gameIndex: previous, stage: previousStage } = get().job;
         if ((e.gameIndex ?? 0) > previous && previous > 0) void get().refreshGames().catch(() => undefined); // la game précédente est enregistrée en entier : replay et positions disponibles sans attendre la fin
+        else if (previousStage === 'kills' && e.stage !== 'kills') void get().refreshGames(false).catch(() => undefined); // kills de la game en cours enregistrés : la frise les montre sans attendre les positions
         set({ job: { running: true, jobId, paused: get().job.paused, stage: e.stage ?? null, pct: e.pct ?? 0, gameIndex: e.gameIndex ?? 0, gameCount: e.gameCount ?? 0, error: null, message: null } });
       } else if (e.event === 'done') {
         set({ job: { ...idleJob, message: e.message ?? 'Vidéo chargée' } });
         void get()
           .loadVideos()
-          .then(() => (e.video_id ? get().selectVideo(e.video_id) : undefined))
+          // Même vidéo : on relit seulement ses games (la game choisie et le zoom de la frise restent) ; autre vidéo : on l'ouvre.
+          .then(() => (e.video_id && e.video_id !== get().videoId ? get().selectVideo(e.video_id) : get().refreshGames()))
           // Les nouvelles icônes sont nommées d'après les modèles verrouillés ; seules celles de forme inconnue sont demandées à l'utilisateur.
           .then(() => analysisApi.auditWeapons().catch(() => undefined))
           .then(() => analysisApi.guessWeapons().catch(() => undefined))
@@ -113,6 +119,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
           .catch((err: Error) => set({ job: { ...idleJob, error: err.message } }));
       } else {
         set({ job: { ...idleJob, error: e.message ?? 'Erreur inconnue' } });
+        void get().refreshGames(false).catch(() => undefined); // analyse arrêtée ou en échec : ce qui a déjà été enregistré s'affiche
       }
     });
 
@@ -121,6 +128,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
   videoId: null,
   games: [],
   selectedGameId: null,
+  zoomGameId: null,
   currentTime: 0,
   pendingStart: null,
   seekRequest: null,
@@ -210,7 +218,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
   },
 
   selectVideo: async (id) => {
-    set({ videoId: id, games: [], comments: [], selectedGameId: null, currentTime: 0, pendingStart: null });
+    set({ videoId: id, games: [], comments: [], selectedGameId: null, zoomGameId: null, currentTime: 0, pendingStart: null });
     if (id !== null) {
       await get().refreshGames();
       void get().loadComments().catch(() => undefined);
@@ -223,25 +231,36 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
     set((s) => ({ dataVersion: s.dataVersion + 1 }));
   },
 
-  refreshGames: async () => {
+  refreshGames: async (applyTeams = true) => {
     const requested = get().videoId;
     if (requested === null) return;
     const games = await analysisApi.games(requested);
     // Réponse ignorée si l'utilisateur a changé de vidéo entre-temps.
     if (get().videoId === requested) {
       set({ games });
-      void get().applyKnownTeams().catch(() => undefined); // un nom d'équipe retenu s'applique aux games qui n'en ont pas encore
+      if (applyTeams) void get().applyKnownTeams().catch(() => undefined); // un nom d'équipe retenu s'applique aux games qui n'en ont pas encore
     }
   },
 
-  selectGame: (id) => set({ selectedGameId: id }),
+  // Choisir une autre game pendant que la frise est zoomée déplace le zoom sur elle.
+  selectGame: (id) => {
+    if (get().zoomGameId !== null && id !== null) get().zoomGame(id);
+    set({ selectedGameId: id });
+  },
+  // Zoomer relit les games (lecture seule) : la frise montre l'état réel de la base, même si les kills ont été écrits
+  // par une analyse que la page n'a pas suivie jusqu'au bout (page rechargée, analyse lancée en ligne de commande).
+  zoomGame: (id) => {
+    set({ zoomGameId: id });
+    if (id !== null) void get().refreshGames(false).catch(() => undefined);
+  },
   setCurrentTime: (t) => set({ currentTime: t }),
   setPendingStart: (t) => set({ pendingStart: t }),
   requestSeek: (t) => set({ seekRequest: { t, nonce: Date.now() } }),
   viewRequest: null,
   openAt: async (videoId, gameId, t) => {
     if (get().videoId !== videoId) await get().selectVideo(videoId);
-    set({ selectedGameId: gameId, viewRequest: { view: 'analyse', nonce: Date.now() } });
+    get().selectGame(gameId);
+    set({ viewRequest: { view: 'analyse', nonce: Date.now() } });
     get().requestSeek(t);
   },
 

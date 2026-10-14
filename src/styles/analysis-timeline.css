@@ -1,9 +1,9 @@
-/* Onglet Analyse : frise des games */
+/* Onglet Analyse : frise des games (vue complète, ou zoomée sur une game avec capture et kills) */
 
 .timeline__bar {
   position: relative;
   height: 28px;
-  background: #2a2f3d;
+  background: var(--c-timeline-bg);
   border-radius: 6px;
   cursor: pointer;
   overflow: hidden;
@@ -13,13 +13,13 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: #2ec27e;
+  background: var(--c-timeline-game);
   opacity: 0.85;
 }
 
 
 .timeline__game.is-selected {
-  outline: 2px solid #fff;
+  outline: 2px solid var(--c-timeline-cursor);
   outline-offset: -2px;
 }
 
@@ -47,7 +47,7 @@
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #fff;
+  background: var(--c-timeline-cursor);
   pointer-events: none;
 }
 
@@ -57,4 +57,157 @@
   margin-top: 0.25rem;
   font-size: 0.8rem;
   color: var(--c-text-muted);
+}
+
+/* Vue zoomée : titre, aide et retour à la vue complète */
+
+.timeline__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.timeline__head .help {
+  margin: 0;
+}
+
+.timeline__head .help[open] {
+  order: 3;
+  flex-basis: 100%;
+}
+
+.analysis button.timeline__full,
+.analysis button.timeline__reread {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Les deux boutons à droite du titre (Relire cette game, Vue complète). */
+.analysis button.timeline__reread {
+  margin-left: auto;
+}
+
+/* Message à la place des rangées de kills quand la game n'en a aucun (analyse non faite, kills non lus, aucun kill). */
+.timeline__status {
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+  color: var(--c-text-muted);
+}
+
+/* Barre de capture : équipe qui capture à chaque instant */
+
+.timeline__capture {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.timeline__capture--A {
+  background: var(--c-team-a);
+}
+
+.timeline__capture--B {
+  background: var(--c-team-b);
+}
+
+.timeline__capture--none {
+  background: var(--c-timeline-neutral);
+}
+
+/* Rangées de kills : orange au-dessus de la barre, bleue et grise en dessous. --lane : hauteur d'une sous-rangée, --lane-i : sous-rangée du marqueur. */
+
+.timeline__kills {
+  position: relative;
+}
+
+.timeline__kills--A {
+  --c-kill: var(--c-team-a);
+  margin-bottom: 2px;
+}
+
+.timeline__kills--B {
+  --c-kill: var(--c-team-b);
+  margin-top: 2px;
+}
+
+.timeline__kills--neutral {
+  --c-kill: var(--c-timeline-neutral);
+  margin-top: 2px;
+}
+
+/* Marqueur : tête de mort de 16 px centrée sur l'instant du kill. Les règles générales des boutons (fond, bordure, padding,
+   min-height: 2rem de ui-common.css) sont annulées pour garder un marqueur compact. La borne droite laisse la place à la
+   pastille du nombre de kills (4 px). Taille et écart : KILL_MARK_PX dans lib/killTimeline.ts. */
+.analysis button.timeline__kill {
+  position: absolute;
+  left: clamp(0px, calc(var(--x) - 8px), calc(100% - 20px));
+  width: 16px;
+  height: 16px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-kill);
+  opacity: var(--kill-rest-opacity);
+  transition: transform 0.1s, opacity 0.1s;
+}
+
+.analysis button.timeline__kill .ic {
+  width: 15px;
+  height: 15px;
+}
+
+.timeline__kills--A button.timeline__kill {
+  bottom: calc(var(--lane-i) * var(--lane) + 1px);
+}
+
+.timeline__kills--B button.timeline__kill,
+.timeline__kills--neutral button.timeline__kill {
+  top: calc(var(--lane-i) * var(--lane) + 1px);
+}
+
+/* Tueur déduit (pseudo non lu) : cercle en pointillé autour d'une tête de mort plus petite et plus pâle. */
+.analysis button.timeline__kill.is-inferred {
+  border: 1px dashed var(--c-kill);
+  opacity: var(--kill-inferred-opacity);
+}
+
+.analysis button.timeline__kill.is-inferred .ic {
+  width: 11px;
+  height: 11px;
+}
+
+.analysis button.timeline__kill:hover,
+.analysis button.timeline__kill:focus-visible {
+  opacity: 1;
+  transform: scale(var(--kill-hover-scale));
+  z-index: 1;
+}
+
+.analysis button.timeline__kill:focus-visible {
+  outline: 1px solid var(--c-timeline-cursor);
+  outline-offset: 1px;
+}
+
+/* Nombre de kills d'un marqueur regroupé : pastille en haut à droite de l'icône. */
+.timeline__kill-count {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 11px;
+  height: 11px;
+  padding: 0 2px;
+  border-radius: 6px;
+  background: var(--c-kill);
+  color: var(--c-bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 11px;
+  text-align: center;
 }

@@ -56,7 +56,12 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const videoId = Number(query.get('video'));
   if (!Number.isInteger(videoId)) return fail('Paramètre video manquant');
   const rows = ctx.db
-    .prepare('SELECT id, video_id, start_s, end_s, map, status, winner, team_a, team_b, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples FROM games WHERE video_id = ? ORDER BY start_s')
+    .prepare(
+      `SELECT id, video_id, start_s, end_s, map, status, winner, team_a, team_b, doubts, (SELECT COUNT(*) FROM samples s WHERE s.game_id = games.id) AS samples,
+         EXISTS (SELECT 1 FROM kills_meta km WHERE km.game_id = games.id) AS killsRead,
+         EXISTS (SELECT 1 FROM capture_state cs WHERE cs.game_id = games.id AND cs.point IN ('score_A', 'score_B')) AS captureRead
+       FROM games WHERE video_id = ? ORDER BY start_s`,
+    )
     .all(videoId) as Row[];
   type KillOut = { t: number; killer: number | null; victim: number; weapon: string | null; weaponName: string | null; stuff: string | null; headshot: boolean; kind: string | null };
   const kills = new Map<number, KillOut[]>();
@@ -84,6 +89,9 @@ function listGames(ctx: ApiContext, query: URLSearchParams): ApiResult {
       return {
         ...r,
         doubts: typeof r.doubts === 'string' ? JSON.parse(r.doubts) : [],
+        // Étapes de l'analyse détaillée déjà faites : killfeed lu (même sans aucun kill), scores de capture lus.
+        killsRead: !!r.killsRead,
+        captureRead: !!r.captureRead,
         players: gamePlayers,
         kills: (kills.get(r.id as number) ?? []).map((k) => {
           const weaponName = k.weapon ? (names[k.weapon] ?? null) : null;
