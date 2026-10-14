@@ -12,7 +12,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 
 ## Racine et configuration
 
-- `README.md` : présentation et mode d'emploi. `CLAUDE.md` : règles de travail pour Claude Code. `docs/SKILLS_ET_OUTILS.md` : skills et outils utiles au projet.
+- `README.md` : présentation concise (fonctions principales et secondaires, tout tourne en local, installation, utilisation, données et réinstallation, avancé), avec trois animations en CSS dans des SVG (`docs/anim/installation.svg`, `utilisation.svg`, `donnees.svg`, générées par un script hors dépôt : à modifier à la main ou à régénérer). `docs/DETAILS_ANALYSE.md` : fonctionnement détaillé de chaque lecture et des cartes (ancien corps du README). `CLAUDE.md` : règles de travail pour Claude Code. `docs/SKILLS_ET_OUTILS.md` : skills et outils utiles au projet.
 - `package.json` : scripts npm (`setup`, `start`, `dev`, `build`, `lint`, `test:js`, `test:py`).
 - `vite.config.ts` : configuration Vite, branche `analysisPlugin`. `tsconfig*.json` : TypeScript. `eslint.config.js` : lint. `pytest.ini` : tests Python (dossier `analysis/tests`).
 - `index.html` : page d'entrée, charge `src/main.tsx`.

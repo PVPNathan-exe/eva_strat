@@ -1,110 +1,160 @@
 # EVA Strat
 
-Planificateur tactique et analyse de rediffusions pour le jeu **EVA**. Quatre onglets :
+Outil pour **préparer ses stratégies** et **analyser ses parties** du jeu EVA : on lui donne une vidéo de partie, il retrouve les games, les joueurs, leurs positions, les kills et le score, puis rejoue la partie sur le plan de la carte.
 
-- **Stratégie** : importer le **plan** d'une carte, le dessiner (lignes, rectangles, cercles, crayon, couleur et épaisseur), gérer jusqu'à 3 **étages**, poser des **armes** avec leur portée (échelle à calibrer), **sauvegarder** par carte (automatique dans le navigateur, export et import JSON).
-- **Analyse** : lire une vidéo de partie (.mp4) : repérage des games par le chrono, pseudos, équipement, kills, score de capture et **positions et regards des joueurs** sur la minimap, replay sur le plan, commentaires liés à un instant.
-- **Lecture** : ce que le programme sait d'une carte (couloirs, tyroliennes, zones de départ, points de capture), la forme des joueurs lue sur la minimap, et la **cartographie à la main** qui construit les masques des cartes.
-- **Armes** : nommer les icônes d'armes vues par l'analyse.
+**Tout tourne sur ton ordinateur** : pas de compte, pas d'abonnement, aucun service en ligne.
 
-L'analyse fonctionne sous **Windows** (la reconnaissance de texte des pseudos et du killfeed utilise celle de Windows) : un conteneur Docker ne convient donc pas, `npm start` fait l'installation.
+![Installation en trois étapes](docs/anim/installation.svg)
 
-## Stack
+## Ce que fait le programme
 
-- [Vite](https://vite.dev/) + React + TypeScript
-- [Konva](https://konvajs.org/) / `react-konva` : canvas interactif
-- [Zustand](https://github.com/pmndrs/zustand) : état global + persistance `localStorage`
+**Fonctions principales**
 
-## Démarrer
+- **Analyse** : repère les games d'une vidéo par le chrono, lit les pseudos, l'équipement, les kills, le score de capture, puis les **positions et regards des joueurs** sur la minimap. Replay sur le plan de la carte, en même temps que la vidéo.
+- **Stratégie** : importer le plan d'une carte, le dessiner (lignes, formes, crayon, couleurs, jusqu'à 3 étages), poser des armes avec leur portée. Sauvegarde automatique par carte dans le navigateur, export et import JSON.
+- **Armes** : nommer les icônes d'armes vues par l'analyse (une fois nommées, elles servent à toutes les vidéos).
+
+**Fonctions secondaires**
+
+- Corrections à la main (position, regard, joueur mort) qui servent d'indications au suivi, commentaires liés à un instant de la vidéo, noms des équipes par morceau de vidéo.
+- Téléchargement d'une vidéo YouTube (1080p, refusé avec un message clair si YouTube ne propose que du 360p).
+- **Priorité de l'analyse** (basse, normale, haute) pour aller plus vite quand le PC n'a rien d'autre à faire.
+- **Export et import des données** en fichiers JSON, pour une clé USB, un disque externe ou un autre PC.
+- Réglages avancés : cartographie à la main des cartes, calibrage de l'écran (voir « Avancé »).
+
+En préparation : un onglet **Stats** (parcours des joueurs, morts, retakes, rotations), plan dans [`docs/PLAN_STATS_AGENTS.md`](docs/PLAN_STATS_AGENTS.md).
+
+## Tout tourne en local : pourquoi
+
+- **Les vidéos sont lourdes** (plusieurs Go) : le programme les lit directement sur ton disque avec ffmpeg, sans rien envoyer.
+- **Tes stratégies restent à toi** : les replays d'entraînement d'une équipe ne quittent pas la machine.
+- **Gratuit** : pas d'IA en ligne ni de service payant. Les pseudos et le killfeed sont lus par la reconnaissance de texte déjà présente dans Windows.
+- **Tu possèdes tes données** : un fichier SQLite (`data/eva.db`) et un export JSON lisible par n'importe quel outil.
+- Le site n'écoute que sur ton PC (`http://localhost:5173`) et refuse les requêtes venues d'ailleurs. Internet n'est utilisé qu'à l'installation (npm, pip, ffmpeg) et pour télécharger une vidéo YouTube si tu le demandes.
+- Conséquences : **Windows** est nécessaire pour l'analyse, et le calcul se fait sur ton PC : la durée dépend de la vidéo et de la machine (sur l'ancien PC de développement : une à deux heures pour une vidéo de 58 minutes). La priorité de l'analyse se règle dans Options.
+
+## Les onglets
+
+| Groupe | Onglet | Pour quoi faire |
+|---|---|---|
+| Usage courant | **Stratégie** | dessiner et préparer ses plans |
+| Usage courant | **Analyse** | charger une vidéo, lancer l'analyse, voir le replay |
+| Usage courant | **Armes** | nommer les icônes d'armes |
+| **Avancé** | **Lecture** | ce que le programme sait des cartes, corrections à la main, cartographie |
+| **Avancé** | **Données** | place prise, export et import JSON, effacement du cache |
+
+> **Avancé = à tes risques et périls.** Ce qui y est modifié (cartographie, corrections, « Appliquer au programme », calibrage de l'écran) **change les calculs** de l'analyse : on suppose que tu sais ce que tu fais, et il vaut mieux sauvegarder avant (onglet Données > Exporter). Et **réinstaller le programme sans copier ses données peut les faire disparaître** : lis la section « Réinstaller sans perdre ses données ».
+
+## Installer
+
+Il faut **Windows 10 ou 11**, [Node.js](https://nodejs.org/) 22 ou plus (version LTS) et [Python](https://www.python.org/downloads/) 3.10 ou plus (coche « Add python.exe to PATH » à l'installation). ffmpeg s'installe tout seul.
+
+1. Installe Node.js et Python.
+2. Télécharge le projet : sur GitHub, choisis la branche `feat/onglet-analyse` puis **Code > Download ZIP**, et dézippe-le où tu veux (par exemple `Documents\eva_strat`). Avec Git : `git clone <adresse>` puis `git checkout feat/onglet-analyse`.
+3. Ouvre un terminal dans ce dossier (dans l'Explorateur, tape `cmd` dans la barre d'adresse puis Entrée) et lance :
 
 ```bash
-npm install
-npm run dev      # serveur de dev (http://localhost:5173)
-npm run build    # build de production
-npm run preview  # prévisualiser le build
+npm start
 ```
 
-> Note : si `npm` échoue avec une erreur de certificat SSL (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`),
-> lance avec `NODE_OPTIONS=--use-system-ca`.
+La première fois, il installe ce qui manque (paquets npm, bibliothèques Python, ffmpeg par winget) puis ouvre le site sur http://localhost:5173. Les fois suivantes, `npm start` lance directement le site. Pour l'arrêter, ferme la fenêtre du terminal.
 
-## Documentation de reprise
+Si `npm` échoue avec une erreur de certificat SSL : `set NODE_OPTIONS=--use-system-ca` puis relance. Pour utiliser un autre Python : variable `EVA_PYTHON`.
 
-- [`docs/CHANGER_DE_PC.md`](docs/CHANGER_DE_PC.md) : installer le projet sur un autre PC et ce qui n'est pas dans Git (base, vidéos, réglages du navigateur).
-- [`docs/PLAN_RESTANT.md`](docs/PLAN_RESTANT.md) : où en est l'onglet Analyse, ce qui reste à faire dans l'ordre.
-- [`docs/PLAN_OPTIMISATIONS.md`](docs/PLAN_OPTIMISATIONS.md) : pistes pour analyser plus vite, avec les mesures de référence (`python analysis/benchmark.py`).
+## Utiliser
 
-## Structure
+![Utiliser le programme en cinq étapes](docs/anim/utilisation.svg)
 
-La carte complète du projet (fichiers, routes de l'API, flux de données) est dans [`ARCHITECTURE.md`](ARCHITECTURE.md), à lire avant de chercher ou de créer un fichier. En bref :
+1. **Analyse > Parcourir** (ou colle un lien YouTube) pour charger la vidéo.
+2. **Détecter les games** : le chrono est lu, les games apparaissent en liste.
+3. Vérifie les bornes (les bandes orange de la frise sont les passages incertains), puis confirme.
+4. **Analyse détaillée** : coche les games et lance l'analyse. Menu **Options > Priorité** : *basse* (le PC reste fluide), *normale* (réglage de Windows) ou *haute* (plus rapide quand d'autres programmes se partagent le processeur ; le PC peut devenir moins réactif). L'analyse tourne sur ton PC : changer d'onglet ou recharger la page ne l'arrête pas, fermer le terminal oui.
+5. Sélectionne une game : replay sur le plan, kills, score de capture. Onglet **Armes** : nomme les icônes que le programme ne connaît pas encore.
 
+## Tes données : où elles sont, combien elles pèsent
+
+| Quoi | Où | À savoir |
+|---|---|---|
+| Games, positions, kills, corrections, commentaires, calibrages | `data/eva.db` | **le plus précieux** ; ignoré par Git |
+| Noms et images des armes | `analysis/weapon_icons/` | doivent rester avec la base : elle cite les icônes par numéro (B25, G9...) |
+| Cartes que tu as « appliquées » | `analysis/map_masks/`, `analysis/map_*.json` | seulement si tu as utilisé l'outil de cartographie |
+| Cache | `data/cache/` | vidéos téléchargées, lectures gardées (se refont) |
+| Tes vidéos | là où tu les as rangées | la base en garde le chemin complet |
+| Cartes de l'onglet Stratégie | le navigateur | à exporter en JSON depuis l'onglet ; un autre navigateur ou une autre adresse ne les voit pas |
+
+**Poids** (mesuré sur 32 games dont 13 analysées) : la base fait 23,4 Mo, soit environ 1,8 Mo par game analysée, presque tout en positions (extrapolation, non mesurée : 100 games analysées, environ 180 Mo). Ce qui pèse vraiment, c'est le **cache** : une vidéo YouTube téléchargée fait plusieurs Go (2,6 Go ici) et les lectures gardées 137 Mo. L'onglet **Données** donne ces chiffres chez toi et efface les lectures gardées (elles se refont, 1 à 2 minutes par game) ; les vidéos téléchargées sont à supprimer à la main.
+
+### Clé USB, disque externe : exporter, ne pas y mettre la base
+
+La base écrit sans cesse et un débranchement en cours d'écriture peut la corrompre ; une clé s'use surtout à l'écriture. Lire ne l'use pas. Le programme n'y lit donc pas sa base : il **exporte** vers un dossier, une seule fois par game.
+
+![Réinstaller ou déplacer ses données](docs/anim/donnees.svg)
+
+- **Données > Dossier > Exporter** : un fichier compressé par game, plus les réglages et les icônes. Mesuré : 32 games en 5 Mo (contre 23 Mo de base). Un deuxième export n'écrit que ce qui a changé.
+- **Données > Dossier > Importer** (ou « Voir ce qui serait importé » d'abord) : ajoute les games absentes, ne touche jamais celles déjà présentes, traduit les numéros d'icônes d'armes, et fait une copie de la base avant d'écrire.
+- Les avis et verrous d'icônes ne voyagent pas (jugements locaux). En ligne de commande : `python analysis/data_export.py export E:\sauvegarde` et `import`.
+
+### Réinstaller sans perdre ses données
+
+**Méthode simple, sans Git ni IA (export puis import)**
+
+1. Ancienne installation, onglet **Données** : choisis un dossier (clé ou disque) et **Exporter**.
+2. Ferme le site. Télécharge la nouvelle version dans un **nouveau dossier** (ne supprime pas l'ancien).
+3. `npm start` dans le nouveau dossier, onglet **Données**, même dossier, **Importer**.
+4. Vérifie que tes games sont dans l'onglet Analyse, puis seulement supprime l'ancien dossier.
+
+**Méthode par copie de dossiers**
+
+1. Site fermé, dans le **nouveau** dossier, remplace `data` et `analysis\weapon_icons` par ceux de l'ancien. Copie aussi `analysis\map_masks` et `analysis\map_*.json` **seulement si tu as utilisé l'outil de cartographie** (sinon tu écraserais les cartes de la nouvelle version).
+2. `npm start`. La base d'une ancienne version s'ouvre avec la nouvelle : les colonnes et tables manquantes sont ajoutées à l'ouverture (vérifié avec une base du 10 octobre : aucune ligne perdue). L'inverse (ouvrir une base récente avec une vieille version) n'est pas prévu.
+3. Les chemins des vidéos sont enregistrés en absolu : si tu les as déplacées, voir [`docs/CHANGER_DE_PC.md`](docs/CHANGER_DE_PC.md).
+
+**Avec Git (développeurs)**
+
+```bash
+# site fermé ; sauvegarde d'abord (data/ n'est pas dans Git)
+xcopy data ..\eva-data-sauvegarde /E /I
+git status                                # ce que tu as modifié : icônes, cartes
+git add analysis/weapon_icons analysis/map_masks analysis/map_*.json
+git commit -m "mes données"
+git pull --rebase                         # en cas de doute : git rebase --abort
+npm start
 ```
-src/            site (React, Konva, Zustand) : onglets Stratégie, Analyse, Lecture, Armes
-server/         API d'analyse (plugin du serveur Vite, SQLite) et lancement des analyses
-analysis/       lecture des vidéos (Python, OpenCV, ffmpeg) et cartes (masques, tyroliennes, zones de départ)
-tests/          tests du site et du serveur (npm run test:js)
-docs/           reprise sur un autre PC, plan de ce qui reste, pistes de vitesse
+
+Un nouveau `git clone` ne contient jamais `data/` : copie-le depuis l'ancien dossier. Ne lance jamais `git clean -fdx` (il efface `data/`).
+
+### Placer ses données ailleurs, utiliser sa propre base
+
+Avant `npm start`, dans le même terminal :
+
+```bash
+set EVA_DATA_DIR=D:\eva-data     # dossier de la base et du cache (PowerShell : $env:EVA_DATA_DIR = "D:\eva-data")
+set EVA_DB=D:\copie\eva.db       # ou seulement le fichier de la base
+set EVA_CACHE=D:\gros-cache      # ou seulement le cache (vidéos téléchargées)
 ```
 
-## Suite
+Pour que ce soit permanent : `setx EVA_DATA_DIR "D:\eva-data"` (nouveau terminal ensuite). **PS : ta propre base** : `EVA_DB` accepte tout fichier SQLite au format du programme (la base d'un coéquipier, une copie d'essai). Une autre sorte de base (PostgreSQL, MongoDB...) n'est pas prise en charge ; l'export JSON sert de passerelle : chaque game est un document `{format, uid, video, game, tables: {nom: {columns, rows}}}` (JSON compressé gzip), facile à charger ailleurs. L'onglet Données avertit si la base est sur une clé USB ou un disque réseau ; Windows déclare souvent « fixe » un SSD ou disque dur USB, qui n'est donc pas repéré : l'avertissement ne remplace pas la prudence.
 
-Ce qui reste à faire dans l'onglet Analyse est dans [`docs/PLAN_RESTANT.md`](docs/PLAN_RESTANT.md). Côté Stratégie : vision joueur en cône qui bute sur les murs, placement et déplacement des joueurs entre étages (non faits).
+## Avancé : ce qui change les calculs
 
-## Onglet Analyse
+- **Lecture > Joueurs sur la minimap** (corrections à la main) : tes positions, regards et morts servent d'indications au suivi ; « Recalculer avec mes corrections » refait les positions de la game.
+- **Lecture > Cartographie à la main** : « Appliquer au programme » réécrit les masques et fichiers de la carte, et les positions déjà lues ne changent qu'à la prochaine analyse.
+- **Analyse > Options > Calibrer les zones du HUD** : si les zones sont fausses, tout ce qui est lu l'est aussi.
+- Les règles du suivi sont versionnées (`ALGO_REVISION` dans `analysis/tracking.py`) : changer l'algorithme fait relire les positions au prochain « Analyser ».
 
-**Parcours** : (1) « Détecter les games » repère les games par le chrono (environ 3 minutes pour une vidéo de 83 minutes) ; elle n'est refaite que si la vidéo n'a encore aucune game ou si on clique « Refaire la détection », et les games dont les bornes ne changent pas gardent leur analyse ; (2) on vérifie les bornes dans la liste des games et la vidéo ; (3) dans « Analyse détaillée », on coche les games à analyser et on choisit leur ordre (flèches, ou « Une carte d'abord »), puis « Analyser la sélection dans cet ordre » ou « Analyser toute la vidéo ». Les noms des deux équipes (orange à gauche, bleue à droite) se saisissent d'un coup pour un **morceau de la vidéo** (deux champs sur la ligne de « Ce que voit le programme », menu « Appliquer à… » : du temps au temps ; utile pour les rediffs de bootcamp de 4 à 5 heures où les équipes tournent) : les games dont le milieu tombe dans le morceau les reçoivent, et le morceau est retenu pour les games détectées ou posées plus tard ; « Proposer d'après les pseudos » découpe la vidéo là où les équipes changent, d'après les diminutifs déjà lus sur les bandeaux (préfixe commun de trois pseudos sur quatre, le x de liaison retiré : NCTXVEX donne NCT). On peut aussi les corriger par game dans la liste des games, pour les statistiques par équipe : le préfixe commun des pseudos (ex. SNV) est seulement proposé, car toutes les équipes n'en ont pas et ce n'est qu'un diminutif ; le nom complet saisi est retenu pour les games suivantes. Lancer l'analyse confirme les bornes des games cochées. Chaque game est analysée en entier avant la suivante, et ce qui est déjà lu et à jour est sauté (rien n'est recalculé sauf si les réglages ou l'algorithme ont changé).
+## Pour les développeurs
 
-On charge un .mp4 (bouton « Parcourir… » ou chemin collé) ou une URL YouTube, puis on pose soi-même les marqueurs de début et de fin de chaque game.
+```bash
+npm run dev                  # site de développement (http://localhost:5173)
+npm run test:js              # tests du site et du serveur
+python -m pytest -q          # tests de l'analyse
+npx tsc -b                   # typage
+```
 
-**Démarrage** : après un clone ou un `git pull`, `npm start` installe ce qui manque (paquets npm, bibliothèques Python, ffmpeg par winget sous Windows) puis lance le site sur http://localhost:5173. `npm run setup` fait l'installation sans lancer le site. Seuls Node 22+ et Python 3.10+ sont à installer soi-même.
+Pile : [Vite](https://vite.dev/) + React + TypeScript, [Konva](https://konvajs.org/), [Zustand](https://github.com/pmndrs/zustand), serveur d'analyse en plugin Vite (SQLite), analyse en Python (OpenCV, ffmpeg).
 
-**Source de la vidéo** : il faut un fichier **.mp4** local. Pour une vidéo YouTube, l'extraire d'abord avec [4K Video Downloader](https://www.4kdownload.com/) (en 1080p ou plus, la minimap est illisible en 360p), puis charger le .mp4 obtenu. Le téléchargement direct par URL (yt-dlp) prend le meilleur mp4 jusqu'à 1080p, en H.264 de préférence ; il est refusé avec un message clair si YouTube ne propose que du 360p ou moins pour la vidéo (minimap illisible). Dans ce cas, se connecter : variable `EVA_YT_COOKIES_FILE` (fichier cookies.txt exporté du navigateur) ou `EVA_YT_COOKIES_BROWSER=firefox` (yt-dlp ne sait plus lire les cookies chiffrés de Chrome, Edge et Brave récents sous Windows).
-
-**Détection des games** : à l'analyse, le chrono (boîte grise sous le logo) est lu chaque seconde. Une game commence quand le chrono quitte sa valeur de départ (10:00, 12:00… selon la carte) ; la « marge » de la barre du haut garde quelques secondes avant ce départ (« Avant ») et quelques secondes après la dernière lecture du chrono pour inclure l'écran de victoire (« Après »). Les games détectées sont à confirmer, et les passages incertains (chrono illisible, pause, vidéo coupée…) sont hachurés en orange sur la timeline. Le bouton « Détecter les games » relance la détection sur la vidéo choisie, sauf si toutes ses games sont déjà confirmées, vérifiées (aucune zone à vérifier) et munies d'une carte. Le nom de la carte (sous le chrono) est lu automatiquement à partir de modèles rangés dans `analysis/map_names/` : une carte sans modèle reste vide, et choisir sa carte à la main sur une game suffit pour que la prochaine analyse la reconnaisse. Les modèles de chiffres (`analysis/digit_templates.npz`) se régénèrent avec `analysis/build_templates.py` si la police du chrono change.
-
-**Cohérence des positions** : les pastilles lues image par image sont reliées dans le temps (`analysis/tracking.py`) : chaque trajectoire reçoit son joueur par vote de tous ses numéros lus, les croix sont rattachées au joueur qui vient de s'arrêter à cet endroit, les disparitions courtes sont comblées et les directions sont lissées (le sens est choisi sur toute la trajectoire, pas image par image). Les positions déjà lues avec un ancien algorithme sont refaites automatiquement.
-
-**Direction des joueurs** : l'axe de la pastille est mesuré sur sa forme (stable) ; le sens (avant ou arrière) vient de l'asymétrie de la goutte, de la silhouette complète pour le joueur observé (blanc plus liseré coloré) et du déplacement : un joueur regarde presque toujours là où il court, ce qui tranche quand la forme est ambiguë. Le sens est choisi sur toute la trajectoire.
-
-**Réglage automatique du suivi** (`analysis/tune.py`) : les réglages du suivi sont dans `analysis/tracking_params.json` (versionné : un `git pull` sur un autre PC les retrouve). Pour les améliorer avec de nouvelles rediffs : charger la vidéo et lancer « Analyser » (les games et leurs cartes doivent être justes), puis `python analysis/tune.py build --video "chemin.mp4" --name ceres-2` (extrait les détections dans `analysis/datasets/`, sans avoir besoin de la vidéo ensuite), `python analysis/tune.py eval` (note actuelle) et `python analysis/tune.py search --minutes 10` (cherche de meilleurs réglages ; ils ne sont sauvegardés que s'ils font mieux, et la recherche repart toujours des meilleurs connus). La note vient d'un test sans vérité manuelle : 70 % des numéros lus sur les pastilles sont cachés, et on regarde si le suivi retrouve le bon joueur. Plusieurs vidéos d'une même carte avec des déplacements différents rendent les réglages plus généraux. L'historique de toutes les sauvegardes est dans `analysis/tracking_params.history.jsonl`.
-
-**Pseudos** : les 8 pseudos de chaque game sont lus sur les bandeaux du haut (reconnaissance de texte intégrée à Windows, sans installation), par vote sur plusieurs images ; un pseudo tronqué par le jeu suffit, il sert seulement à reconnaître le joueur. L'ordre des bandeaux donne le numéro 1 à 8. Ils s'affichent en infobulle dans le replay, et la case « Pseudos » les écrit près des pastilles. Les zones « Équipe gauche/droite » du HUD incluent les numéros, et deux zones « % de capture » (une par équipe) sont calibrables en vue de la lecture des captures.
-
-**Noms déduits** : le nom d'une arme du killfeed est déduit de l'équipement du tueur (l'arme d'un kill est forcément dans son équipement) : si une icône revient chez plusieurs tueurs qui n'ont qu'une arme nommée en commun, c'est elle ; si aucune arme n'est commune mais que tous les tueurs ont une grenade équipée, c'est le logo générique « GRENADE », qui n'est pas affiché dans l'onglet Armes. Un nom déduit est marqué « deviné » ; un nom saisi passe toujours avant. Plus il y a de games analysées, plus le programme en déduit.
-
-**Armes inconnues** : après chaque analyse, si le programme a rencontré des icônes d'armes qu'il ne connaît pas, une fenêtre demande leur nom (propositions tirées de l'onglet Stratégie ; « Plus tard » la ferme jusqu'à la prochaine nouveauté), et l'onglet Armes affiche le nombre d'icônes sans nom. Pour un kill à la grenade, le logo du killfeed est le même pour toutes les grenades : le programme prend alors la grenade équipée par le tueur (DX3 ou STICKY, lue sur son bandeau).
-
-**Arme d'un kill** : elle n'est plus lue sur l'icône du killfeed (trop petite, trop sale) mais sur le bandeau du tueur : l'arme tenue (en noir) juste avant l'entrée du killfeed, relue à ce moment-là car l'équipement change à la réapparition. Pour une grenade (logo compact du killfeed), c'est le gadget du tueur, et seules les grenades DX3 et STICKY comptent. Si le bandeau est ambigu, l'arme reste vide plutôt que devinée. Un tueur illisible est déduit par élimination (adversaires en vie, arme tenue, distance à la victime) seulement si c'est cohérent, et marqué « déduit ».
-
-**Signaler une icône** : sur chaque icône de l'onglet Armes, « Signaler » ouvre une fenêtre qui relit les bandeaux autour des endroits où l'icône a été vue et propose des images. « Recalculer automatiquement » moyenne les images nettes, entières et de la bonne forme ; on peut aussi désigner une image comme modèle. Pour un nom deviné par le programme, « Bon » le confirme et « Pas bon » ne le fait plus reproposer. Les avis sont dans `analysis/weapon_icons/reviews.json`. Après un recalcul, relancer « Analyser » pour que les kills et l'équipement en profitent.
-
-**Onglet Armes** : toutes les icônes vues par l'analyse y sont rangées en trois catalogues : les armes du killfeed (W…), les deux armes de chaque joueur lues sur les bandeaux (B…, l'arme tenue en noir, l'autre en pâle) et les gadgets (G…). On tape le nom sous chaque logo ; il est enregistré dans `analysis/weapon_icons/names.json` (versionné, comme les icônes) et affiché dans la liste des kills. Plusieurs icônes peuvent porter le même nom. Dans le killfeed, la petite cible est le marqueur de headshot (retirée de l'icône de l'arme) ; un kill sans tueur est une mort du décor ou d'un admin ; le même pseudo des deux côtés est un suicide.
-
-**Score de capture** : les pourcentages de chaque équipe (de part et d'autre du chrono, zones « % de capture » calibrables) sont lus chiffre par chiffre à partir de modèles (`analysis/capture_digits.npz`), nettoyés (valeurs aberrantes écartées, petits trous comblés) et tracés sous le replay ; un clic sur la courbe déplace le replay.
-
-**Killfeed** : le killfeed (haut droite) est lu par ligne : le pseudo du tueur et celui de la victime sont reconnus parmi les 8 de la game (lecture approximative acceptée), avec l'heure du kill. L'icône d'arme est comparée à des modèles (`analysis/weapon_icons/`) ; une icône nouvelle devient « W1 », « W2 »… et on la nomme en l'écrivant dans `analysis/weapon_icons/names.json` (`{"W1": "Blaster"}`). Les morts du killfeed corrigent le suivi : une croix manquée sur la minimap est reposée à la dernière position du joueur. Les kills sont listés sous le replay (clic = aller au moment dans la vidéo).
-
-**Correction manuelle** : si le suivi a échangé deux joueurs de la même équipe, ouvre « Corriger le suivi » sous le replay, clique sur leurs deux pastilles (ou choisis-les dans les listes) et la durée à partir de l'instant affiché, puis « Échanger ». La correction est enregistrée, listée (et annulable), et réappliquée automatiquement si les positions sont relues.
-
-**Commentaires** : sous la vidéo, une zone de commentaires liés à un instant. Un clic dans le champ met la vidéo en pause et fige l'instant ; on choisit une catégorie (suivi, équipe, note) et, si besoin, les joueurs concernés ; Ctrl + Entrée ajoute. Chaque commentaire ramène la vidéo 2 secondes avant, apparaît comme un repère sur la timeline, indique sa game et le temps dans la game, et peut être marqué traité. « Copier le texte » met les commentaires en attente dans le presse-papiers, prêts à coller dans une conversation pour décrire ce qui ne va pas dans le suivi ; ils sont aussi dans la table `comments` de `data/eva.db`.
-
-**Replay** : une fois les positions lues, sélectionner une game affiche un replay sur le plan de sa carte (joueurs numérotés, direction, ✕ pour un mort, traînées en option). Il suit la vidéo ou se rejoue seul (lecture, vitesse jusqu'à 8×), les joueurs se masquent un par un, et « Alignement sur le plan » ajuste le cadre de la minimap sur l'image du plan (mémorisé par carte).
-
-**Analyse longue** : l'analyse tourne sur le serveur de développement, pas dans la page : changer d'onglet ou recharger la page ne l'interrompt pas, et la page se reconnecte toute seule à l'analyse en cours (progression, pause, arrêt). Elle s'arrête si `npm run dev` est fermé ; les games déjà terminées sont conservées et ne sont pas relues.
-
-**Utilisation** : `npm run dev`, onglet « Analyse », charger la vidéo, « Analyser » : détecte les games (sans rien relire si elles sont déjà vérifiées) puis lit, game par game, les pseudos, l'équipement, les kills, le score et les positions des joueurs. « Détecter les games » ne fait que la partie games. Le champ « Positions : toutes les N frames » règle la cadence de lecture de la minimap (6 par défaut, soit 5 lectures par seconde à 30 i/s) : plus N est petit, plus c'est précis et fluide, au prix d'une analyse plus longue ; changer N relit les positions des games déjà lues. Les positions (minimap : équipe, numéro, position normalisée, direction, vivant) sont lues chaque seconde et stockées dans la table `samples` ; elles ne sont relues que pour les games qui n'en ont pas (déplacer une borne les efface). Les chiffres de la minimap se lisent par modèles (`analysis/minimap_digits.npz`) et, pour l'équipe bleue, par comptage de trous (6, 8, 9).
-Les données sont dans `data/eva.db` (SQLite, ignoré par git) ; les vidéos YouTube téléchargées sont dans `data/cache/`.
-Les vidéos locales ne sont jamais copiées.
-
-**Réglages** : variable d'environnement `EVA_PYTHON` pour utiliser un autre exécutable Python que `python`.
-
-**Tests** : `npm test` (Node et Python).
-
-## Onglet Lecture et cartes
-
-Trois sous-onglets : **Couloirs lus** (la carte telle que le programme la lit, avec une légende et un menu « Calques »), **Joueurs sur la minimap** (formes, regards et corrections posées à la main sur une game) et **Cartographie à la main**.
-
-**Cartographie à la main** : on range les couleurs de la minimap en classes (sol, mur, tir par-dessus, vue seulement, porte, porte vitrée), on trace les tyroliennes, les portes et fenêtres, les points de capture, les zones de départ (deux par équipe, quatre zones neutres pour Outlaw) et des zones de classe (dont « Hors map »), et on aligne la minimap sur le plan avec des repères. « Appliquer au programme » écrit le masque de la carte (`analysis/map_masks/`) et les fichiers `analysis/map_*.json`, nettoie les petites taches et refuse un masque qui rejetterait plus de 1 % des positions lues avec certitude. Les positions déjà enregistrées ne changent qu'à la prochaine analyse.
-
-**Règles propres aux cartes** : anneaux tournants d'Engine, point de capture unique d'Outlaw (un seul actif à la fois, calendrier des changements affiché dans l'onglet Lecture), portes à bouton de Reef Point (murs pour la vue, passages pour les trajets). Le détail et les mesures sont dans `CLAUDE.md`.
-
-**Suivi** : en plus du lissage décrit plus haut, le suivi applique des règles mesurées : les regards des tyroliennes, des duels et des kills, le mur entre deux joueurs, et le départ (aucun joueur hors de sa zone de départ avant le début de la game). L'algorithme est versionné (`ALGO_REVISION` dans `analysis/tracking.py`) : changer de version relit les positions au prochain « Analyser ».
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) : carte du projet (fichiers, routes de l'API, flux), à lire avant de chercher ou de créer un fichier.
+- [`CLAUDE.md`](CLAUDE.md) : règles de travail, commandes et pièges techniques mesurés.
+- [`docs/DETAILS_ANALYSE.md`](docs/DETAILS_ANALYSE.md) : fonctionnement détaillé de chaque lecture (games, pseudos, kills, positions, replay, cartes).
+- [`docs/CHANGER_DE_PC.md`](docs/CHANGER_DE_PC.md) : installer sur un autre PC, chemins des vidéos.
+- [`docs/PLAN_RESTANT.md`](docs/PLAN_RESTANT.md), [`docs/PLAN_OPTIMISATIONS.md`](docs/PLAN_OPTIMISATIONS.md), [`docs/PLAN_STATS_AGENTS.md`](docs/PLAN_STATS_AGENTS.md) : ce qui reste, vitesse, onglet Stats.

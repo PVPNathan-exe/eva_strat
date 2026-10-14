@@ -1,7 +1,7 @@
 # Reprendre le projet sur un autre PC
 
 Tout le code est dans Git (branche `feat/onglet-analyse`). Trois choses n'y sont **pas** et sont à copier à la main : la base de données, les
-vidéos, et ce qui est enregistré dans le navigateur.
+vidéos, et ce qui est enregistré dans le navigateur. Le plus simple pour la base : onglet **Données**, Exporter vers une clé ou un disque, puis Importer sur l'autre PC (voir le README) ; la copie de `data/eva.db` ci-dessous marche aussi.
 
 ## Ce qu'il faut installer
 
@@ -56,7 +56,7 @@ L'erreur de lint `MapCanvas.tsx` (setState dans un effet) existait avant ce trav
 ## Pour profiter d'un PC plus puissant
 
 - Le nombre de processus de lecture est limité par des garde-fous écrits pour le PC de développement (8 Go de mémoire). Sur une machine plus grande :
-  `EVA_WORKERS=6` (variable d'environnement) et, si besoin, les trois constantes en tête de `analysis/positions.py`. Détails et autres pistes : `docs/PLAN_OPTIMISATIONS.md`.
+  `EVA_WORKERS=6` (variable d'environnement ; la priorité de l'analyse se règle aussi dans Options) et, si besoin, les trois constantes en tête de `analysis/positions.py`. Détails et autres pistes : `docs/PLAN_OPTIMISATIONS.md`.
 - Ne jamais lancer deux analyses en même temps sur la même base.
 - Une analyse en ligne de commande n'apparaît pas dans la page ; lancée depuis le site (bouton « Analyser »), elle s'y reconnecte même après un rechargement.
   En ligne de commande : `python analysis/analyze.py --source "chemin.mp4" --skip-if-ok --positions`.
@@ -66,4 +66,5 @@ L'erreur de lint `MapCanvas.tsx` (setState dans un effet) existait avant ce trav
 
 - `docs/PLAN_RESTANT.md` : ce qui reste à faire, dans l'ordre, et l'état de la précision.
 - `docs/PLAN_OPTIMISATIONS.md` : les pistes de vitesse.
-- `README.md` (section « Onglet Analyse ») : comment fonctionne chaque lecture.
+- `docs/DETAILS_ANALYSE.md` : comment fonctionne chaque lecture.
+- `README.md` : installation, données, export et import.
