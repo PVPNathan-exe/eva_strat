@@ -1,0 +1,98 @@
+// Vue Présence : chaleur du temps passé par case de la minimap, pour une équipe ou un joueur, sur les games retenues.
+// La grille est agrégée par le serveur (/api/stats/presence) ; lissage, mise à l'échelle et couleurs sont faits ici (lib/heatGrid.ts, couleurs de tokens.css).
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { SlidersHorizontal } from 'lucide-react';
+import { blur, gridFromCells, heatPixels, normalize, totalSeconds } from '../../lib/heatGrid';
+import { formatTime } from '../../lib/timeline';
+import type { TeamSide } from '../../types/stats';
+import { noticeOf, tokenRgb, usePresence, type StatsGame } from './useStats';
+import { StatsMapBase } from './StatsMapBase';
+
+const GRID_N = 64; // côté de la grille demandée au serveur
+
+interface Props {
+  map: string;
+  games: StatsGame[];
+  team: TeamSide | 'all';
+  slot: number;
+}
+
+/** Couche de chaleur : un canevas n par n étiré sur la minimap (le navigateur interpole entre les cases). */
+function HeatLayer({ pixels, n }: { pixels: Uint8ClampedArray; n: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const ctx = ref.current?.getContext('2d');
+    if (ctx) ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), n, n), 0, 0);
+  }, [pixels, n]);
+  return <canvas ref={ref} width={n} height={n} className="stats__heat" />;
+}
+
+export function StatsPresence({ map, games, team, slot }: Props) {
+  const [sigma, setSigma] = useState(1.5);
+  const [corridors, setCorridors] = useState(false);
+  const [stations, setStations] = useState(false);
+  const [spawns, setSpawns] = useState(true);
+  const ids = useMemo(() => games.map((g) => g.id), [games]);
+  const query = useMemo(() => ({ map, games: ids, team: team === 'all' ? undefined : team, slot: slot || undefined, n: GRID_N }), [map, ids, team, slot]);
+  const load = usePresence(query);
+
+  const view = useMemo(() => {
+    if (!load.data) return null;
+    const n = load.data.n;
+    const raw = gridFromCells(n, load.data.cells);
+    const norm = normalize(blur(raw, n, sigma));
+    return { n, total: totalSeconds(raw), pixels: heatPixels(norm, n, tokenRgb('--c-heat-low', [42, 47, 61]), tokenRgb('--c-heat-high', [255, 159, 28])) };
+  }, [load.data, sigma]);
+
+  const notice = noticeOf(load);
+  const empty = !notice && (!view || view.total <= 0);
+
+  return (
+    <div className="stats__view">
+      <div className="stats__bar">
+        <details className="menu">
+          <summary>
+            <SlidersHorizontal className="ic" /> Affichage
+          </summary>
+          <div className="menu__panel">
+            <label className="stats__range">
+              Lissage : {sigma === 0 ? 'aucun' : `${sigma.toFixed(1).replace('.', ',')} case${sigma >= 2 ? 's' : ''}`}
+              <input type="range" min={0} max={4} step={0.5} value={sigma} onChange={(e) => setSigma(Number(e.target.value))} />
+            </label>
+            <label><input type="checkbox" checked={spawns} onChange={(e) => setSpawns(e.target.checked)} /> Zones de départ</label>
+            <label><input type="checkbox" checked={stations} onChange={(e) => setStations(e.target.checked)} /> Tyroliennes</label>
+            <label><input type="checkbox" checked={corridors} onChange={(e) => setCorridors(e.target.checked)} /> Couloirs</label>
+          </div>
+        </details>
+        {!notice && view && view.total > 0 && (
+          <span className="stats__count">
+            Présence cumulée : {formatTime(view.total)} sur {load.data?.games ?? games.length} games
+          </span>
+        )}
+        <span className="stats__scale" aria-label="Échelle de la chaleur : de peu à beaucoup de temps passé">
+          peu <i /> beaucoup
+        </span>
+      </div>
+      {notice && <p className="stats__empty">{notice}</p>}
+      {empty && <p className="stats__empty">Aucune présence pour ce choix. Elle se calcule à partir des vies, game par game : `python analysis/stats_run.py --game N`.</p>}
+      <StatsMapBase map={map} corridors={corridors} stations={stations} spawns={spawns}>
+        {({ boxStyle }) =>
+          view && view.total > 0 ? (
+            <div className="statsmap__layer" style={boxStyle}>
+              <HeatLayer pixels={view.pixels} n={view.n} />
+            </div>
+          ) : null
+        }
+      </StatsMapBase>
+      <details className="help">
+        <summary>Comment lire la chaleur</summary>
+        <p className="help__body">
+          Chaque case de la minimap (grille de {GRID_N} sur {GRID_N}) cumule le temps pendant lequel le joueur ou l'équipe choisis y étaient vivants, sur toutes les games retenues. La couleur est relative à la
+          case la plus occupée (les 2 % de cases les plus chaudes sont écrêtées), donc elle montre où on passe, pas combien de temps exactement. Le lissage étale chaque case sur ses voisines pour lire les grandes
+          zones ; à zéro, on voit les cases brutes. Pour comparer deux équipes ou deux joueurs, changer le filtre en haut.
+        </p>
+      </details>
+    </div>
+  );
+}
