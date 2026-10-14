@@ -7,6 +7,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findPython } from './maj/python.mjs';
+import { startupCheck } from './maj/report.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const win = process.platform === 'win32';
@@ -28,6 +30,10 @@ const tryRun = (cmd, args, opts = {}) => {
 // Node 22 ou plus (node:sqlite, tests en TypeScript natif).
 if (Number(process.versions.node.split('.')[0]) < 22) fail(`Node 22 ou plus requis (version actuelle : ${process.versions.node}).`);
 
+// 0. Mise à jour depuis GitHub (seulement avec « npm start », jamais bloquante, désactivée par EVA_NO_UPDATE=1). Le code est mis à jour sans question ; les parties sensibles (masques, réglages du
+//    suivi, icônes d'armes) ne sont jamais modifiées sans ton accord. Faite avant le reste pour que de nouvelles dépendances soient installées dans la même foulée.
+if (run) await startupCheck(root, log);
+
 // 1. Dépendances du site : à refaire si node_modules est absent ou plus ancien que le verrou.
 const lock = join(root, 'package-lock.json');
 const modules = join(root, 'node_modules');
@@ -36,17 +42,7 @@ if (!existsSync(modules) || (existsSync(lock) && statSync(modules).mtimeMs < sta
   execFileSync(win ? 'npm.cmd' : 'npm', ['install'], { cwd: root, stdio: 'inherit', shell: win });
 } else log('dépendances npm : ok');
 
-// 2. Python : le premier interpréteur qui répond (le raccourci du Microsoft Store est écarté).
-function findPython() {
-  if (process.env.EVA_PYTHON) return process.env.EVA_PYTHON;
-  for (const name of win ? ['python', 'python3', 'py'] : ['python3', 'python']) {
-    const found = tryRun(win ? 'where' : 'which', [name]);
-    for (const path of (found ?? '').split(/\r?\n/).map((p) => p.trim()).filter(Boolean)) {
-      if (tryRun(path, ['-c', 'import sys; assert sys.version_info >= (3, 10)']) !== null) return path;
-    }
-  }
-  return null;
-}
+// 2. Python : le premier interpréteur qui répond (voir maj/python.mjs ; le raccourci du Microsoft Store est écarté).
 const python = findPython();
 if (!python) fail('Python 3.10 ou plus introuvable. Installez-le (https://www.python.org/downloads/ ou « winget install Python.Python.3.13 »), puis relancez.');
 log(`Python : ${python}`);

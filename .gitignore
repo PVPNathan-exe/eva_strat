@@ -25,6 +25,9 @@ dist-ssr
 
 # Analyse vidéo
 data/
+
+# État des mises à jour (empreintes, sauvegardes, copies de référence) : propre à chaque installation
+.eva/
 __pycache__/
 .pytest_cache/
 *.mp4

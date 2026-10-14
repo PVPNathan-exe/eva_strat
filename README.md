@@ -33,6 +33,18 @@ En préparation : un onglet **Stats** (parcours des joueurs, morts, retakes, rot
 - Le site n'écoute que sur ton PC (`http://localhost:5173`) et refuse les requêtes venues d'ailleurs. Internet n'est utilisé qu'à l'installation (npm, pip, ffmpeg) et pour télécharger une vidéo YouTube si tu le demandes.
 - Conséquences : **Windows** est nécessaire pour l'analyse, et le calcul se fait sur ton PC : la durée dépend de la vidéo et de la machine (sur l'ancien PC de développement : une à deux heures pour une vidéo de 58 minutes). La priorité de l'analyse se règle dans Options.
 
+### Windows seulement, pour l'instant
+
+Le programme ne tourne **que sous Windows**, parce qu'il s'appuie sur des outils de Windows :
+
+- la **reconnaissance de texte intégrée à Windows**, appelée par PowerShell (`analysis/ocr_win.ps1`), lit les pseudos et le killfeed ;
+- le sélecteur de fichier et de dossier (« Parcourir… ») ouvre les fenêtres de Windows par PowerShell ;
+- ffmpeg est installé par `winget`, la priorité de l'analyse utilise l'API de Windows et un arrêt d'analyse utilise `taskkill`.
+
+Sans Windows, d'après le code (**non testé** sur Mac ou Linux) : les pseudos et le killfeed ne sont pas lus (l'analyse continue pour le reste), le bouton Parcourir ne s'ouvre pas (on colle le chemin), et les parties de l'interface qui n'ont pas besoin de ces outils (l'onglet Stratégie, par exemple) ne dépendent pas de Windows.
+
+**Mac et Linux, est-ce possible ?** Oui en principe : il faudrait remplacer ces outils par leurs équivalents. À ma connaissance (rien de cela n'est installé ni mesuré ici) : [Tesseract](https://github.com/tesseract-ocr/tesseract) ou des moteurs installables par `pip` (RapidOCR, EasyOCR) à la place de l'OCR de Windows, la reconnaissance de texte d'Apple (Vision) sur Mac, des fenêtres de choix de fichier natives (`osascript`, `zenity`), ffmpeg par `brew` ou `apt`, `os.nice` pour la priorité. **Ce qu'on ne sait pas encore** : si ces moteurs lisent aussi bien les polices du jeu (pseudos tronqués, killfeed) que celui de Windows : il faudra le mesurer sur de vraies vidéos avant d'annoncer une compatibilité. Ce serait un chantier à part.
+
 ## Les onglets
 
 | Groupe | Onglet | Pour quoi faire |
@@ -57,7 +69,7 @@ Il faut **Windows 10 ou 11**, [Node.js](https://nodejs.org/) 22 ou plus (version
 npm start
 ```
 
-La première fois, il installe ce qui manque (paquets npm, bibliothèques Python, ffmpeg par winget) puis ouvre le site sur http://localhost:5173. Les fois suivantes, `npm start` lance directement le site. Pour l'arrêter, ferme la fenêtre du terminal.
+La première fois, il installe ce qui manque (paquets npm, bibliothèques Python, ffmpeg par winget) puis ouvre le site sur http://localhost:5173. Les fois suivantes, `npm start` regarde d'abord s'il y a une mise à jour (voir « Mises à jour et remises à zéro ») puis lance le site. Pour l'arrêter, ferme la fenêtre du terminal.
 
 Si `npm` échoue avec une erreur de certificat SSL : `set NODE_OPTIONS=--use-system-ca` puis relance. Pour utiliser un autre Python : variable `EVA_PYTHON`.
 
@@ -134,6 +146,39 @@ set EVA_CACHE=D:\gros-cache      # ou seulement le cache (vidéos téléchargée
 ```
 
 Pour que ce soit permanent : `setx EVA_DATA_DIR "D:\eva-data"` (nouveau terminal ensuite). **PS : ta propre base** : `EVA_DB` accepte tout fichier SQLite au format du programme (la base d'un coéquipier, une copie d'essai). Une autre sorte de base (PostgreSQL, MongoDB...) n'est pas prise en charge ; l'export JSON sert de passerelle : chaque game est un document `{format, uid, video, game, tables: {nom: {columns, rows}}}` (JSON compressé gzip), facile à charger ailleurs. L'onglet Données avertit si la base est sur une clé USB ou un disque réseau ; Windows déclare souvent « fixe » un SSD ou disque dur USB, qui n'est donc pas repéré : l'avertissement ne remplace pas la prudence.
+
+## Mises à jour et remises à zéro
+
+À chaque `npm start`, le programme regarde en quelques secondes s'il y a une nouvelle version sur la branche `main` de GitHub (rien n'est téléchargé tant que `main` n'a pas changé ; hors ligne, il continue sans rien dire). `EVA_NO_UPDATE=1` désactive ce contrôle.
+
+**Ce qui est mis à jour tout seul : le code** (interface, serveur, programmes Python, docs), après sauvegarde de l'ancienne version dans `.eva/backup/`. **Ce qui n'est jamais modifié sans ton accord : les parties sensibles**, celles qui changent les calculs et que tu as peut-être réglées : les masques et réglages des cartes, les réglages du suivi, les noms et images des armes, les modèles de chiffres. Elles sont seulement signalées. `data/` (ta base, ton cache) n'est jamais touché. Une installation faite avec Git (dossier `.git`) n'est pas modifiée : le programme dit seulement qu'il y a du nouveau, `git pull` reste à toi.
+
+| Commande | Ce qu'elle fait |
+|---|---|
+| `npm run maj` | met à jour le code maintenant (`-- --check` : montre ce qui serait fait, sans rien écrire) |
+| `npm run maj -- sensibles` | compare chaque partie sensible à GitHub et te laisse choisir : prendre GitHub, garder la tienne, ou la garder et la proposer |
+| `npm run comparer` | **qui est le meilleur, toi ou GitHub** (`-- masques`, `-- suivi`, `-- masques --map Polaris`) |
+| `npm run contribuer` | prépare un dossier à proposer quand ta version est **mesurée** meilleure |
+| `npm run reset -- <partie>` | remet **une seule partie** à zéro (voir ci-dessous) |
+
+**Comparer avant de choisir.** Deux mesures existent : pour un **masque**, la part de *tes* positions lues avec certitude qu'il refuserait (plus bas = mieux ; il faut au moins 500 positions de cette carte dans ta base) ; pour les **réglages du suivi**, la note de `tune.py` sur les jeux de données du dépôt (plus haut = mieux). Les noms d'armes et les modèles n'ont pas de mesure : c'est à toi de décider. `--yes` prend la recommandation affichée : GitHub seulement s'il est mesuré meilleur (ou si tu n'as pas touché au fichier et qu'aucune mesure n'existe), sinon ta version est gardée.
+
+**Contribuer.** Si tes réglages sont mesurés meilleurs, `npm run contribuer` écrit `data/contributions/<date>/` : les fichiers et un rapport avec les chiffres (aucune vidéo, aucun pseudo, rien de ta base), puis explique comment les proposer (un fork et une *pull request* sur GitHub, ou le dossier à envoyer à la personne qui tient le projet). **Rien n'est envoyé par le programme.**
+
+**Remises à zéro, partie par partie** (toujours : on montre ce qui sera touché, on demande, on sauvegarde avant ; `--dry-run` montre sans écrire) :
+
+| Partie | Effet |
+|---|---|
+| `masques` (`--map Carte`) | masques, traits et réglages des cartes remis à la version de GitHub, pour toutes les cartes ou une seule |
+| `suivi` | réglages du suivi remis à ceux de GitHub |
+| `armes` | avis et verrous des icônes remis à zéro (les noms et images ne sont jamais touchés : la base cite les icônes par numéro) |
+| `modeles` | modèles de chiffres, noms de cartes, zones par défaut |
+| `calibrages` (`--map Carte`) | zones de l'écran que tu as réglées : retour aux zones par défaut |
+| `cartographie --map Carte` | ta cartographie à la main de cette carte |
+| `corrections --game N` | positions, regards, morts et kills marqués posés à la main sur cette game |
+| `cache` | lectures gardées (elles se refont) |
+
+Les parties de la base (`calibrages`, `cartographie`, `corrections`) font d'abord une copie de la base (`eva.avant-reset-<partie>-<date>.db`) : ferme le site avant. Les positions déjà lues ne changent qu'à la prochaine analyse.
 
 ## Avancé : ce qui change les calculs
 

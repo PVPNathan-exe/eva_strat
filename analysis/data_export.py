@@ -313,10 +313,10 @@ def _import_config(conn, path):
             conn.execute("INSERT INTO team_ranges (video_id, start_s, end_s, team_a, team_b) VALUES (?, ?, ?, ?, ?)", (vid, r["start_s"], r["end_s"], r["team_a"], r["team_b"]))
 
 
-def backup_db(conn, dest_dir=None):
-    """Copie cohérente de la base avant un import (API de sauvegarde de SQLite, valable avec le journal WAL). Renvoie le chemin de la copie."""
+def backup_db(conn, dest_dir=None, label="import"):
+    """Copie cohérente de la base avant une opération qui l'écrit (API de sauvegarde de SQLite, valable avec le journal WAL) : `eva.avant-<label>-<date>.db`. Renvoie le chemin de la copie."""
     src = Path(conn.execute("PRAGMA database_list").fetchone()["file"])
-    dest = Path(dest_dir or src.parent) / f"{src.stem}.avant-import-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
+    dest = Path(dest_dir or src.parent) / f"{src.stem}.avant-{label}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
     target = sqlite3.connect(dest)
     conn.backup(target)
     target.close()

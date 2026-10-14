@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "setup": "node scripts/setup.mjs",
+    "maj": "node scripts/maj/cli.mjs maj",
+    "comparer": "node scripts/maj/cli.mjs comparer",
+    "contribuer": "node scripts/maj/cli.mjs contribuer",
+    "reset": "node scripts/maj/cli.mjs reset",
     "start": "node scripts/setup.mjs --run",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:js": "node --test --disable-warning=ExperimentalWarning \"tests/**/*.test.ts\"",
+    "test:js": "node --test --disable-warning=ExperimentalWarning \"tests/**/*.test.{ts,mjs}\"",
     "test:py": "python -m pytest -q",
     "test": "npm run test:js && npm run test:py"
   },
