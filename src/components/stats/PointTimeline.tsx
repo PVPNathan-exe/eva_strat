@@ -1,8 +1,9 @@
 // Chronologie d'une game par point (vues Retakes et Rotations) : une ligne par point avec les bandes de propriétaire (équipe suivie « a », adversaires « b », gris : neutre),
-// éventuellement les périodes où le point est actif, les épisodes marqués (forme selon le résultat), le curseur de temps partagé avec l'horloge de rejeu.
-// Cliquer un repère le choisit (le parent place le curseur au début de sa fenêtre) ; cliquer ailleurs sur une ligne place le curseur à cet instant.
+// éventuellement les périodes où le point est actif, les repères marqués (forme selon le résultat), le curseur de temps partagé avec l'horloge de rejeu.
+// Une vague (Retakes) est une barre du départ du spawn à la résolution, colorée par l'équipe, avec un trait au premier kill et le symbole de l'issue à la fin ; la barre est rayée quand la vague est progressive.
+// Cliquer un repère ou une barre le choisit (le parent place le curseur à son début) ; cliquer ailleurs sur une ligne place le curseur à cet instant.
 
-import type { MouseEvent } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import { axisTicks, timeAtFraction, type EpisodeMark, type Lane, type OwnerBand } from '../../lib/episodeClock';
 import { formatTime, spanToPct } from '../../lib/timeline';
 import '../../styles/stats-chrono.css';
@@ -20,24 +21,32 @@ interface Props {
   ownerTitle: (band: OwnerBand) => string;
 }
 
+/** Nombre de rangées d'une ligne, lu par le CSS (hauteur de la ligne et de son étiquette). */
+const rowsStyle = (lane: Lane): CSSProperties => ({ '--rows': lane.rows }) as CSSProperties;
+
 export function PointTimeline({ lanes, duration, t, activeKey, onSeek, onPick, ownerTitle }: Props) {
   const ticks = axisTicks(duration);
+  const hasBars = lanes.some((lane) => lane.marks.some((m) => m.bar));
   const onTrack = (e: MouseEvent<HTMLDivElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
     if (box.width > 0) onSeek(timeAtFraction((e.clientX - box.left) / box.width, duration));
   };
+  const pick = (e: MouseEvent, m: EpisodeMark) => {
+    e.stopPropagation();
+    onPick(m);
+  };
   return (
-    <div className="ptl" role="group" aria-label="Chronologie des points">
+    <div className={`ptl${hasBars ? ' ptl--waves' : ''}`} role="group" aria-label="Chronologie des points">
       <div className="ptl__labels">
         {lanes.map((lane) => (
-          <span key={lane.point} className="ptl__label">
+          <span key={lane.point} className="ptl__label" style={rowsStyle(lane)}>
             Point {lane.point}
           </span>
         ))}
       </div>
       <div className="ptl__tracks">
         {lanes.map((lane) => (
-          <div key={lane.point} className="ptl__track" onClick={onTrack}>
+          <div key={lane.point} className="ptl__track" style={rowsStyle(lane)} onClick={onTrack}>
             {lane.owners.map((b, i) => (
               <i key={i} className={`ptl__band ptl__band--${b.tone}`} style={{ left: `${b.left}%`, width: `${b.width}%` }} title={ownerTitle(b)} />
             ))}
@@ -45,22 +54,35 @@ export function PointTimeline({ lanes, duration, t, activeKey, onSeek, onPick, o
               <i key={`a${i}`} className="ptl__active" style={{ left: `${b.left}%`, width: `${b.width}%` }} title={`Point actif de ${formatTime(b.t0)} à ${formatTime(b.t1)}`} />
             ))}
             {lane.owners.length === 0 && lane.active.length === 0 && <span className="ptl__nodata">propriétaire non lu</span>}
-            {lane.marks.map((m) => (
-              <i key={`s${m.key}`} className={`ptl__span${activeKey === m.key ? ' is-active' : ''}`} style={{ left: `${m.spanLeft}%`, width: `${m.spanWidth}%` }} />
-            ))}
+            {lane.marks.map((m) =>
+              m.bar ? null : <i key={`s${m.key}`} className={`ptl__span${activeKey === m.key ? ' is-active' : ''}`} style={{ left: `${m.spanLeft}%`, width: `${m.spanWidth}%` }} />,
+            )}
+            {lane.marks.map((m) =>
+              m.bar ? (
+                <button
+                  key={`w${m.key}`}
+                  type="button"
+                  className={`ptl__wave${m.bar.speed === 'progressif' ? ' ptl__wave--progressif' : ''} pal pal--${m.palette ?? 'a'}${activeKey === m.key ? ' is-active' : ''}`}
+                  style={{ left: `${m.bar.left}%`, width: `${m.bar.width}%`, '--row': m.bar.row } as CSSProperties}
+                  title={m.label}
+                  aria-label={`Vague ${m.label}`}
+                  aria-pressed={activeKey === m.key}
+                  onClick={(e) => pick(e, m)}
+                >
+                  {m.bar.contactLeft !== null && <i className="ptl__contact" style={{ left: `${((m.bar.contactLeft - m.bar.left) / m.bar.width) * 100}%` }} />}
+                </button>
+              ) : null,
+            )}
             {lane.marks.map((m) => (
               <button
                 key={`m${m.key}`}
                 type="button"
-                className={`ptl__mark ptl__mark--${m.kind} ptl__mark--${m.tone}${m.palette ? ` pal pal--${m.palette}` : ''}${activeKey === m.key ? ' is-active' : ''}`}
-                style={{ left: `${m.left}%` }}
+                className={`ptl__mark ptl__mark--${m.tone} ptl__mark--${m.kind}${m.bar ? ' ptl__mark--wave' : ''}${m.palette ? ` pal pal--${m.palette}` : ''}${activeKey === m.key ? ' is-active' : ''}`}
+                style={{ left: `${m.left}%`, ...(m.bar ? { '--row': m.bar.row } : {}) } as CSSProperties}
                 title={m.label}
                 aria-label={m.label}
                 aria-pressed={activeKey === m.key}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPick(m);
-                }}
+                onClick={(e) => pick(e, m)}
               />
             ))}
           </div>

@@ -11,7 +11,9 @@ import {
   indexSamples,
   lastAtOrBefore,
   markKind,
+  MIN_BAR_PCT,
   ownerBands,
+  packRows,
   paletteOfSide,
   pointsOf,
   positionsAt,
@@ -24,6 +26,7 @@ import {
 } from '../src/lib/episodeClock.ts';
 import { nameKey, NO_FOLLOW, type FollowGame, type FollowSpec } from '../src/lib/teamFollow.ts';
 import type { Episode, PointActive, PointOwner } from '../src/types/stats.ts';
+import { waveEpisode } from './waveFixtures.ts';
 
 const GAME: FollowGame = { id: 32, teamA: 'SNV', teamB: 'NCT', players: [] };
 const SWAPPED: FollowGame = { id: 33, teamA: 'NCT', teamB: 'SNV', players: [] };
@@ -102,26 +105,81 @@ test('activeBands, pointsOf et buildLanes : une ligne par point avec ses repère
   const marks = [retakeMark(eps[0], 540, 'b')];
   const lanes = buildLanes(['B', 'C', 'D'], OWNERS, ACTIVE, marks, 540, () => 'none');
   assert.deepEqual(lanes.map((l) => [l.point, l.owners.length, l.active.length, l.marks.length]), [['B', 3, 1, 0], ['C', 1, 1, 0], ['D', 0, 0, 1]]);
+  assert.deepEqual(lanes.map((l) => l.rows), [1, 1, 1]);
 });
 
-test('markKind et retakeMark : forme selon le résultat, position et fenêtre', () => {
-  assert.equal(markKind({ outcome: 'success' }), 'success');
-  assert.equal(markKind({ outcome: 'fail' }), 'fail');
-  assert.equal(markKind({ outcome: 'no_push' }), 'nopush');
-  assert.equal(markKind({ outcome: 'series_collapse' }), 'series');
-  assert.equal(markKind({ outcome: null }), 'nopush');
-  const m = retakeMark(episode({ id: 9, outcome: 'series_fail', data: { series_t: [384, 392.5] } }), 540, 'a');
+test('buildLanes : deux vagues qui se chevauchent sur un point sont rangées sur deux rangées, la ligne grandit', () => {
+  const base = waveEpisode().data as { wave: Record<string, unknown> };
+  const a = retakeMark(waveEpisode({ id: 1, point: 'A' }), 540, 'a'); // 2,2 s à 21 s
+  const b = retakeMark(waveEpisode({ id: 2, point: 'A', data: { ...base, wave: { ...base.wave, t_start: 5, t_end: 30, t_contact: 8 } } }), 540, 'b');
+  const later = retakeMark(waveEpisode({ id: 3, point: 'A', data: { wave: { t_start: 100, t_end: 110, t_contact: 105, speed: 'progressif' } } }), 540, 'a');
+  const other = retakeMark(waveEpisode({ id: 4, point: 'B' }), 540, 'a');
+  const rotation = { key: 'r', point: 'A', kind: 'rotation' as const, tone: 'doubt' as const, t: 50, left: 9, spanLeft: 8, spanWidth: 2, palette: null, label: 'rotation' };
+  const lanes = buildLanes(['A', 'B', 'C'], [], [], [a, b, later, other, rotation], 540, () => 'none');
+  assert.deepEqual(lanes.map((l) => l.rows), [2, 1, 1]);
+  const rowOf = (key: string) => lanes[0].marks.find((m) => m.key === key)?.bar?.row;
+  assert.deepEqual([rowOf('1'), rowOf('2'), rowOf('3')], [0, 1, 0]); // la troisième vague reprend la première rangée
+  assert.equal(lanes[0].marks.find((m) => m.key === 'r')?.bar, undefined); // un repère sans barre ne change pas
+  assert.equal(lanes[1].marks[0].bar?.row, 0);
+});
+
+test('packRows : rangement glouton par début, écart minimal entre deux barres d' + "'" + 'une même rangée', () => {
+  assert.deepEqual(packRows([]), []);
+  assert.deepEqual(packRows([{ left: 0, width: 10 }, { left: 20, width: 10 }]), [0, 0]);
+  assert.deepEqual(packRows([{ left: 0, width: 10 }, { left: 5, width: 10 }]), [0, 1]);
+  // Écart de 1,5 : une barre qui commence 1 après la fin de la précédente passe à la rangée suivante, 1,5 après elle reste sur la même
+  assert.deepEqual(packRows([{ left: 0, width: 10 }, { left: 11, width: 5 }]), [0, 1]);
+  assert.deepEqual(packRows([{ left: 0, width: 10 }, { left: 11.5, width: 5 }]), [0, 0]);
+  assert.deepEqual(packRows([{ left: 0, width: 10 }, { left: 10.2, width: 5 }], 0), [0, 0]);
+  // Entrée désordonnée : une rangée par barre dans l'ordre d'entrée
+  assert.deepEqual(packRows([{ left: 40, width: 5 }, { left: 0, width: 50 }, { left: 20, width: 5 }, { left: 60, width: 5 }]), [1, 0, 1, 0]);
+});
+
+test('markKind : une forme par issue, anciennes issues mappées', () => {
+  const shape = (outcome: string) => markKind(waveEpisode({ outcome }));
+  assert.deepEqual(
+    ['success', 'fail', 'won_no_capture', 'initial', 'initial_lost', 'duel', 'indecis', 'no_contact'].map(shape),
+    ['success', 'fail', 'won', 'initial', 'initial_lost', 'duel', 'indecis', 'no_contact'],
+  );
+  assert.equal(markKind({ outcome: 'no_push', data: null }), 'indecis');
+  assert.equal(markKind({ outcome: 'series_fail', data: null }), 'fail');
+  assert.equal(markKind({ outcome: 'series_collapse', data: null }), 'won');
+  assert.equal(markKind({ outcome: null, data: null }), 'indecis');
+});
+
+test('retakeMark : barre du départ à la résolution, trait au premier kill, symbole à la fin', () => {
+  const m = retakeMark(waveEpisode({ id: 9 }), 540, 'a');
   assert.equal(m.key, '9');
-  assert.equal(m.kind, 'series');
-  assert.equal(m.tone, 'bad');
-  assert.equal(m.t, 384); // instant clé d'une série : le premier kill
-  assert.ok(Math.abs(m.left - (384 / 540) * 100) < 1e-9);
-  assert.ok(Math.abs(m.spanLeft - (364 / 540) * 100) < 1e-9);
-  assert.ok(Math.abs(m.spanWidth - (38.5 / 540) * 100) < 1e-9);
+  assert.equal(m.kind, 'success');
+  assert.equal(m.tone, 'good');
   assert.equal(m.palette, 'a');
-  const r = retakeMark(episode({ outcome: 'success', data: { push_t: 84.5, change_t: 87 } }), 540, null);
-  assert.equal(r.t, 84.5);
-  assert.equal(r.tone, 'good');
+  assert.equal(m.t, 21); // le symbole est posé sur la résolution
+  assert.ok(Math.abs(m.left - (21 / 540) * 100) < 1e-9);
+  assert.ok(m.bar);
+  assert.ok(Math.abs(m.bar.left - (2.2 / 540) * 100) < 1e-9);
+  assert.ok(Math.abs(m.bar.width - (18.8 / 540) * 100) < 1e-9);
+  assert.ok(Math.abs((m.bar.contactLeft ?? 0) - (9.5 / 540) * 100) < 1e-9);
+  assert.equal(m.bar.speed, 'rapide');
+  assert.equal(m.bar.row, 0);
+  assert.equal(m.spanLeft, m.bar.left);
+  assert.equal(m.label, '0:02 : Retake réussi (rapide)');
+});
+
+test('retakeMark : vague sans contact, vague très courte, ancienne ligne', () => {
+  const nc = retakeMark(waveEpisode({ outcome: 'no_contact', data: { wave: { t_start: 211.4, t_end: 221.1, t_contact: null, speed: null } } }), 540, 'b');
+  assert.equal(nc.bar?.contactLeft, null);
+  assert.equal(nc.bar?.speed, null);
+  assert.equal(nc.label, '3:31 : Sans contact');
+  const tiny = retakeMark(waveEpisode({ data: { wave: { t_start: 10, t_end: 10, t_contact: 10, speed: 'rapide' } } }), 540, 'a');
+  assert.equal(tiny.bar?.width, MIN_BAR_PCT);
+  // Ancienne ligne (sans data.wave) : barre de son début à sa fin, symbole de l'issue mappée
+  const old = retakeMark(episode({ id: 5, outcome: 'series_fail', data: null }), 540, 'a');
+  assert.equal(old.kind, 'fail');
+  assert.equal(old.tone, 'bad');
+  assert.ok(Math.abs((old.bar?.left ?? 0) - (364 / 540) * 100) < 1e-9);
+  assert.ok(Math.abs((old.bar?.width ?? 0) - (38.5 / 540) * 100) < 1e-9);
+  assert.equal(old.bar?.contactLeft, null);
+  assert.match(old.label, /ancien calcul/);
 });
 
 test('episodesAt et timeAtFraction', () => {

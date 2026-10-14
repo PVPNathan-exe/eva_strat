@@ -5,35 +5,30 @@
 import type { Episode, PointOwner, TeamSide } from '../types/stats.ts';
 import { numberOfSlot } from './killTimeline.ts';
 import type { Palette } from './teamFollow.ts';
+import { waveInfo } from './waveInfo.ts';
+import { issueLabel } from './waveOutcome.ts';
 
 /** Nombre minimal d'épisodes décidés (réussis ou échoués) pour afficher un pourcentage. */
 export const MIN_EPISODES = 5;
 /** Le lien vers la vidéo ouvre l'instant clé moins ce délai (s). */
 export const VIDEO_LEAD_S = 5;
 
-export type Tone = 'good' | 'bad' | 'doubt';
+/** Ton d'un résultat : bon, mauvais, à vérifier, ou neutre (prise initiale, duel, vague sans contact : ni réussite ni échec). */
+export type Tone = 'good' | 'bad' | 'doubt' | 'neutral';
 
+/** Résultats des rotations (les issues des retakes sont dans waveOutcome.ts). */
 const OUTCOMES: Record<string, { label: string; tone: Tone }> = {
-  success: { label: 'Réussi', tone: 'good' },
-  fail: { label: 'Échec', tone: 'bad' },
-  no_push: { label: 'Sans départ, à vérifier', tone: 'doubt' },
   arrived: { label: 'Arrivés à deux ou plus', tone: 'good' },
   partial: { label: 'Un seul arrivé', tone: 'doubt' },
   not_arrived: { label: 'Personne arrivé', tone: 'bad' },
-  // Séries de 3 ou 4 kills (kill_series.py) : le ton est celui de l'équipe de l'épisode (qui subit la série dans la lecture « victime »)
-  series_fail: { label: 'Série de kills : échec de retake', tone: 'bad' },
-  series_collapse: { label: 'Série de kills : défense effondrée', tone: 'bad' },
-  series_hold: { label: 'Série de kills : la défense tient', tone: 'good' },
-  series_changed: { label: "Série de kills suivie d'une prise du point", tone: 'doubt' },
-  series_neutral: { label: 'Série de kills, point sans propriétaire', tone: 'doubt' },
 };
 
-/** Vrai pour une série de 3 ou 4 kills (épisode retake dont le résultat commence par series_). Une série n'entre pas dans les taux : la même poussée est souvent aussi un échec classique. */
+/** Vrai pour une ancienne série de 3 ou 4 kills (révision 2 des retakes : résultat series_*, plus écrite par le calcul actuel). Tolérance pour une base non recalculée. */
 export const isSeries = (ep: Pick<Episode, 'outcome'>): boolean => (ep.outcome ?? '').startsWith('series_');
 
-/** Libellé et ton (bon, mauvais, à vérifier) d'un résultat d'épisode ; un résultat inconnu reste « à vérifier ». */
+/** Libellé et ton d'un résultat d'épisode (rotation, issue de vague ou ancienne issue) ; un résultat inconnu reste « à vérifier ». */
 export function outcomeInfo(outcome: string | null): { label: string; tone: Tone } {
-  return (outcome && OUTCOMES[outcome]) || { label: outcome ?? 'Inconnu', tone: 'doubt' };
+  return (outcome && OUTCOMES[outcome]) || issueLabel(outcome) || { label: outcome ?? 'Inconnu', tone: 'doubt' };
 }
 
 const CAUSES: Record<string, string> = {
@@ -47,7 +42,7 @@ const CAUSES: Record<string, string> = {
 export const causeLabel = (cause: string): string => CAUSES[cause] ?? cause;
 
 const FATES: Record<string, string> = {
-  mort: 'mort avant la prise',
+  mort: 'mort dans le teamfight',
   mort_apres: 'mort après la prise',
   recule: 'reculé',
   reste: 'resté au point',
@@ -196,6 +191,13 @@ export function deathSentence(d: DeathInfo, name: (slot: number) => string | und
   return `${playerLabel(d.slot, name(d.slot))} : ${by}${where} (${causeLabel(d.cause)})`;
 }
 
+/** Causes des morts en une phrase : « tué à distance : 3 ; tué sur le point : 1 » (la plus fréquente d'abord). */
+export function causeSummary(deaths: Pick<DeathInfo, 'cause'>[]): string {
+  const count = new Map<string, number>();
+  for (const d of deaths) count.set(d.cause, (count.get(d.cause) ?? 0) + 1);
+  return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([cause, n]) => `${causeLabel(cause)} : ${n}`).join(' ; ');
+}
+
 // ---------------------------------------------------------------- filtres et regroupements
 
 /** Le joueur (slot 1 à 8) participe à l'épisode : attaquant, défenseur, mort, ou joueur de la rotation. slot 0 : tous. */
@@ -330,17 +332,26 @@ export function keyInstant(ep: Episode): number {
 /** Temps de vidéo (s) du lien : début de la game plus l'instant (temps de game) moins le délai, sans reculer avant le début de la game. */
 export const videoSeek = (gameStartS: number, t: number): number => gameStartS + Math.max(0, t - VIDEO_LEAD_S);
 
-/** Repères de la frise : (instant, libellé) du départ, de la prise du point ou du changement de point actif. */
+/** Repères de la frise : (instant, libellé) du départ du spawn, du premier kill, de la prise du point ou du changement de point actif. */
 export function episodeMarks(ep: Episode): { t: number; label: string }[] {
   if (ep.kind === 'rotation') {
     const t = rotationInfo(ep).switchT;
     return t === null ? [] : [{ t, label: 'Nouveau point actif' }];
   }
   const r = retakeInfo(ep);
+  const contact = waveInfo(ep)?.tContact ?? null;
   const marks: { t: number; label: string }[] = [];
   if (r.pushT !== null) marks.push({ t: r.pushT, label: 'Départ' });
+  if (contact !== null) marks.push({ t: contact, label: 'Premier kill' });
   if (r.changeT !== null) marks.push({ t: r.changeT, label: 'Prise du point' });
-  return marks;
+  return marks.sort((a, b) => a.t - b.t);
+}
+
+/** Fenêtre de la frise détaillée d'un épisode : `data.window` (5 s de marge de chaque côté) si elle est écrite, sinon les bornes de l'épisode. */
+export function windowOf(ep: Pick<Episode, 't0' | 't1' | 'data'>): { t0: number; t1: number } {
+  const w = ep.data?.window;
+  if (Array.isArray(w) && num(w[0]) !== null && num(w[1]) !== null && (w[1] as number) > (w[0] as number)) return { t0: w[0] as number, t1: w[1] as number };
+  return { t0: ep.t0, t1: ep.t1 };
 }
 
 /** Position (0 à 100) d'un instant dans la fenêtre de l'épisode, bornée. */

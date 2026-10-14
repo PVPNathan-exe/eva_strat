@@ -3,9 +3,11 @@
 // Fonctions pures : temps en secondes depuis le début de la game (comme les tables Stats), positions en fractions de la minimap, aucune dépendance au navigateur.
 
 import type { Episode, PointActive, PointOwner, TeamSide } from '../types/stats.ts';
-import { involvesSlot, isSeries, keyInstant, outcomeInfo, type Tone } from './episodeFormat.ts';
+import { involvesSlot, type Tone } from './episodeFormat.ts';
 import { keptSides, paletteOf, wantedSlot, type FollowGame, type FollowSpec, type Palette } from './teamFollow.ts';
 import { formatTime, spanToPct } from './timeline.ts';
+import { waveInfo } from './waveInfo.ts';
+import { waveIssueInfo, type MarkShape } from './waveOutcome.ts';
 
 // ---------------------------------------------------------------- équipes et filtres
 
@@ -93,16 +95,28 @@ export function pointsOf(owners: PointOwner[], active: PointActive[], eps: Episo
 
 // ---------------------------------------------------------------- repères des épisodes
 
-export type MarkKind = 'success' | 'fail' | 'nopush' | 'series' | 'rotation';
+export type MarkKind = MarkShape | 'rotation';
 
-/** Un repère sur la frise : un épisode (ou un changement de point actif) à son instant clé, avec sa fenêtre en fond. */
+/** Barre d'une vague sur la frise : du départ du spawn à la résolution, avec le repère du premier kill (positions en pourcentage de la durée de la game). */
+export interface WaveBar {
+  left: number;
+  width: number;
+  /** Position du premier kill ; null sans contact. */
+  contactLeft: number | null;
+  /** Vitesse de la vague (rapide ou progressive) ; null sans contact. */
+  speed: 'rapide' | 'progressif' | null;
+  /** Rangée de la barre dans sa ligne (0 en haut) : deux vagues qui se chevauchent ne se cachent pas. */
+  row: number;
+}
+
+/** Un repère sur la frise : un épisode (ou un changement de point actif) à son instant clé, avec sa fenêtre en fond. Une vague a en plus une barre (`bar`). */
 export interface EpisodeMark {
   /** Clé stable du repère (identifiant de l'épisode, ou clé du changement de point). */
   key: string;
   point: string;
   kind: MarkKind;
   tone: Tone;
-  /** Instant clé (s) et position en pourcentage. */
+  /** Instant clé (s) et position en pourcentage : pour une vague, sa résolution (fin de la barre, là où se pose le symbole de l'issue). */
   t: number;
   left: number;
   /** Fenêtre de l'épisode (début au curseur en cas de clic), en pourcentage. */
@@ -111,33 +125,62 @@ export interface EpisodeMark {
   /** Équipe de l'épisode (palette), null si inconnue. */
   palette: Palette | null;
   label: string;
+  bar?: WaveBar;
 }
 
-/** Forme du repère d'un retake selon son résultat : réussite, échec, sans départ, série de kills. */
-export function markKind(ep: Pick<Episode, 'outcome'>): MarkKind {
-  if (isSeries(ep)) return 'series';
-  if (ep.outcome === 'success') return 'success';
-  if (ep.outcome === 'fail') return 'fail';
-  return 'nopush';
-}
+/** Forme du repère d'une ligne de retake selon son issue (nouvelle ou ancienne, voir waveOutcome.ts). */
+export const markKind = (ep: Pick<Episode, 'outcome' | 'data'>): MarkKind => waveIssueInfo(ep).shape;
 
-/** Repère d'un épisode de retake (ou de série) : instant clé, fenêtre, forme selon le résultat. */
+/** Largeur minimale d'une barre de vague (pourcentage de la game) : une vague très courte reste visible et cliquable. */
+export const MIN_BAR_PCT = 0.5;
+
+/**
+ * Repère d'une vague : barre du départ (`t_start`) à la résolution (`t_end`), repère du premier kill (`t_contact`), symbole de l'issue à la fin, couleur de l'équipe (palette).
+ * Une ancienne ligne (sans `data.wave`) devient une barre de son début à sa fin.
+ */
 export function retakeMark(ep: Episode, duration: number, palette: Palette | null): EpisodeMark {
-  const t = keyInstant(ep);
-  const win = bandOf(ep.t0, ep.t1, duration);
-  const out = outcomeInfo(ep.outcome);
+  const w = waveInfo(ep);
+  const info = waveIssueInfo(ep);
+  const t0 = w?.tStart ?? ep.t0;
+  const t1 = Math.max(w?.tEnd ?? ep.t1, t0);
+  const win = bandOf(t0, t1, duration);
+  const left = win?.left ?? spanToPct(t0, 0, duration);
+  const width = Math.max(win?.width ?? 0, MIN_BAR_PCT);
+  const contact = w?.tContact ?? null;
+  const speed = w?.speed ? ` (${w.speed === 'rapide' ? 'rapide' : 'progressif'})` : '';
   return {
     key: String(ep.id),
     point: ep.point ?? '?',
-    kind: markKind(ep),
-    tone: out.tone,
-    t,
-    left: spanToPct(t, 0, duration),
-    spanLeft: win?.left ?? 0,
-    spanWidth: win?.width ?? 0,
+    kind: info.shape,
+    tone: info.tone,
+    t: t1,
+    left: spanToPct(t1, 0, duration),
+    spanLeft: left,
+    spanWidth: width,
     palette,
-    label: `${formatTime(t)} : ${out.label}`,
+    label: `${formatTime(t0)} : ${info.short}${speed}`,
+    bar: { left, width, contactLeft: contact !== null && contact >= t0 && contact <= t1 ? spanToPct(contact, 0, duration) : null, speed: w?.speed ?? null, row: 0 },
   };
+}
+
+/** Écart minimal (pourcentage de la game) entre la fin d'une barre et le début de la suivante sur une même rangée : place pour le symbole de l'issue. */
+export const BAR_GAP_PCT = 1.5;
+
+/** Rangée de chaque barre : rangement glouton par début, une barre prend la première rangée libre (deux vagues qui se chevauchent sont superposées). Renvoie un indice de rangée par barre, dans l'ordre d'entrée. */
+export function packRows(bars: { left: number; width: number }[], gap: number = BAR_GAP_PCT): number[] {
+  const rows: number[] = new Array(bars.length).fill(0);
+  const ends: number[] = [];
+  const order = bars.map((_, i) => i).sort((a, b) => bars[a].left - bars[b].left || a - b);
+  for (const i of order) {
+    let r = ends.findIndex((end) => end + gap <= bars[i].left);
+    if (r < 0) {
+      r = ends.length;
+      ends.push(0);
+    }
+    ends[r] = bars[i].left + bars[i].width;
+    rows[i] = r;
+  }
+  return rows;
 }
 
 /** Une ligne de la frise : un point avec ses bandes de propriétaire, ses périodes actives et ses repères. */
@@ -146,16 +189,25 @@ export interface Lane {
   owners: OwnerBand[];
   active: Band[];
   marks: EpisodeMark[];
+  /** Nombre de rangées de barres de vague (1 sans barre) : la ligne grandit avec elles. */
+  rows: number;
+}
+
+/** Repères d'un point, les barres de vague rangées sans se chevaucher. */
+function laneMarks(marks: EpisodeMark[]): { marks: EpisodeMark[]; rows: number } {
+  const bars = marks.filter((m) => m.bar);
+  if (bars.length === 0) return { marks, rows: 1 };
+  const rows = packRows(bars.map((m) => m.bar as WaveBar));
+  const placed = new Map(bars.map((m, i) => [m.key, rows[i]]));
+  return { marks: marks.map((m) => (m.bar ? { ...m, bar: { ...m.bar, row: placed.get(m.key) ?? 0 } } : m)), rows: Math.max(...rows) + 1 };
 }
 
 /** Lignes de la frise : un par point, les repères rangés sur le point de leur ligne. */
 export function buildLanes(points: string[], owners: PointOwner[], active: PointActive[], marks: EpisodeMark[], duration: number, toneOf: (owner: TeamSide | 'none') => Palette | 'none'): Lane[] {
-  return points.map((point) => ({
-    point,
-    owners: ownerBands(owners, point, duration, toneOf),
-    active: activeBands(active, point, duration),
-    marks: marks.filter((m) => m.point === point),
-  }));
+  return points.map((point) => {
+    const placed = laneMarks(marks.filter((m) => m.point === point));
+    return { point, owners: ownerBands(owners, point, duration, toneOf), active: activeBands(active, point, duration), marks: placed.marks, rows: placed.rows };
+  });
 }
 
 /** Graduations de l'axe de la frise : une par minute (une toutes les deux minutes au-delà de 15 minutes), sans dépasser la durée. */

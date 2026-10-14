@@ -3,13 +3,16 @@ import assert from 'node:assert/strict';
 import {
   arrivalGap,
   causeLabel,
+  causeSummary,
   deathSentence,
+  episodeMarks,
   fateLabel,
   filterEpisodes,
   flowSignature,
   formatSeconds,
   groupByPoint,
   involvesSlot,
+  isSeries,
   keyInstant,
   offsetLabel,
   outcomeInfo,
@@ -21,8 +24,10 @@ import {
   timelineDeaths,
   timelineRows,
   videoSeek,
+  windowOf,
 } from '../src/lib/episodeFormat.ts';
 import type { Episode, PointOwner } from '../src/types/stats.ts';
+import { REAL_NO_CONTACT, waveEpisode } from './waveFixtures.ts';
 
 /** Épisode de test : seuls les champs utiles changent. */
 const episode = (over: Partial<Episode>): Episode => ({ id: 1, game_id: 1, kind: 'retake', point: 'A', point_to: null, team: 'B', t0: 67, t1: 97, outcome: 'success', data: null, verdict: null, ...over });
@@ -42,13 +47,74 @@ const REAL_RETAKE = {
   defenders_left: 0,
 };
 
-test('outcomeInfo : libellés et tons, résultat inconnu à vérifier', () => {
-  assert.deepEqual(outcomeInfo('success'), { label: 'Réussi', tone: 'good' });
-  assert.equal(outcomeInfo('fail').tone, 'bad');
+test('outcomeInfo : libellés et tons des retakes (vocabulaire des vagues), des rotations et des anciennes issues', () => {
+  assert.deepEqual(outcomeInfo('success'), { label: 'Retake réussi (teamfight gagné et point capturé)', tone: 'good' });
+  assert.deepEqual(outcomeInfo('fail'), { label: 'Retake raté (teamfight perdu)', tone: 'bad' });
+  assert.equal(outcomeInfo('won_no_capture').label, 'Teamfight gagné sans capture du point');
+  assert.equal(outcomeInfo('initial').tone, 'neutral');
+  assert.equal(outcomeInfo('duel').tone, 'neutral');
+  assert.equal(outcomeInfo('indecis').tone, 'doubt');
   assert.equal(outcomeInfo('no_push').tone, 'doubt');
+  assert.equal(outcomeInfo('series_fail').tone, 'bad');
+  assert.deepEqual(outcomeInfo('arrived'), { label: 'Arrivés à deux ou plus', tone: 'good' });
   assert.equal(outcomeInfo('not_arrived').tone, 'bad');
   assert.equal(outcomeInfo('zzz').tone, 'doubt');
   assert.equal(outcomeInfo(null).label, 'Inconnu');
+});
+
+test('windowOf : data.window si elle est écrite, sinon les bornes de l\'épisode', () => {
+  assert.deepEqual(windowOf(waveEpisode()), { t0: 0, t1: 26 });
+  assert.deepEqual(windowOf(episode({ t0: 5, t1: 9, data: null })), { t0: 5, t1: 9 });
+  assert.deepEqual(windowOf(episode({ t0: 5, t1: 9, data: { window: [9, 5] } })), { t0: 5, t1: 9 }); // fenêtre à l'envers : ignorée
+  assert.deepEqual(windowOf(episode({ t0: 5, t1: 9, data: { window: ['a', 12] } })), { t0: 5, t1: 9 });
+});
+
+test('episodeMarks : départ, premier kill et prise du point d\'une vague, dans l\'ordre du temps', () => {
+  assert.deepEqual(episodeMarks(waveEpisode()), [{ t: 2.2, label: 'Départ' }, { t: 9.5, label: 'Premier kill' }, { t: 21, label: 'Prise du point' }]);
+  assert.deepEqual(episodeMarks(waveEpisode({ data: REAL_NO_CONTACT })), [{ t: 211.4, label: 'Départ' }]); // ni contact ni prise
+  assert.deepEqual(episodeMarks(episode({ data: { push_t: 84.5, change_t: 87 } })), [{ t: 84.5, label: 'Départ' }, { t: 87, label: 'Prise du point' }]); // ancienne ligne
+});
+
+test('causeSummary : causes des morts, la plus fréquente d\'abord', () => {
+  assert.equal(causeSummary([{ cause: 'tue_a_distance' }, { cause: 'tue_sur_le_point' }, { cause: 'tue_a_distance' }]), 'tué à distance : 2 ; tué sur le point : 1');
+  assert.equal(causeSummary([]), '');
+});
+
+test('isSeries et keyInstant : une ancienne série garde son premier kill comme instant clé', () => {
+  assert.equal(isSeries({ outcome: 'series_hold' }), true);
+  assert.equal(isSeries({ outcome: 'success' }), false);
+  assert.equal(isSeries({ outcome: null }), false);
+  assert.equal(keyInstant(episode({ t0: 364, outcome: 'series_fail', data: { series_t: [384, 392.5] } })), 384);
+  assert.equal(keyInstant(episode({ t0: 364, outcome: 'series_fail', data: null })), 364);
+  assert.equal(keyInstant(waveEpisode()), 2.2); // vague : le départ du spawn
+});
+
+test('rateOf (rotations) : les anciennes séries de kills sont comptées à part, jamais dans le taux', () => {
+  const eps = [
+    episode({ id: 1, outcome: 'success', data: null }),
+    episode({ id: 2, outcome: 'fail', data: null }),
+    episode({ id: 3, outcome: 'series_fail' }),
+    episode({ id: 4, outcome: 'series_collapse' }),
+    episode({ id: 5, outcome: 'series_changed', verdict: 'ko' }),
+  ];
+  const r = rateOf(eps);
+  assert.equal(r.total, 2);
+  assert.equal(r.series, 2); // la série jugée fausse n'est pas comptée
+  assert.equal(r.decided, 2);
+  assert.equal(r.good, 1);
+});
+
+test('timelineRows : teinte par équipe nommée (toneOf) ou, par défaut, A donne « a » et B donne « b »', () => {
+  const owners: PointOwner[] = [
+    { game_id: 1, point: 'A', t0: 67, t1: 80, owner: 'A', source: 'box' },
+    { game_id: 1, point: 'A', t0: 80, t1: 95, owner: 'B', source: 'box' },
+    { game_id: 1, point: 'A', t0: 90, t1: 95, owner: 'none', source: 'box' },
+  ];
+  const ep = episode({});
+  assert.deepEqual(timelineRows(ep, owners)[0].bands.map((b) => b.tone), ['a', 'b', 'none']);
+  const swapped = timelineRows(ep, owners, (o) => (o === 'B' ? 'a' : o === 'A' ? 'b' : 'none')); // équipe suivie côté B : ses bandes prennent la palette « a »
+  assert.deepEqual(swapped[0].bands.map((b) => b.tone), ['b', 'a', 'none']);
+  assert.deepEqual(swapped[0].bands.map((b) => b.owner), ['A', 'B', 'none']); // le propriétaire brut reste disponible
 });
 
 test('formatSeconds : virgule décimale et minutes', () => {
@@ -201,6 +267,7 @@ test('deathSentence : numéro de jeu, pseudo et cause', () => {
 
 test('fateLabel, causeLabel et offsetLabel : libellés français', () => {
   assert.equal(fateLabel('recule'), 'reculé');
+  assert.equal(fateLabel('mort'), 'mort dans le teamfight');
   assert.equal(fateLabel(null), 'sort inconnu');
   assert.equal(fateLabel('autre_chose'), 'autre_chose');
   assert.equal(causeLabel('en_route'), 'tué en route');
