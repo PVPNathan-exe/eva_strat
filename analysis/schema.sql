@@ -302,3 +302,15 @@ CREATE TABLE IF NOT EXISTS point_active (
   source TEXT CHECK (source IN ('hud', 'box', 'schedule')),
   PRIMARY KEY (game_id, point, t0)
 );
+
+-- Niveau d'un joueur sur une carte à deux étages (Atlantis, The Cliff) au cours de la game : un segment par période, en secondes depuis le début de la game. 'dessous' : rez-de-chaussée (au départ),
+-- 'etage' : à l'étage, seulement après avoir pris une tyrolienne qui y mène (source 'tp') ou en zone qui n'existe qu'à l'étage (source 'zone') ; 'grey' : pastille grisée sur la minimap (analysis/levels.py).
+CREATE TABLE IF NOT EXISTS player_levels (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  level TEXT NOT NULL CHECK (level IN ('etage', 'dessous')),
+  source TEXT CHECK (source IN ('default', 'tp', 'zone', 'grey')),
+  PRIMARY KEY (game_id, slot, t0)
+);
