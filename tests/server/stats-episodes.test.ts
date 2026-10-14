@@ -264,7 +264,7 @@ test('teams : paramètres manquants ou trop longs, 400 clair', () => {
   bad(`map=Polaris&team=${'x'.repeat(61)}`, /team/);
 });
 
-test('active : périodes du point actif d'une game, une autre game ignorée', () => {
+test("active : périodes du point actif d'une game, une autre game ignorée", () => {
   const ctx = testContext();
   const g = insertGame(ctx, 'Outlaw');
   const other = insertGame(ctx, 'Outlaw');
