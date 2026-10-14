@@ -47,5 +47,18 @@
   "B24": "MX42",
   "B26": "SPECTRE",
   "B25": "ATLAS",
-  "B28": "MX42"
+  "B28": "MX42",
+  "G18": "SONAR",
+  "G19": "DX3",
+  "G20": "DX3",
+  "G27": "DX3",
+  "G21": "CLONE",
+  "G22": "SHIELD",
+  "G23": "SHIELD",
+  "G24": "SHIELD",
+  "G16": "SHIELD",
+  "G28": "SHIELD",
+  "G26": "SHIELD",
+  "G25": "SHIELD",
+  "B29": "SPECTRE"
 }
