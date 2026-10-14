@@ -37,6 +37,15 @@
   --c-team-a: var(--c-orange);
   --c-team-b: var(--c-blue);
 
+  /* Onglet Stats : propriétaire d'un point, vie et mort, chaleur de présence */
+  --c-owner-a: var(--c-team-a);
+  --c-owner-b: var(--c-team-b);
+  --c-owner-none: var(--c-timeline-neutral);
+  --c-stats-life: var(--c-ok);
+  --c-stats-death: var(--c-danger);
+  --c-heat-low: #2a2f3d;
+  --c-heat-high: #ff9f1c;
+
   /* Frise des games */
   --c-timeline-bg: #2a2f3d;
   --c-timeline-game: #2ec27e;

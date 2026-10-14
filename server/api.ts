@@ -1,6 +1,7 @@
 // Logique REST de l'onglet Analyse (fonctions pures, testables sans serveur HTTP).
 
 import type { DatabaseSync } from 'node:sqlite';
+import { handleStats } from './statsApi.ts';
 import { resolveStuff } from './weapons.ts';
 
 export const ZONE_NAMES = ['minimap', 'capture_points', 'capture_pct_a', 'capture_pct_b', 'team_a_bar', 'team_b_bar', 'timer'] as const;
@@ -502,6 +503,9 @@ export function handleApi(
   body: unknown,
 ): ApiResult {
   const payload = (body && typeof body === 'object' ? body : {}) as Row;
+
+  const stats = handleStats(ctx, method, pathname, query, body); // onglet Stats : /api/stats/*
+  if (stats) return stats;
 
   if (method === 'GET' && pathname === '/api/videos') {
     return reply(200, ctx.db.prepare('SELECT id, path, source_url, duration_s, fps, width, height FROM videos ORDER BY id DESC').all());

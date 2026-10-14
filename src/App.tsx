@@ -8,11 +8,12 @@ import { MapCanvas } from './components/MapCanvas';
 import { AnalysisTab } from './components/analysis/AnalysisTab';
 import { DataTab } from './components/analysis/DataTab';
 import { ReadingTab } from './components/analysis/ReadingTab';
+import { StatsTab } from './components/stats/StatsTab';
 import { WeaponPrompt } from './components/analysis/WeaponPrompt';
 import { WeaponsTab } from './components/analysis/WeaponsTab';
 import './styles/index.css';
 
-type View = 'strategie' | 'analyse' | 'lecture' | 'armes' | 'donnees';
+type View = 'strategie' | 'analyse' | 'stats' | 'lecture' | 'armes' | 'donnees';
 
 export default function App() {
   const [view, setView] = useState<View>('strategie');
@@ -49,6 +50,9 @@ export default function App() {
         <button className={view === 'analyse' ? 'is-active' : ''} onClick={() => setView('analyse')}>
           Analyse
         </button>
+        <button className={view === 'stats' ? 'is-active' : ''} onClick={() => setView('stats')}>
+          Stats
+        </button>
         <button className={view === 'armes' ? 'is-active' : ''} onClick={() => setView('armes')}>
           Armes{unnamed > 0 && <span className="tabs__badge" title="Icônes d'armes à nommer">{unnamed}</span>}
         </button>
@@ -75,6 +79,8 @@ export default function App() {
             <MapCanvas />
           </main>
         </>
+      ) : view === 'stats' ? (
+        <StatsTab />
       ) : view === 'armes' ? (
         <WeaponsTab />
       ) : view === 'lecture' ? (

@@ -1,0 +1,12 @@
+/* Onglet Stats (voir StatsTab). Les couleurs sont dans tokens.css. */
+
+.stats {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-height: 0;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  overflow-y: auto;
+}

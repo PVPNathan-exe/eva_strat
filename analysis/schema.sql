@@ -209,3 +209,85 @@ CREATE TABLE IF NOT EXISTS team_ranges (
   team_a TEXT,
   team_b TEXT
 );
+
+-- ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Onglet Stats : tables DÉRIVÉES (recalculables depuis samples, kills, capture_*), voir docs/PLAN_STATS_AGENTS.md. Temps en secondes depuis le début de la game, positions en fractions de la minimap.
+-- ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-- Une vie : de l'apparition à la mort (ended = 'death') ou à la fin de la game (ended = 'end'). killer_slot, weapon et kill_kind viennent du killfeed.
+CREATE TABLE IF NOT EXISTS lives (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  idx INTEGER NOT NULL,
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  x0 REAL, y0 REAL,  -- position d'apparition
+  x1 REAL, y1 REAL,  -- position de la mort (ou dernière position)
+  ended TEXT NOT NULL CHECK (ended IN ('death', 'end')),
+  killer_slot INTEGER CHECK (killer_slot BETWEEN 1 AND 8),
+  weapon TEXT,
+  kill_kind TEXT,
+  PRIMARY KEY (game_id, slot, idx)
+);
+
+-- Liens entre kills : trade (duel où les deux joueurs meurent à moins de 1 s : deux kills croisés) et revenge (un coéquipier de la victime tue le tueur dans les 5 s, à moins de 12 m).
+-- victim_slot : le joueur mort sur la ligne ; other_slot : l'autre joueur du lien (pour un revenge : le joueur vengé) ; dt en secondes ; dist_m en mètres.
+CREATE TABLE IF NOT EXISTS kill_links (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  t REAL NOT NULL,
+  victim_slot INTEGER NOT NULL CHECK (victim_slot BETWEEN 1 AND 8),
+  kind TEXT NOT NULL CHECK (kind IN ('trade', 'revenge')),
+  other_slot INTEGER CHECK (other_slot BETWEEN 1 AND 8),
+  dt REAL,
+  dist_m REAL,
+  PRIMARY KEY (game_id, t, victim_slot, kind)
+);
+
+-- Propriétaire d'un point de capture au cours de la game (couleur de la boîte sur la minimap, recoupée avec la pente des scores) : un segment par période.
+CREATE TABLE IF NOT EXISTS point_owner (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  point TEXT NOT NULL,
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  owner TEXT NOT NULL CHECK (owner IN ('A', 'B', 'none')),
+  source TEXT CHECK (source IN ('box', 'score')),
+  PRIMARY KEY (game_id, point, t0)
+);
+
+-- Équipement d'un joueur pour une vie (il change à chaque réapparition) ; held : arme tenue au moment de la mort ; source : comment la case a été lue.
+CREATE TABLE IF NOT EXISTS life_loadouts (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  life_idx INTEGER NOT NULL,
+  weapon1 TEXT,
+  weapon2 TEXT,
+  gadget TEXT,
+  held TEXT,
+  source TEXT,
+  PRIMARY KEY (game_id, slot, life_idx)
+);
+
+-- Épisodes de retake (le même point change de propriétaire) et de rotation (une équipe quitte un point pour un autre) ; data : JSON (positions de départ, joueurs, morts, causes) ;
+-- verdict : jugement de l'utilisateur sur la détection (NULL : pas encore regardé).
+CREATE TABLE IF NOT EXISTS episodes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('retake', 'rotation')),
+  point TEXT,
+  point_to TEXT,
+  team TEXT CHECK (team IN ('A', 'B')),
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  outcome TEXT,
+  data TEXT,
+  verdict TEXT CHECK (verdict IN ('ok', 'ko'))
+);
+CREATE INDEX IF NOT EXISTS idx_episodes_game ON episodes(game_id, kind, t0);
+
+-- Version de chaque module de calcul des tables Stats, par game : un module dont la version a changé est recalculé.
+CREATE TABLE IF NOT EXISTS stats_meta (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  module TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (game_id, module)
+);
