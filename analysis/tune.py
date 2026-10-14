@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import tracking
+import paths
 
 HERE = Path(__file__).parent
 DATASETS_DIR = HERE / "datasets"
@@ -266,7 +267,7 @@ def main(argv=None):
     b = sub.add_parser("build", help="extrait les détections d'une vidéo déjà chargée")
     b.add_argument("--video", required=True)
     b.add_argument("--name", required=True)
-    b.add_argument("--db", default=str(HERE.parent / "data" / "eva.db"))
+    b.add_argument("--db", default=str(paths.db_path()))
     b.add_argument("--every", type=int, default=6, help="une lecture toutes les N images")
     b.set_defaults(fn=_cmd_build)
     e = sub.add_parser("eval", help="note des réglages actuels")

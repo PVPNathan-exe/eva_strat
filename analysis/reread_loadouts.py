@@ -16,6 +16,7 @@ import analyze
 import db
 import ingest
 import weapons
+import paths
 
 
 def unused_icons(folder, used, names, reviews):
@@ -43,7 +44,7 @@ def purge(folder, icons):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Relit l'équipement des games d'une vidéo et retire les icônes devenues inutiles.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--video", type=int, required=True)
     parser.add_argument("--keep-icons", action="store_true", help="Ne retirer aucune icône")
     args = parser.parse_args(argv)

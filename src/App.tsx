@@ -6,12 +6,13 @@ import { DrawToolbar } from './components/DrawToolbar';
 import { WeaponPanel } from './components/WeaponPanel';
 import { MapCanvas } from './components/MapCanvas';
 import { AnalysisTab } from './components/analysis/AnalysisTab';
+import { DataTab } from './components/analysis/DataTab';
 import { ReadingTab } from './components/analysis/ReadingTab';
 import { WeaponPrompt } from './components/analysis/WeaponPrompt';
 import { WeaponsTab } from './components/analysis/WeaponsTab';
 import './styles/index.css';
 
-type View = 'strategie' | 'analyse' | 'lecture' | 'armes';
+type View = 'strategie' | 'analyse' | 'lecture' | 'armes' | 'donnees';
 
 export default function App() {
   const [view, setView] = useState<View>('strategie');
@@ -48,11 +49,18 @@ export default function App() {
         <button className={view === 'analyse' ? 'is-active' : ''} onClick={() => setView('analyse')}>
           Analyse
         </button>
+        <button className={view === 'armes' ? 'is-active' : ''} onClick={() => setView('armes')}>
+          Armes{unnamed > 0 && <span className="tabs__badge" title="Icônes d'armes à nommer">{unnamed}</span>}
+        </button>
+        <span className="tabs__sep" aria-hidden="true" />
+        <span className="tabs__group" title="Réglages du programme : ce qui est modifié ici peut changer les calculs de l'analyse">
+          Avancé
+        </span>
         <button className={view === 'lecture' ? 'is-active' : ''} onClick={() => setView('lecture')}>
           Lecture
         </button>
-        <button className={view === 'armes' ? 'is-active' : ''} onClick={() => setView('armes')}>
-          Armes{unnamed > 0 && <span className="tabs__badge" title="Icônes d'armes à nommer">{unnamed}</span>}
+        <button className={view === 'donnees' ? 'is-active' : ''} onClick={() => setView('donnees')}>
+          Données
         </button>
       </nav>
       {view === 'strategie' ? (
@@ -71,6 +79,8 @@ export default function App() {
         <WeaponsTab />
       ) : view === 'lecture' ? (
         <ReadingTab />
+      ) : view === 'donnees' ? (
+        <DataTab />
       ) : (
         <AnalysisTab />
       )}

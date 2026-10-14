@@ -19,6 +19,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 
 HERE = Path(__file__).parent
 MASKS = HERE / "map_masks"
@@ -71,7 +72,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Nettoie les masques de zones praticables.")
     parser.add_argument("--map")
     parser.add_argument("--write", action="store_true")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     args = parser.parse_args(argv)
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     names = [args.map] if args.map else sorted(p.stem for p in MASKS.glob("*.png") if "_" not in p.stem)

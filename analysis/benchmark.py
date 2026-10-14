@@ -16,6 +16,7 @@ import names
 import positions
 import timer
 import tracking
+import paths
 
 
 def machine():
@@ -27,7 +28,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Chronomètre les étapes de l'analyse.")
     parser.add_argument("--video", default="Ceres.mp4")
     parser.add_argument("--seconds", type=float, default=30.0, help="Durée de l'extrait mesuré")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     args = parser.parse_args(argv)
     conn = db.connect(args.db)
     import ingest

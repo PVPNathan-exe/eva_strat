@@ -1,4 +1,4 @@
-/* Onglets Stratégie, Analyse et Armes */
+/* Onglets Stratégie, Analyse et Armes, puis le groupe Avancé (Lecture : réglages du programme) */
 
 .tabs {
   display: flex;
@@ -34,4 +34,24 @@
   background: var(--c-surface);
   color: var(--c-text);
   border-color: var(--c-border);
+}
+
+/* Séparation entre les onglets d'usage courant et les onglets de réglage (groupe « Avancé »). */
+.tabs__sep {
+  flex: none;
+  align-self: stretch;
+  width: 1px;
+  margin: 0.3rem 0.6rem 0;
+  background: var(--c-border-strong);
+}
+
+.tabs__group {
+  flex: none;
+  align-self: center;
+  margin-right: 0.15rem;
+  color: var(--c-amber);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }

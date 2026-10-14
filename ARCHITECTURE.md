@@ -42,6 +42,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 - `VisionOverlay.tsx` : calques « ce que voit le programme » (dont le contrôle à la vraie minimap et les zones peu fiables). `useGameFlags.ts` : positions non confirmées, joueur observé et carte de fiabilité d'une game. `ReliabilityLayer.tsx` : cases douteuses sur le plan du replay. `CalibrationEditor.tsx` : zones du HUD par carte.
 - `ReplayPanel.tsx` (549 lignes) : rejeu des positions sur le plan de la carte.
 - `CommentsPanel.tsx` : commentaires liés à un instant, export texte.
+- `DataTab.tsx` : onglet Données (groupe Avancé) : place prise, export et import JSON vers un dossier ; `lib/dataApi.ts`, `lib/formatBytes.ts`, `types/data.ts`, `styles/data-tab.css`. Les onglets sont séparés : usage courant (Stratégie, Analyse, Armes) puis groupe « Avancé » (Lecture, Données) avec un avertissement (`.advanced-note`).
 - `WeaponsTab.tsx` : onglet Armes (recalcul des floues et signalées, verrouillage des modèles).
 - `WeaponCard.tsx` : une icône (nom, verrou, étiquette floue, avis sur le nom deviné). `WeaponPrompt.tsx` : demande le nom des icônes inconnues après une analyse. `WeaponReport.tsx` : signalement et recalcul d'une icône.
 
@@ -64,6 +65,7 @@ Point d'entrée `index.css` (l'ordre des imports est l'ordre de la cascade). **L
 - `analysisPlugin.ts` (364 lignes) : plugin Vite, routes `/api/*` d'analyse (lancement, jobs, armes, vidéo en Range), choix de l'interpréteur Python. Le reste est délégué à `handleApi`.
 - `api.ts` (359 lignes) : `handleApi`, routes REST (games, positions, commentaires, corrections, calibrations).
 - `db.ts` : SQLite (`node:sqlite`) et schéma. `jobs.ts` : lance `analyze.py`, garde ses événements, pause, reprise, arrêt.
+- `dataTools.ts` : routes `/api/data/*` (place prise, export, import refusé pendant une analyse, effacement du cache) et `/api/pick-folder` (sélecteur de dossier Windows), délégué à `data_usage.py` et `data_export.py`.
 - `weapons.ts` : catalogue des icônes, noms (`names.json`), avis et verrous (`reviews.json`), noms déduits ou devinés.
 - `guard.ts` : refuse les requêtes d'une autre origine. `range.ts` : en-tête HTTP Range. `filePicker.ts` : boîte « Ouvrir un fichier » de Windows.
 
@@ -79,6 +81,7 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 - `icon_fix.py` : recalcul des icônes (`candidates`, `rebuild` avec marge élargie, `audit`, `guess`).
 - Outils : `tune.py` (réglage du suivi), `evaluate.py` (accord avec les bandeaux, positions manquantes, sauts, test de trous simulés `--gap-test`), `benchmark.py` (vitesse), `build_templates.py` (chiffres du chrono).
 - `reread_loadouts.py` : relit l'équipement d'une vidéo avec l'algorithme actuel et retire les icônes B et G devenues inutiles (sans nom, ni verrou, ni signalement).
+- `paths.py` : emplacement des données (`EVA_DATA_DIR` dossier, `EVA_DB` base seule, `EVA_CACHE` cache seul ; sans variable : `data/`), genre du disque (clé USB, réseau) et avertissement ; tous les scripts d'analyse en tirent leur `--db` par défaut. `data_export.py` : export et import des données en fichiers JSON compressés (un fichier par game, tables trouvées dans la base, icônes d'armes traduites à l'import, deuxième export sans réécriture) ; `data_usage.py` : place prise (base, sauvegardes, cache, vidéos téléchargées) et effacement des lectures gardées ; `python analysis/data_export.py export|import <dossier> [--dry-run]`.
 - `priority.py` : priorité Windows de l'analyse (basse, normale, haute, choisie dans le menu Options de `IngestBar.tsx`, option `--priority` de `analyze.py`, route `POST /api/ingest` champ `priority`, serveur `server/priority.ts`) : posée sur le processus principal puis transmise aux processus de lecture (`positions._init_worker`) et à ffmpeg par la variable `EVA_PRIORITY` et `creation_flags()` ; sans choix, processus de lecture en priorité basse comme avant. Choix gardé par le navigateur (`analysisStore`).
 - `frame_noise.py` : contamination de couleur de la minimap (stries de lumière qui ressemblent à des joueurs), mesurée à partir d'une carte grossière des couleurs d'équipe gardée à chaque lecture (`minimap.coarse_colour_map`) ; le suivi n'y crée ni trajectoire ni croix sans numéro.
 - `observed_name.py` : pseudo du joueur observé lu en bas à droite de l'écran (images regroupées par ressemblance du texte, un représentant par groupe lu par la reconnaissance de texte de Windows) ; complète le cadre blanc des bandeaux, ne le contredit jamais.
@@ -153,6 +156,8 @@ Pipeline : `analyze.py` (CLI principale, `run()`) enchaîne les étapes ci-desso
 | PATCH, DELETE | `/api/comments/:id` | modifier ou supprimer |
 | GET, POST, DELETE | `/api/corrections`, `/api/corrections/:id` | corrections de joueurs |
 | GET, PUT | `/api/calibrations` | zones du HUD d'une carte |
+| GET | `/api/data/usage` | place prise (`dataTools.ts`) |
+| POST | `/api/data/export`, `/api/data/import`, `/api/data/purge-cache`, `/api/pick-folder` | export et import JSON, effacement des lectures gardées, sélecteur de dossier |
 | GET, PUT | `/api/teams` | diminutifs d'équipe et leur nom complet (ex. SNV : nom saisi) |
 
 ## Fichiers à surveiller (plus de 400 lignes)

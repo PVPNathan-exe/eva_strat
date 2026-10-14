@@ -32,6 +32,7 @@ import superpose
 import timer
 import tracking
 import weapons
+import paths
 
 ZONES_PATH = Path(__file__).with_name("default_zones.json")
 
@@ -406,8 +407,8 @@ def run(source, db_path, cache_dir, emit=print_event, do_detect=True, pre_roll=s
 def main(argv=None, emit=print_event):
     parser = argparse.ArgumentParser(description="Enregistre une vidéo EVA (fichier local ou URL).")
     parser.add_argument("--source", required=True, help="Chemin d'un .mp4 ou URL YouTube")
-    parser.add_argument("--db", default="data/eva.db")
-    parser.add_argument("--cache", default="data/cache")
+    parser.add_argument("--db", default=str(paths.db_path()))
+    parser.add_argument("--cache", default=str(paths.cache_dir()))
     parser.add_argument("--no-detect", action="store_true", help="Ne pas chercher les games (vidéo d'une seule game)")
     parser.add_argument("--pre-roll", type=float, default=segments.PRE_ROLL_S, help="Secondes gardées avant le départ du chrono")
     parser.add_argument("--post-roll", type=float, default=segments.POST_ROLL_S, help="Secondes gardées après la fin du chrono (écran de victoire)")

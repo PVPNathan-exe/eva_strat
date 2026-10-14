@@ -19,6 +19,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 
 HERE = Path(__file__).parent
 PLAN_DIR = HERE.parent / "src" / "assets" / "maps"
@@ -113,7 +114,7 @@ def main(argv=None):
     import map_annotations as ma
 
     parser = argparse.ArgumentParser(description="Montre ce que le plan stratégique changerait au masque d'une carte (lecture seule).")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--map", required=True)
     args = parser.parse_args(argv)
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)

@@ -23,6 +23,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 
 HERE = Path(__file__).parent
 ROTORS = HERE / "map_rotors.json"
@@ -254,7 +255,7 @@ def measure(games, zone, spec=ENGINE, t_ref=15.0):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Mesure la rotation des anneaux d'Engine sur la vidéo (et écrit map_rotors.json avec --write).")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--map", default="Engine")
     parser.add_argument("--game", type=int, action="append", required=True)
     parser.add_argument("--write", action="store_true")

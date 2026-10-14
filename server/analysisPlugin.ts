@@ -2,6 +2,7 @@
 //   GET  /api/videos/:id/stream   vidéo locale, avec Range
 //   POST /api/ingest              lance analyze.py, renvoie { jobId }
 //   POST /api/pick-file           ouvre le sélecteur de fichier Windows, renvoie { path } (null si annulé)
+//   /api/data/*, /api/pick-folder place prise, export et import JSON, nettoyage du cache, sélecteur de dossier (dataTools.ts)
 //   GET  /api/jobs/:id/events     progression en SSE
 //   GET  /api/weapons             catalogue des icônes d'armes ; PUT /api/weapons/:id nomme une arme ; GET /api/weapons/:id/icon l'image
 //   le reste                      handleApi (games, calibrations, vidéos)
@@ -14,6 +15,7 @@ import { pipeline } from 'node:stream';
 import type { Plugin } from 'vite';
 import { handleApi, type ApiContext, type Zones } from './api.ts';
 import { openDb } from './db.ts';
+import { handleData } from './dataTools.ts';
 import { pickVideoFile } from './filePicker.ts';
 import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
@@ -103,8 +105,10 @@ export function analysisPlugin(): Plugin {
     name: 'eva-analysis',
     configureServer(server) {
       const root = server.config.root;
-      const dbPath = process.env.EVA_DB ?? join(root, 'data', 'eva.db'); // EVA_DB : base de test (copie), sans toucher à la vraie
-      const cacheDir = join(root, 'data', 'cache');
+      // Emplacements des données (mêmes variables que analysis/paths.py) : EVA_DATA_DIR dossier des données, EVA_DB base seule (base de test : copie, sans toucher à la vraie), EVA_CACHE cache seul.
+      const dataDir = process.env.EVA_DATA_DIR ?? join(root, 'data');
+      const dbPath = process.env.EVA_DB ?? join(dataDir, 'eva.db');
+      const cacheDir = process.env.EVA_CACHE ?? join(dataDir, 'cache');
       const script = join(root, 'analysis', 'analyze.py');
       const python = findPython();
       const weaponsDir = join(root, 'analysis', 'weapon_icons');
@@ -218,7 +222,7 @@ export function analysisPlugin(): Plugin {
               // Games à analyser en détail, dans l'ordre voulu (identifiants entiers seulement : jamais de texte libre dans la ligne de commande).
               if (Array.isArray(body?.games) && body.games.length > 0 && body.games.length <= 200 && body.games.every((g) => Number.isInteger(g) && g > 0)) extra.push(`--games=${body.games.join(',')}`);
               if (Number.isInteger(body?.posEvery) && (body?.posEvery as number) >= 1 && (body?.posEvery as number) <= 60) extra.push(`--pos-every=${body?.posEvery}`);
-              const controlPath = join(root, 'data', 'job.control');
+              const controlPath = join(dataDir, 'job.control');
               const job = jobs.start(python, [script, `--source=${source}`, '--db', dbPath, '--cache', cacheDir, `--control=${controlPath}`, ...extra], controlPath);
               return sendJson(res, 202, { jobId: job.id });
             } catch (err) {
@@ -402,6 +406,8 @@ export function analysisPlugin(): Plugin {
           }
 
           const body = method === 'GET' || method === 'DELETE' ? undefined : await readJson(req);
+          const data = await handleData({ python, root, dbPath, analysisRunning: () => jobs.running() !== null }, method, url.pathname, body);
+          if (data) return sendJson(res, data.status, data.json);
           const result = handleApi(ctx, method, url.pathname, url.searchParams, body);
           return sendJson(res, result.status, result.json);
         } catch (err) {

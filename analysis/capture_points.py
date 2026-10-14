@@ -19,6 +19,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 
 HERE = Path(__file__).parent
 POINTS = HERE / "map_capture_points.json"
@@ -237,7 +238,7 @@ def _from_plan(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Cherche les points de capture actifs d'une game sur la minimap de la vidéo.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--game", type=int)
     parser.add_argument("--map", help="avec --from-plan : la carte")
     parser.add_argument("--from-plan", action="store_true", help="lit les boîtes de capture du plan stratégique (points jamais vus sur une minimap)")

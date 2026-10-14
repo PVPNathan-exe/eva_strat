@@ -2,6 +2,7 @@
 // Trois sous-onglets : une seule chose à la fois à l'écran.
 
 import { useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { mapsWithReading } from '../../lib/mapReading';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { CaptureSchedule } from './CaptureSchedule';
@@ -48,6 +49,12 @@ export function ReadingTab() {
 
   return (
     <div className="reading">
+      <div className="advanced-note" role="note">
+        <AlertTriangle className="ic" />
+        <span>
+          Onglet avancé : ce qui est modifié ici (cartographie, corrections, « Appliquer au programme ») change les calculs de l'analyse. Sauvegarde <code>data/eva.db</code> avant de t'y aventurer.
+        </span>
+      </div>
       <div className="reading__bar">
         <nav className="subtabs" aria-label="Sections de l'onglet Lecture">
           {SUBS.map((s) => (

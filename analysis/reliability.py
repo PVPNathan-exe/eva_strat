@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import db
+import paths
 
 GRID = 16  # cases par côté
 MIN_ROWS_POS = 40  # lignes minimales dans une case pour juger ses positions
@@ -123,7 +124,7 @@ def flagged_cells(report, kind):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Carte des zones où le suivi est peu fiable.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--map", required=True)
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args(argv)

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 
 MASK_DIR = Path(__file__).with_name("map_masks")
 SIZE = 400  # côté de l'image de la minimap utilisée pour la médiane
@@ -176,7 +177,7 @@ def main(argv=None):
     import db
 
     parser = argparse.ArgumentParser(description="Construit le masque des zones praticables d'une carte.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--map", required=True)
     parser.add_argument("--reuse", action="store_true", help="reprend la médiane de la planche de contrôle déjà construite (pas de relecture de la vidéo) ; les traits de murs ne sont pas refaits")
     args = parser.parse_args(argv)

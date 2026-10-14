@@ -17,6 +17,7 @@ import sys
 import db
 import evaluate
 import tracking
+import paths
 
 ARENA_M = (31.0, 16.5)
 
@@ -123,7 +124,7 @@ def summary(errs):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Erreur du suivi mesurée sur les corrections de l'utilisateur.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--game", type=int, required=True)
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--lag", action="store_true")

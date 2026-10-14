@@ -2,13 +2,13 @@
 
 import type { AnalysisPriority, TeamRange, CaptureBox, CaptureSeries, CommentTag, IconWork, Correction, Game, GameFlags, JobEvent, Reliability, Sample, UserMark, Video, VideoComment, Weapon, Zones } from '../types/analysis';
 
-async function parse<T>(res: Response): Promise<T> {
+export async function parse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error ?? `Erreur serveur (${res.status})`);
   return data as T;
 }
 
-const jsonInit = (method: string, body: unknown): RequestInit => ({
+export const jsonInit = (method: string, body: unknown): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body),

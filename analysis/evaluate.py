@@ -21,11 +21,12 @@ from pathlib import Path
 import db
 import positions
 import tracking
+import paths
 
 JUMP_CONF = 0.35  # confiance minimale pour compter un saut : tout sauf les trous comblés (0,3)
 READ_CONF = 0.7  # confiance minimale d'une position réellement lue (les trous comblés en ont moins)
 JUMP_DIST = 0.08  # distance (relative à la minimap) entre deux images consécutives au-delà de laquelle un déplacement est impossible
-CACHE = Path(__file__).resolve().parent.parent / "data" / "cache"
+CACHE = paths.cache_dir()
 
 
 def compare(rows, states, dead_sets=None, step_s=0.1, teleports=()):
@@ -165,7 +166,7 @@ def gap_test(conn, game_ids):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Mesure la qualité du suivi avec les bandeaux comme témoin.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--game", type=int, default=None)
     parser.add_argument("--video", type=int, default=None)
     parser.add_argument("--gap-test", action="store_true", help="Mesurer l'erreur du comblement de trous sur des positions sûres cachées")

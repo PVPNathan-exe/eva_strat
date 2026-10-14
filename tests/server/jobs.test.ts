@@ -53,7 +53,8 @@ test('refuse un second job tant que le premier tourne', async () => {
   const manager = new JobManager();
   manager.start(node, ['-e', 'setTimeout(() => {}, 700)']);
   assert.throws(() => manager.start(node, ['-e', '0']), /déjà en cours/);
-  await new Promise((r) => setTimeout(r, 1000));
+  // On attend la fin réelle du premier job (et non un délai fixe : le démarrage de node est plus lent quand d'autres tests tournent en parallèle).
+  for (let waited = 0; manager.running() && waited < 10_000; waited += 50) await new Promise((r) => setTimeout(r, 50));
   assert.doesNotThrow(() => manager.start(node, ['-e', '0']));
 });
 

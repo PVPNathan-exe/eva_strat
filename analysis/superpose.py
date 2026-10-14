@@ -19,6 +19,7 @@ import numpy as np
 import db
 import minimap
 import timer
+import paths
 
 RADIUS = 0.022  # rayon (fraction de la largeur de la minimap) autour de la position où l'on cherche la pastille
 MIN_TEAM_PIXELS = 50  # pixels de la couleur d'équipe pour confirmer une pastille (une pastille pleine en fait environ 180)
@@ -97,7 +98,7 @@ def main(argv=None):
     import evaluate
 
     parser = argparse.ArgumentParser(description="Vérifie le suivi enregistré en le superposant à la vraie minimap.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--game", type=int, required=True)
     parser.add_argument("--rows", default=None, help="fichier pickle de lignes du suivi à comparer à celles de la base")
     parser.add_argument("--store", action="store_true", help="contrôle toutes les images et enregistre dans la base les positions non confirmées (affichées par le site)")

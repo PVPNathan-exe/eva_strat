@@ -14,6 +14,7 @@ from pathlib import Path
 import db
 import tracking
 import weapons
+import paths
 
 # Seuils des contrôles
 DEATH_S = 17.0  # durée d'une mort mesurée sur les bandeaux (réapparition)
@@ -142,7 +143,7 @@ def game_report(conn, g, names, current_version):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Bilan de qualité d'une vidéo analysée.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--video", type=int, default=None, help="Identifiant de la vidéo")
     parser.add_argument("--source", default=None, help="Chemin de la vidéo")
     args = parser.parse_args(argv)

@@ -1,0 +1,101 @@
+/* Onglet Données : stockage, export et import (voir DataTab). */
+
+.data {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-height: 0;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  overflow-y: auto;
+}
+
+.data__cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.data__card {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+
+.data__card h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.data__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding-block: 0.3rem;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-soft);
+}
+
+.data__row strong {
+  color: var(--c-text);
+}
+
+.data__note {
+  flex-basis: 100%;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+.data__confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--c-warn);
+  font-size: 0.85rem;
+}
+
+.data__folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--c-text-soft);
+}
+
+.data__folder input {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.data__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.data__ok {
+  margin: 0;
+  color: var(--c-ok-text);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.data__error {
+  margin: 0;
+  color: var(--c-danger-soft);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.data code {
+  overflow-wrap: anywhere;
+}

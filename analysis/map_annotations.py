@@ -38,6 +38,7 @@ import numpy as np
 
 import capture_points
 import mask_clean
+import paths as data_paths
 
 HERE = Path(__file__).parent
 MASK_DIR = HERE / "map_masks"
@@ -547,7 +548,7 @@ def main(argv=None):
     import db
 
     parser = argparse.ArgumentParser(description="Applique la cartographie à la main d'une carte aux fichiers du programme.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(data_paths.db_path()))
     parser.add_argument("--map")
     parser.add_argument("--all", action="store_true")
     args = parser.parse_args(argv)

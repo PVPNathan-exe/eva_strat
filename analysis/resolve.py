@@ -16,6 +16,7 @@ import observed_name
 import superpose
 import tracking
 import weapons
+import paths
 
 
 def resolve_game(conn, game_id):
@@ -43,7 +44,7 @@ def resolve_game(conn, game_id):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Refait le suivi des positions à partir des lectures en cache.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--game", type=int, default=None)
     parser.add_argument("--video", type=int, default=None)
     args = parser.parse_args(argv)

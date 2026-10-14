@@ -414,3 +414,22 @@
   width: 100%;
   max-width: min(1100px, calc((100vh - 13rem) * 1.7)); /* la minimap garde sa hauteur dans la fenêtre : la barre de lecture reste proche */
 }
+
+/* Avertissement en tête de l'onglet Lecture (réglages du programme). */
+.advanced-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-amber);
+  border-radius: 6px;
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.advanced-note .ic {
+  flex: none;
+  color: var(--c-amber);
+}

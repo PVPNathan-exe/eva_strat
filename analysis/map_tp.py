@@ -17,6 +17,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import paths
 
 HERE = Path(__file__).parent
 MASK_DIR = HERE / "map_masks"
@@ -186,7 +187,7 @@ def main(argv=None):
     import db
 
     parser = argparse.ArgumentParser(description="Stations de tyrolienne d'une carte et leurs paires.")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--map")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--write", action="store_true", help="écrit les paires dans analysis/map_teleports.json (remplace la carte)")

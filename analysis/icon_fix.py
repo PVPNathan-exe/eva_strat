@@ -22,6 +22,7 @@ import db
 import loadout
 import names
 import weapons
+import paths
 
 FRAMES_PER_SOURCE = 12  # images lues par endroit où l'icône a été vue
 MAX_SOURCES = 3  # nombre d'endroits (game + joueur) explorés au premier passage
@@ -214,7 +215,7 @@ def main(argv=None):
     parser.add_argument("--id", default="")
     parser.add_argument("--ids", default="")
     parser.add_argument("--locked", default="")
-    parser.add_argument("--db", default="data/eva.db")
+    parser.add_argument("--db", default=str(paths.db_path()))
     parser.add_argument("--token", default=None)
     args = parser.parse_args(argv)
     if args.command == "audit":
