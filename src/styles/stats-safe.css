@@ -104,6 +104,10 @@
   stroke-dasharray: 4 3;
 }
 
+.safe__pin.is-upper {
+  box-shadow: 0 0 0 2px var(--c-surface), 0 0 0 4px var(--c-text);
+}
+
 .safe__ranges {
   margin: 0;
   padding-left: 1.1rem;

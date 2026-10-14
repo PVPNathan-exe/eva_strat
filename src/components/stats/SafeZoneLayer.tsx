@@ -60,7 +60,7 @@ export function SafeZoneLayer({ result, colors, boxStyle, only = 'all', outlines
       )}
       {pins &&
         result.shooters.map((s) => (
-          <span key={s.slot} className={`safe__pin safe__pin--${palette(s.team)}${s.estimated ? ' is-estimated' : ''}`} style={{ left: `${s.x * 100}%`, top: `${s.y * 100}%` }}>
+          <span key={s.slot} className={`safe__pin safe__pin--${palette(s.team)}${s.estimated ? ' is-estimated' : ''}${s.level === 'etage' ? ' is-upper' : ''}`} style={{ left: `${s.x * 100}%`, top: `${s.y * 100}%` }}>
             {numberOfSlot(s.slot)}
           </span>
         ))}

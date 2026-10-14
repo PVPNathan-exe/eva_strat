@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
-import { COVER_A, COVER_B, computeInstant, computeZones, createCache, indexSamples, outlinesOf, positionsAt, shootersAt, zoneCounts, zonePixels, type Instant, type PositionSample, type Shooter } from '../src/lib/safeZones.ts';
+import { COVER_A, COVER_B, computeInstant, computeZones, createCache, indexSamples, levelAt, withLevels, outlinesOf, positionsAt, shootersAt, zoneCounts, zonePixels, type Instant, type PositionSample, type Shooter } from '../src/lib/safeZones.ts';
 import { buildGrid, cellMetres, CLASS_CODES, layerGrid, type BlockGrid, type GraySource, type Segment } from '../src/lib/visibility.ts';
 import type { RotorModel } from '../src/lib/rotors.ts';
 
@@ -363,4 +363,21 @@ test('niveau : la ligne de suivi le porte jusqu au joueur qui couvre', () => {
   const index = indexSamples([{ t: 10, slot: 1, team: 'A', x: 0.3, y: 0.5, alive: 1, level: 'etage' }, { t: 10, slot: 5, team: 'B', x: 0.7, y: 0.5, alive: 1 }]);
   const shooters = shootersAt(positionsAt(index, 10), [{ slot: 1, weapon1: null, weapon2: null }, { slot: 5, weapon1: null, weapon2: null }]);
   assert.deepEqual(shooters.map((p) => p.level), ['etage', null]);
+});
+
+test("niveau d un joueur : à l étage après une tyrolienne, de retour en dessous, sans ligne dessous", () => {
+  const rows = [{ slot: 1, t0: 186.8, t1: 220.2, level: "etage" as const }, { slot: 1, t0: 220.2, t1: 400, level: "dessous" as const }];
+  assert.equal(levelAt(rows, 1, 100), "dessous", "avant la tyrolienne : aucune ligne, rez-de-chaussée");
+  assert.equal(levelAt(rows, 1, 200), "etage");
+  assert.equal(levelAt(rows, 1, 300), "dessous", "redescendu");
+  assert.equal(levelAt(rows, 2, 200), "dessous", "autre joueur sans ligne");
+  const base = buildGrid(image(400, 255), image(400, CLASS_CODES.sol, (x) => (x >= 240 && x < 260 ? CLASS_CODES.mur : undefined)), "balles", 100, image(400, 0, (x) => (x >= 240 && x < 260 ? 255 : undefined)));
+  const at = (t: number, ...who: Shooter[]) => inst(base, withLevels(who, rows, t));
+  const one = shooter(1, 0.3, 0.5);
+  const two = shooter(2, 0.3, 0.3);
+  assert.equal(at(200, one).result.state[50 * 100 + 70], 0, "à l étage : le sol du dessous est un mur");
+  assert.equal(at(200, two).result.state[30 * 100 + 70], COVER_A, "le joueur 2, sans ligne, est en dessous : il voit derrière");
+  assert.equal(at(300, one).result.state[50 * 100 + 70], COVER_A, "redescendu : grille commune");
+  assert.equal(at(200, one, two).unknownLevel, 0, "des lignes existent : plus de niveau inconnu");
+  assert.equal(inst(base, withLevels([shooter(1, 0.3, 0.5)], [], 200)).unknownLevel, 1, "aucune ligne de niveau pour la game : inconnu");
 });

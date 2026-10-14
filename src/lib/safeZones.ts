@@ -12,10 +12,10 @@
 // moins de son segment (positions de l'instant choisi). Une porte vitrée fermée laisse voir et bloque les balles ; ouverte, elle laisse tout passer.
 // `doors: null` : portes ouvertes en permanence (comme avant).
 //
-// ÉTAGES. Sur Atlantis et The Cliff le masque est l'union des deux niveaux. Quand le niveau d'un joueur est connu (`level: 'etage'`) et que la grille a été construite avec
+// ÉTAGES. Sur Atlantis et The Cliff le masque est l'union des deux niveaux. Quand le niveau d'un joueur est connu (`level: 'etage'`, withLevels) et que la grille a été construite avec
 // l'image « dessous » (buildGrid, 5e paramètre), il voit avec la grille de l'étage (le sol réservé au niveau du dessous n'y est pas praticable). Niveau inconnu ou rez-de-chaussée :
-// grille commune. LIMITE : les lignes de suivi n'ont pas de niveau (il n'existe que dans les corrections à la main), donc le niveau est inconnu pour tous les joueurs tant que
-// l'appelant ne le renseigne pas ; `Instant.unknownLevel` dit combien de joueurs sont dans ce cas sur une carte à deux étages.
+// grille commune. LIMITE : les lignes de suivi n'ont pas de niveau ; il vient de /api/stats/levels (déduit des tyroliennes : à l'étage seulement après une tyrolienne,
+// escaliers non pris en compte). Sans aucune ligne de niveau pour la game, il reste inconnu et `Instant.unknownLevel` compte les joueurs concernés sur une carte à deux étages.
 
 import { castView, doorsOpenedBy, DOOR_OPEN_M, layerGrid, viewPolygon, withClosedDoors, withOpenedGlass, withRotors, type BlockGrid, type Level, type Segment, type SightMode, type View } from './visibility.ts';
 import type { RotorModel } from './rotors.ts';
@@ -105,6 +105,25 @@ export function shootersAt(positions: PositionSample[], players: { slot: number;
     const r = rangeOfPlayer(mine?.weapon1, mine?.weapon2, fallback, names);
     return { slot: p.slot, team: p.team, x: p.x, y: p.y, rangeM: r.rangeM, estimated: r.estimated, weapon: r.weapon, open: r.open, level: p.level ?? null };
   });
+}
+
+/** Période où un joueur est à un niveau (réponse de /api/stats/levels), en secondes de game. */
+export interface LevelRow {
+  slot: number;
+  t0: number;
+  t1: number;
+  level: Level;
+}
+
+/** Niveau d'un joueur à l'instant t : celui de la période qui contient t, « dessous » (rez-de-chaussée) s'il n'y en a pas (un joueur n'est à l'étage que s'il a pris une tyrolienne avant). */
+export function levelAt(rows: LevelRow[], slot: number, t: number): Level {
+  return rows.find((r) => r.slot === slot && t >= r.t0 && t <= r.t1)?.level ?? 'dessous';
+}
+
+/** Donne leur niveau aux joueurs de l'instant. Sans aucune ligne de niveau (null ou vide : analyse des niveaux non lancée), les niveaux restent inconnus. */
+export function withLevels(shooters: Shooter[], rows: LevelRow[] | null | undefined, t: number): Shooter[] {
+  if (!rows || rows.length === 0) return shooters;
+  return shooters.map((s) => ({ ...s, level: levelAt(rows, s.slot, t) }));
 }
 
 /** Bits de l'état d'une case. */

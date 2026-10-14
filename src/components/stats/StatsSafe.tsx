@@ -6,11 +6,13 @@ import { useDeferredValue, useMemo, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { numberOfSlot } from '../../lib/killTimeline';
 import { readingOf, rotorsOf } from '../../lib/mapReading';
-import { computeInstant, createCache, indexSamples, positionsAt, shootersAt, type CoverMode, type Instant, type ZoneColors, type ZoneShow } from '../../lib/safeZones';
+import { computeInstant, createCache, indexSamples, positionsAt, shootersAt, withLevels, type CoverMode, type Instant, type ZoneColors, type ZoneShow } from '../../lib/safeZones';
 import { formatTime } from '../../lib/timeline';
 import { buildGrid, DOOR_OPEN_M, type GraySource, type Segment } from '../../lib/visibility';
 import { keptSides, sideOfTeam, wantedSlot, type FollowSpec } from '../../lib/teamFollow';
 import { analysisApi } from '../../lib/analysisApi';
+import { statsApi } from '../../lib/statsApi';
+import { TWO_LEVEL_MAPS } from '../../lib/twoLevelMaps';
 import { noticeOf, tokenRgb, useLoad, useSamples, type StatsGame } from './useStats';
 import { SafeZoneLayer } from './SafeZoneLayer';
 import { StatsMapBase } from './StatsMapBase';
@@ -85,6 +87,8 @@ export function StatsSafe({ map, replay, spec }: Props) {
   const samples = useSamples(gameList, true);
   const weapons = useLoad('safe-weapons', () => analysisApi.weapons()); // identifiants d'icônes vers noms d'armes
   const iconNames = useMemo(() => Object.fromEntries((weapons.data ?? []).filter((w) => w.name).map((w) => [w.id, w.name])), [weapons.data]);
+  const levels = useLoad(TWO_LEVEL_MAPS.includes(map) ? `safe-levels:${game.id}` : null, () => statsApi.levels(game.id)); // niveau des joueurs (tyroliennes), cartes à deux étages seulement
+  const levelRows = levels.data;
   const index = useMemo(() => indexSamples(samples.data?.get(game?.id ?? -1) ?? []), [samples.data, game]);
   const tMax = useMemo(() => Math.max(1, ...[...index.values()].map((list) => list[list.length - 1]?.t ?? 0)), [index]);
   const base = useMemo(() => (sources.data ? buildGrid(sources.data.walk, sources.data.classes, 'balles', GRID_SIZE, sources.data.under) : null), [sources.data]); // les deux couches (balles, vue) sont dans la grille
@@ -98,14 +102,14 @@ export function StatsSafe({ map, replay, spec }: Props) {
   const t = Math.round(Math.min(deferredTime, tMax));
   const instant = useMemo(() => {
     if (!base || !game) return null;
-    const key = `${map}|${game.id}|${mode}|${doorsAlwaysOpen}|${t}`;
+    const key = `${map}|${game.id}|${mode}|${doorsAlwaysOpen}|${levelRows ? levelRows.length : -1}|${t}`;
     const hit = cache.get(key);
     if (hit) return hit;
-    const shooters = shootersAt(positionsAt(index, t), game.players, iconNames);
+    const shooters = withLevels(shootersAt(positionsAt(index, t), game.players, iconNames), levelRows, t);
     const value = computeInstant({ base, mode, doors: doorsAlwaysOpen ? null : doors, glassDoors: doorsAlwaysOpen ? null : glassDoors, rotors, t, shooters });
     cache.set(key, value);
     return value;
-  }, [base, game, map, mode, doorsAlwaysOpen, doors, glassDoors, rotors, index, t, cache, iconNames]);
+  }, [base, game, map, mode, doorsAlwaysOpen, doors, glassDoors, rotors, index, t, cache, iconNames, levelRows]);
 
   const notice = noticeOf(sources, samples, weapons);
   const nameA = game.teamA ? `orange (${game.teamA})` : 'orange';
@@ -179,7 +183,7 @@ export function StatsSafe({ map, replay, spec }: Props) {
           {` ; calcul ${instant?.ms.toFixed(0)} ms`}
         </p>
       )}
-      {!notice && unknownLevel > 0 && <p className="stats__empty">Niveau des joueurs inconnu : les deux étages sont mélangés pour {unknownLevel} joueur{unknownLevel > 1 ? 's' : ''}.</p>}
+      {!notice && unknownLevel > 0 && <p className="stats__empty">Niveau des joueurs non calculé pour cette game (lancer npm run stats) : les deux étages sont mélangés.</p>}
       <StatsMapBase map={map} spawns>
         {({ boxStyle }) =>
           instant && shooters.length > 0 ? (
@@ -220,8 +224,8 @@ export function StatsSafe({ map, replay, spec }: Props) {
           couverte par une équipe quand un de ses joueurs la voit ou peut la tirer ; elle est sûre pour une équipe quand elle est couverte par elle seule. Une case vue par l'ennemi à travers une vitre n'est donc pas
           sûre : elle est repérée, même si aucune balle ne peut l'atteindre (le chiffre « vue sans être à portée de tir » les compte). Les murs bloquent tout ; le tir par-dessus laisse passer la vue et les balles. Les
           portes sont fermées (elles bloquent la vue et les balles) sauf quand un joueur, de n'importe quelle équipe, est à moins de {DOOR_OPEN_M} m : elles s'ouvrent alors (vert : ouverte, rouge : fermée, pointillé :
-          vitrée). Sur Engine les anneaux sont placés à l'instant choisi. Sur Atlantis et The Cliff, un joueur dont le niveau est connu voit avec la grille de son étage ; l'analyse ne lit pas encore le niveau, donc les
-          deux étages sont mélangés. Limites : le regard et les gadgets ne sont pas utilisés, la distance d'ouverture des portes ({DOOR_OPEN_M} m) est une hypothèse, et les positions peu sûres du suivi décalent les
+          vitrée). Sur Engine les anneaux sont placés à l'instant choisi. Sur Atlantis et The Cliff, un joueur à l'étage voit avec la grille de son étage, les autres avec la grille commune. Le niveau vient des tyroliennes : un joueur
+          n'est à l'étage que s'il en a pris une vers le haut avant (une par game en moyenne sur les games mesurées, 1 à 2 % du temps à l'étage), les escaliers ne sont pas pris en compte. Limites : le regard et les gadgets ne sont pas utilisés, la distance d'ouverture des portes ({DOOR_OPEN_M} m) est une hypothèse, et les positions peu sûres du suivi décalent les
           zones. Avec un seul joueur sélectionné dans les filtres, seul son contour de vue est dessiné.
         </p>
       </details>
