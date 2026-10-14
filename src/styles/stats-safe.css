@@ -86,6 +86,24 @@
   border-style: dashed;
 }
 
+/* Porte de l'instant : fermée (bloque la vue et les balles) ou ouverte (un joueur est tout près) ; pointillée quand elle est vitrée */
+.safe__door {
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.safe__door--closed {
+  stroke: var(--c-danger-soft);
+}
+
+.safe__door--open {
+  stroke: var(--c-ok);
+}
+
+.safe__door--glass {
+  stroke-dasharray: 4 3;
+}
+
 .safe__ranges {
   margin: 0;
   padding-left: 1.1rem;

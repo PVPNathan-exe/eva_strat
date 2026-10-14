@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildGrid, castView, CLASS_CODES, cellMetres, rayCount, viewPolygon, withClosedDoors, withRotors, type BlockGrid, type GraySource } from '../src/lib/visibility.ts';
+import { buildGrid, castView, CLASS_CODES, cellMetres, DOOR_OPEN_M, distanceToSegmentM, doorsOpenedBy, layerGrid, rayCount, viewPolygon, withClosedDoors, withOpenedGlass, withRotors, type BlockGrid, type GraySource } from '../src/lib/visibility.ts';
 
 /** Source en niveaux de gris de n par n, remplie de `fill`, modifiée par `paint(x, y)` si elle renvoie une valeur. */
 const image = (n: number, fill: number, paint: (x: number, y: number) => number | undefined = () => undefined): GraySource => {
@@ -192,4 +192,70 @@ test('temps de calcul : une vue de 8 joueurs sur une grille de 200 sur 200', () 
     console.log(`   8 joueurs, ${label} : médiane ${times[3].toFixed(1)} ms (min ${times[0].toFixed(1)}, max ${times[6].toFixed(1)})`);
   }
   assert.ok(true);
+});
+
+test('couches : une fenêtre sépare balles et vue, sans vitre les deux couches sont le même tableau', () => {
+  const walk = image(400, 255, (x) => (x >= 240 && x < 280 ? 0 : undefined));
+  const classes = image(400, CLASS_CODES.sol, (x, y) => (x >= 240 && x < 280 ? (y >= 160 && y < 240 ? CLASS_CODES.vue : CLASS_CODES.mur) : undefined));
+  const g = buildGrid(walk, classes, 'balles', 100);
+  assert.ok(g.layers);
+  assert.notEqual(g.layers.balles, g.layers.vue);
+  assert.equal(g.blocked, g.layers.balles, 'blocked suit le mode demandé');
+  assert.equal(buildGrid(walk, classes, 'vue', 100).blocked[50 * 100 + 65], 0, 'la fenêtre laisse voir');
+  assert.equal(g.layers.balles[50 * 100 + 65], 1, 'et bloque les balles');
+  const plain = buildGrid(walk, null, 'balles', 100);
+  assert.equal(plain.layers?.balles, plain.layers?.vue);
+  const view = layerGrid(g, 'vue');
+  assert.equal(view.blocked, g.layers.vue);
+  assert.equal(layerGrid({ w: 3, h: 3, blocked: new Uint8Array(9) }, 'vue').blocked.length, 9, 'grille faite à la main : une seule couche');
+});
+
+test('distance à un segment et ouverture des portes : à DOOR_OPEN_M ou moins, de n importe quel joueur', () => {
+  const door: [[number, number], [number, number]] = [[0.5, 0.4], [0.5, 0.6]]; // 3,3 m de haut, à 15,5 m du bord gauche
+  assert.ok(Math.abs(distanceToSegmentM(0.5, 0.5, door)) < 1e-9, 'sur la porte');
+  assert.ok(Math.abs(distanceToSegmentM(0.5 + 1 / 31, 0.5, door) - 1) < 1e-9, 'à 1 m de côté');
+  assert.ok(Math.abs(distanceToSegmentM(0.5, 0.6 + 2 / 16.5, door) - 2) < 1e-9, 'à 2 m du bout');
+  assert.equal(DOOR_OPEN_M, 2);
+  const near = { x: 0.5 + 1.9 / 31, y: 0.5 };
+  const far = { x: 0.5 + 2.1 / 31, y: 0.5 };
+  assert.deepEqual(doorsOpenedBy([door], [far]), [false]);
+  assert.deepEqual(doorsOpenedBy([door], [far, near]), [true]);
+  assert.deepEqual(doorsOpenedBy([door], [far], 3), [true], 'rayon réglable');
+  assert.deepEqual(doorsOpenedBy([door], []), [false], 'personne : fermée');
+});
+
+test('porte vitrée : fermée elle laisse voir et bloque les balles, ouverte elle laisse tout passer', () => {
+  const walk = image(400, 255);
+  const classes = image(400, CLASS_CODES.sol, (x) => (x >= 240 && x < 244 ? CLASS_CODES.porte_vitre : undefined));
+  const base = buildGrid(walk, classes, 'balles', 100);
+  const shot = layerGrid(base, 'balles');
+  const sight = layerGrid(base, 'vue');
+  const door: [[number, number], [number, number]] = [[0.605, 0.3], [0.605, 0.7]];
+  assert.ok(!seen(shot, 0.3, 0.5, 40)(70, 50), 'balles : fermée');
+  assert.ok(seen(sight, 0.3, 0.5, 40)(70, 50), 'vue : fermée, on voit');
+  const opened = withOpenedGlass(shot, sight, [door]);
+  assert.ok(seen(opened, 0.3, 0.5, 40)(70, 50), 'balles : ouverte');
+  assert.equal(withOpenedGlass(shot, sight, []), shot, 'aucune porte ouverte : rien ne change');
+  assert.ok(!seen(shot, 0.3, 0.5, 40)(70, 50), 'la grille d origine n est pas modifiée');
+});
+
+test('deux étages : le sol réservé au dessous est libre pour tous, mais bloque le joueur de l étage', () => {
+  // Masque 400 : sol partout, un bloc « dessous » de 20 pixels (x 240 à 259) que le masque garde praticable ; classe mur dans ce bloc.
+  const walk = image(400, 255);
+  const classes = image(400, CLASS_CODES.sol, (x) => (x >= 240 && x < 260 ? CLASS_CODES.mur : undefined));
+  const under = image(200, 0, (x) => (x >= 120 && x < 130 ? 255 : undefined)); // image 200 sur 200 : autre taille que le masque
+  const g = buildGrid(walk, classes, 'balles', 100, under);
+  assert.ok(g.layers?.etage, 'couche de l étage présente');
+  assert.ok(seen(layerGrid(g, 'balles'), 0.3, 0.5, 40)(70, 50), 'niveau inconnu ou dessous : le bloc est praticable, on traverse');
+  assert.ok(!seen(layerGrid(g, 'balles', 'etage'), 0.3, 0.5, 40)(70, 50), 'étage : le bloc est un mur (sa classe mur)');
+  assert.equal(buildGrid(walk, classes, 'balles', 100, image(200, 0)).layers?.etage, undefined, 'image dessous vide : pas de couche d étage');
+});
+
+test('castView peut marquer deux tableaux d un seul jeu de rayons', () => {
+  const g = gridOf(100, (x) => x === 60);
+  const a = new Uint8Array(100 * 100);
+  const b = new Uint8Array(100 * 100);
+  castView(g, 0.3, 0.5, 20, a, b);
+  assert.deepEqual(a, b);
+  assert.ok(a[50 * 100 + 40] === 1 && a.some((v) => v === 1));
 });
