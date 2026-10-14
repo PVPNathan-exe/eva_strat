@@ -155,3 +155,27 @@ Voir section 7.
 ## 8. Modèle de consigne pour un agent (court, pour économiser les jetons)
 
 > Tu es l'agent <Nom> du chantier Stats d'EVA Strat. Lis seulement `docs/PLAN_STATS_AGENTS.md` : sections 1 (règles communes), 2 (contrat de données) et ta fiche (section 5, « <Nom> »). Possède uniquement les fichiers de ta fiche. Tâche, mesure et tests : ceux de ta fiche. Ne commite pas. Rapport final de 15 lignes au plus, en français, avec ce qui est mesuré et ce qui ne l'est pas.
+
+## 9. Retour de l'utilisateur du 14 octobre 2026 (vague 3 et suivantes)
+
+Demandes, dans l'ordre où elles sont traitées. Les agents lisent seulement leur fiche (section 10) ; ce tableau garde la trace de la demande.
+
+| Demande | Traitement |
+|---|---|
+| Des « ? » partout dans « Ce que voit le programme » | corrigé par le chef de chantier : l'écran lit l'équipement par vie (`/api/stats/life-loadouts`) et dessine les bandeaux à leur géométrie réelle |
+| Parcours : une chronologie pour rejouer le parcours, le trajet d'avant disparaît à chaque mort et le nouveau apparaît ; Morts : une frise ; Retakes : une frise | F4a (Parcours, Morts) puis F4b (Retakes, Rotations) |
+| Par défaut les stats d'une seule game sur tous les onglets | F4a |
+| Une équipe est bleue ou orange selon la vidéo : compiler les données par équipe (même couleur), et choisir « équipe à gauche », « à droite » ou les deux pour la présence | F4a : suivi par NOM d'équipe, couleur normalisée, filtre de côté |
+| Rotations : plus faciles à déterminer que les retakes (le point actif change) ; 20 s avant (abandonne-t-on le point, à quel moment) et 20 s après (comment l'équipe adverse défend, qui gagne la rotation) | P7 (définition) et P6 (lecture du point actif) |
+| Lire le HUD sous le chrono (hexagones des points, ceux qui clignotent) pour savoir quel point est actif et à qui il est | P6 : `hud_points.py`, tables `point_active` et `point_owner` (source `hud`) ; mesure : calendrier connu d'Outlaw |
+| Zones sûres : masques en référence, portes fermées sauf si un joueur est à proximité, vitres : étendre la zone de vision | F5 |
+| Retakes : le changement de point reste la référence, mais compter aussi les séries de 3 ou 4 kills (échecs de retake) avec 20 s de déplacements avant et 5 à 10 s de repositionnement de l'équipe adverse après | P7 (voir la question ouverte : quelle équipe fait les kills) |
+| À la fin : tout combiné à la frise de la game dans l'écran de review et dans la chronologie des games de l'onglet Analyse | vague 5, après réglage des paramètres dans l'onglet Stats |
+
+## 10. Fiches de la vague 3
+
+### P6 : HUD des points sous le chrono (Python, vidéo, lourd)
+- **Possède** : `analysis/hud_points.py`, `analysis/point_owner.py`, `analysis/tests/test_hud_points.py`, `analysis/tests/test_point_owner.py`.
+- **Constat** : sous le chrono, le HUD affiche un hexagone par point (lettres A, B, C ; zone `capture_points`, par défaut x 0,47 y 0,125 w 0,06 h 0,07) coloré orange, bleu ou gris selon le propriétaire. Sur Engine les trois hexagones montrent leur propriétaire en permanence (la couleur de la boîte de la minimap ne bouge pas : voir CLAUDE.md, « Stats : propriétaire des points »). Sur Atlantis un seul semble coloré à la fois. Outlaw a une zone plus large (5 points).
+- **Tâche** : lire les hexagones une fois par seconde (couleur par lettre, ordre gauche à droite des lettres lu ou appris, état actif ou qui clignote), écrire `point_owner` (source `hud`) et `point_active` (source `hud`) pour toutes les cartes à plusieurs points et, en recoupement, les cartes à un point et Outlaw.
+- **Mesure** : Outlaw, calendrier connu des changements de point (11:25, 9:55, 8:25, 6:55, 5:25, 3:55, 2:25, 0:55 du chrono) ; accord avec la couleur de boîte de `point_owner` (Polaris 26, Outlaw 32) ; Engine game 30 et Atlantis game 31 : secondes lisibles, accord avec la pente des scores.
