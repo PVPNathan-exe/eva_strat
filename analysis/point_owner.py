@@ -11,8 +11,10 @@ Deux sources de couleur, une image par seconde chacune (une lecture ffmpeg par s
 La pente des scores (`capture_state`, `score_A` et `score_B`) sert de troisième témoin : l'équipe dont le score monte tient le point. Elle comble les secondes que ni la boîte ni le HUD ne lisent
 (source `score`) et se compare à la boîte et au HUD (`agreement`). Elle ne sait pas dire « personne » (un score qui ne monte pas peut aussi être à 100 % ou en pause) et retarde de 2 s environ sur la couleur.
 
-Point actif (table point_active, source `hud`) : le point lumineux du HUD (Atlantis, Outlaw : un seul à la fois ; Engine : les trois en permanence). Sans HUD lisible, Outlaw garde les plages des boîtes
-de la minimap (source `box`).
+Point actif (table point_active) : sur les cartes qui ont un calendrier de changements (`rotation_schedule.py` : Outlaw, Atlantis) les BORNES des périodes sont celles du calendrier (instants du chrono
+convertis en secondes de game par une lecture courte du chrono) et le HUD ne dit que QUEL point est allumé dans chaque période (vote, source `schedule`) ; une période sans point lisible n'a pas de ligne.
+Sans calendrier ou sans chrono lisible : le point lumineux du HUD (source `hud`, Atlantis, Outlaw : un seul à la fois ; Engine : les trois en permanence) ; sans HUD lisible, Outlaw garde les plages des
+boîtes de la minimap (source `box`).
 
 Temps : secondes depuis le début de la game (la table capture_state est en secondes de la vidéo, on retranche `start_s`). Un segment [t0, t1[ garde le même propriétaire.
 Contrat commun des modules Stats : `compute(conn, game_id) -> int` (idempotent, renvoie le nombre de segments de point_owner) et `stats_meta` (module `point_owner`, révision REVISION)."""
@@ -26,9 +28,10 @@ from pathlib import Path
 import numpy as np
 import paths
 import hud_points
+import rotation_schedule
 
 MODULE = "point_owner"
-REVISION = 2  # 2 : source HUD (hud_points.py), Atlantis et Engine calculés, table point_active
+REVISION = 3  # 2 : source HUD (hud_points.py), Atlantis et Engine calculés, table point_active ; 3 : bornes du point actif tirées du calendrier (rotation_schedule.py)
 HERE = Path(__file__).parent
 CAPTURE = HERE / "map_capture.json"  # zones des points de capture tracées à la main (polygones, fractions de la minimap), une par point
 MULTI_POINT_MAPS = {"Atlantis", "Engine"}  # trois points : propriétaire lu sur le HUD seulement (la boîte de la minimap ne dit rien du propriétaire de chaque point)
@@ -280,15 +283,35 @@ def _hud_by_letter(hud):
     return {k: {round(float(t), 2): v for t, v in zip(hud["times"], labels)} for k, labels in hud["owner"].items()} if hud else {}
 
 
-def _analyse_hud_only(hud, capture):
-    """Cartes à trois points (Atlantis, Engine) : segments du HUD seul, plus l'accord avec la pente des scores. Renvoie {"segments", "active", "stats"}."""
+def _schedule_active(conn, game, hud, chrono=None):
+    """Point actif d'après le calendrier de la carte (rotation_schedule) : le résultat de active_from_calendar, plus « off » (seconde de game + chrono), ou None si la carte n'a pas de calendrier,
+    si le HUD n'est pas lu ou si le chrono est illisible (repli : le HUD seul). `chrono` : lectures [(seconde, chrono)] à la place de la vidéo (tests)."""
+    if hud is None or hud.get("mode") != hud_points.ACTIVE_ONLY or rotation_schedule.load_calendar(game["map"]) is None:
+        return None  # pas de lecture du chrono inutile
+    off = rotation_schedule.chrono_offset(chrono if chrono is not None else rotation_schedule.read_chrono(conn, game))
+    calendar = rotation_schedule.usable(game["map"], hud, off)
+    if calendar is None:
+        return None
+    return dict(rotation_schedule.active_from_calendar(calendar, off, hud), off=off)
+
+
+def _schedule_stats(sched):
+    """Statistiques du calendrier pour le rapport : périodes, périodes lues, périodes sans point lu (restant du chrono), plages du HUD seul après le dernier instant connu."""
+    if sched is None:
+        return {"used": False}
+    return {"used": True, "off": sched["off"], "periods": len(sched["periods"]), "read": len(sched["periods"]) - len(sched["unread"]), "unread": sched["unread"], "tail": sched["tail"]}
+
+
+def _analyse_hud_only(hud, capture, sched=None):
+    """Cartes à trois points (Atlantis, Engine) : segments du HUD seul, plus l'accord avec la pente des scores. Renvoie {"segments", "active", "stats"}. `sched` : point actif du calendrier."""
     stats = {"seconds": len(hud["times"]), "unreadable_final": hud["stats"]["seconds"] - hud["stats"]["readable"], "hud_mode": hud["mode"], "hud_contested": hud["stats"]["contested"]}
     stats.update({"score_" + k: v for k, v in hud_points.agreement_with_score(hud, capture).items()})
-    return {"segments": hud["owner_segments"], "active": hud["active_segments"], "stats": stats}
+    stats["schedule"] = _schedule_stats(sched)
+    return {"segments": hud["owner_segments"], "active": sched["segments"] if sched else hud["active_segments"], "stats": stats}
 
 
-def analyse(conn, game_id, frames=None, hud_frames=None):
-    """Lit les propriétaires des points d'une game. `frames` : images de la minimap [(t en secondes de game, image)] et `hud_frames` : images du HUD, à la place de la vidéo (tests).
+def analyse(conn, game_id, frames=None, hud_frames=None, chrono=None):
+    """Lit les propriétaires des points d'une game. `frames` : images de la minimap [(t en secondes de game, image)], `hud_frames` : images du HUD et `chrono` : lectures du chrono [(seconde, chrono)], à la place de la vidéo (tests).
     Renvoie {"segments": [...], "active": [...], "stats": {...}}. Sans vidéo (fichier absent) la pente des scores seule donne les segments des cartes à un point et d'Outlaw (source « score »,
     jamais « none ») ; les cartes à trois points n'ont alors aucun segment (le score ne dit pas quel point)."""
     game = _game(conn, game_id)
@@ -296,11 +319,12 @@ def analyse(conn, game_id, frames=None, hud_frames=None):
         return {"segments": [], "active": [], "stats": {"seconds": 0}}
     capture = _capture(conn, game)
     hud = hud_points.analyse(conn, game_id, frames=hud_frames)  # None : vidéo absente ou carte sans hexagone
+    sched = _schedule_active(conn, game, hud, chrono)  # point actif par le calendrier de la carte, sinon None (HUD seul)
     if game["map"] in MULTI_POINT_MAPS:
-        return _analyse_hud_only(hud, capture) if hud else {"segments": [], "active": [], "stats": {"seconds": 0}}
+        return _analyse_hud_only(hud, capture, sched) if hud else {"segments": [], "active": [], "stats": {"seconds": 0}}
     plan = _plan(conn, game)
-    if not plan:
-        return {"segments": [], "active": [], "stats": {"seconds": 0}}
+    if not plan:  # pas de boîte lue (Outlaw non analysé) : le calendrier du point actif ne dépend pas des boîtes
+        return {"segments": [], "active": sched["segments"] if sched else [], "stats": {"seconds": 0, "schedule": _schedule_stats(sched)}}
     frames = list(frames) if frames is not None else list(_video_frames(conn, game))
     by_letter = _hud_by_letter(hud)
     segments, stats = [], {"seconds": 0, "unreadable_box": 0, "unreadable_final": 0, "compared": 0, "agree": 0, "compared_calm": 0, "agree_calm": 0,
@@ -318,7 +342,11 @@ def analyse(conn, game_id, frames=None, hud_frames=None):
         stats["hud_agree"] += hacc["agree"]
         stats["hud_box_only"] += hacc["box_only"]
         stats["hud_only"] += hacc["hud_only"]
-    active = hud["active_segments"] if hud and hud["mode"] == "active_only" and hud["active_segments"] else ([{"point": p, "t0": round(float(a), 2), "t1": round(float(z), 2), "source": "box"} for p, a, z, _ in plan] if game["map"] == OUTLAW else [])
+    stats["schedule"] = _schedule_stats(sched)
+    if sched:
+        active = sched["segments"]
+    else:
+        active = hud["active_segments"] if hud and hud["mode"] == "active_only" and hud["active_segments"] else ([{"point": p, "t0": round(float(a), 2), "t1": round(float(z), 2), "source": "box"} for p, a, z, _ in plan] if game["map"] == OUTLAW else [])
     return {"segments": segments, "active": active, "stats": stats}
 
 
@@ -355,10 +383,10 @@ def _write(conn, game_id, segments, active=()):
     return len(segments)
 
 
-def compute(conn, game_id, frames=None, hud_frames=None):
+def compute(conn, game_id, frames=None, hud_frames=None, chrono=None):
     """Contrat des modules Stats : efface puis réécrit les segments de la game (tables point_owner et point_active) et la révision (stats_meta). Renvoie le nombre de segments de point_owner écrits.
-    `frames`, `hud_frames` : voir analyse() (tests)."""
-    result = analyse(conn, game_id, frames, hud_frames)
+    `frames`, `hud_frames`, `chrono` : voir analyse() (tests)."""
+    result = analyse(conn, game_id, frames, hud_frames, chrono)
     return _write(conn, game_id, result["segments"], result["active"])
 
 
@@ -375,6 +403,9 @@ def main(argv=None):
     if not args.dry_run:
         _write(conn, args.game, result["segments"], result["active"])
     s = result["stats"]
+    sc = s.get("schedule", {})
+    if sc.get("used"):
+        print(f"calendrier du point actif : {sc['read']} périodes lues sur {sc['periods']} (chrono + seconde de game = {sc['off']:.0f}), sans point lu : {sc['unread'] or 'aucune'}, plages du HUD seul après le dernier instant connu : {sc['tail']}")
     for g in result["segments"]:
         print(f"  point {g['point']} {g['t0']:6.1f} s à {g['t1']:6.1f} s : {g['owner']} ({g['source']})")
     for g in result["active"]:

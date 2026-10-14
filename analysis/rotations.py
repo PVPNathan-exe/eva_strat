@@ -1,8 +1,12 @@
 """Épisodes de rotation (table `episodes`, kind = rotation) : `python analysis/rotations.py --game N [--db chemin] [--dry-run] [--sheet]`.
 
 Définition (docs/PLAN_STATS_AGENTS.md, section 2, précisée par l'utilisateur le 14 octobre 2026). Une **rotation** est le MOMENT OÙ LE POINT ACTIF CHANGE (plus facile à déterminer qu'un retake) :
-une équipe (au moins 2 joueurs) quitte l'ancien point pour jouer le nouveau. Calendrier du point actif (episode_common.load_schedule) : table `point_active` (lue par le HUD) si elle a des lignes pour
+une équipe (au moins 2 joueurs) quitte l'ancien point pour jouer le nouveau. Calendrier du point actif (episode_common.load_schedule) : table `point_active` si elle a des lignes pour
 la game, sinon, sur Outlaw, les boîtes vues (`capture_boxes`) ; une carte à plusieurs points sans `point_active` (Atlantis, Engine) ou à un seul point : aucune rotation.
+Sur Outlaw et Atlantis (REVISION 3) `point_active` vient du calendrier fixe de la carte (`rotation_schedule.py`, source `schedule`) : les instants de changement sont ceux du chrono (Outlaw 11:25,
+9:55, 8:25, 6:55, 5:25, 3:55, 2:25, 0:55 ; Atlantis 9:55, 8:25 puis toutes les 60 s) convertis en secondes de game, le HUD ne dit que QUEL point est allumé. Le changement T n'a donc plus le retard
+de 2 s de la lecture seule du HUD (mesuré : le HUD s'allume 0,5 s après le chrono, une image de plus à une image par seconde) et tombe sur le début de la boîte de la minimap à 0 s près
+(Outlaw, games 19 et 32 : 9 changements sur 10, le premier de la game 32 est vu par la boîte 2 s plus tard). Une période dont le point n'est pas lu n'a pas de ligne : aucune rotation n'est affirmée vers elle ni depuis elle (trou de plus de MAX_SWITCH_GAP_S).
 Épisode : `point` = l'ancien point, `point_to` = le nouveau, `team` = l'équipe qui tourne, instant T = début du segment du nouveau point. Un épisode par équipe concernée (au moins 2 joueurs sur
 l'ancien point dans les 20 s avant T, ou 2 joueurs arrivés sur le nouveau) : l'autre équipe de la rotation est dans `opponent`.
 - Joueurs de départ : vivants de l'équipe à moins de `R_POINT` du cadre de l'ancien point à T - `LOOK_BACK_S`.
@@ -32,11 +36,11 @@ import episode_common as ec
 import retakes
 
 MODULE = "rotations"
-REVISION = 2  # 2 : calendrier point_active, 20 s avant et après, adversaire, gagnant, plusieurs cartes
+REVISION = 3  # 2 : calendrier point_active, 20 s avant et après, adversaire, gagnant, plusieurs cartes ; 3 : point_active du calendrier fixe (instants exacts, source schedule)
 OUTLAW = "Outlaw"
 # Valeurs étalonnées sur Outlaw, game 32 (5 changements de point, 10 équipes) : la game 19 a des boîtes mais pas de positions, donc non mesurée.
 R_POINT = 4.0  # « sur un point » : à moins de 4 m du cadre (même seuil que R_PUSH des retakes)
-LOOK_BACK_S = 4.0  # joueurs de départ lus 4 s avant l'apparition de la nouvelle boîte (l'ancienne boîte disparaît 2 s avant)
+LOOK_BACK_S = 4.0  # joueurs de départ lus 4 s avant le changement de point actif (sur la minimap l'ancienne boîte disparaît 2 s avant)
 ROT_MAX_S = 30.0  # une arrivée compte si elle a lieu dans les 30 s qui suivent (les deux points sont à 10 à 18 m l'un de l'autre)
 PRE_S = 20.0  # fenêtre de l'épisode : 20 s avant le changement de point actif
 POST_S = 20.0  # 20 s après pour les photos et les mesures de comportement

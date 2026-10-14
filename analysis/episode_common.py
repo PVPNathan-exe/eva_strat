@@ -93,7 +93,8 @@ def _merge_segments(segs):
 
 
 def load_schedule(conn, game_id, map_name, duration):
-    """Calendrier du point actif : [{point, t0, t1, rect, source}] triés. `point_active` d'abord (source hud, box ou schedule), sinon, sur Outlaw, les boîtes de `capture_boxes` (source box).
+    """Calendrier du point actif : [{point, t0, t1, rect, source}] triés. `point_active` d'abord (source schedule : instants du calendrier fixe de la carte et point lu sur le HUD, voir rotation_schedule.py ;
+    hud : HUD seul pour une carte sans calendrier ; box), sinon, sur Outlaw, les boîtes de `capture_boxes` (source box).
     Le cadre vient de la boîte vue du même point qui recouvre le segment, sinon du cadre de la carte. Une carte sans calendrier (un seul point, ou à plusieurs points sans lecture) : liste vide."""
     import point_owner
 

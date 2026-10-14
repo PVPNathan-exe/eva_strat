@@ -356,3 +356,42 @@ def test_la_ligne_de_commande_de_hud_points_sans_video(tmp_path, capsys):
     make_game(tmp_path, "Engine").close()
     assert hp.main(["--game", "1", "--db", str(tmp_path / "t.db")]) == 0
     assert "rien à lire" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- calendrier du point actif (rotation_schedule) branché sur point_owner
+
+def chrono_of(n, start=600, offset=1):
+    """Lectures du chrono d'une game dont la seconde + le chrono valent start + offset (la valeur de départ reste affichée 2 secondes)."""
+    return [(float(t), start if t < 2 else start + offset - t) for t in range(n)]
+
+
+def test_atlantis_les_bornes_du_point_actif_viennent_du_calendrier_et_le_hud_donne_l_identite(tmp_path):
+    conn = make_game(tmp_path, "Atlantis", start=100.0, end=400.0)
+    # off 601 : changements à 6, 96, 156, 216, 276 s ; le HUD s'allume 1 s plus tard, et l'ancien point s'éteint une seconde plus tard
+    plan = [{}] * 7 + [{"A": {"letter": "white"}}] * 90 + [{"B": {"letter": "white"}}] * 60 + [{"A": {"letter": "white"}}] * 60 + [{"C": {"letter": "white"}}] * 60 + [{"B": {"letter": "white"}}] * 24
+    result = po.analyse(conn, 1, hud_frames=hud_frames("Atlantis", plan), chrono=chrono_of(45))
+    assert [(a["point"], a["t0"], a["t1"], a["source"]) for a in result["active"]] == [
+        ("A", 6.0, 96.0, "schedule"), ("B", 96.0, 156.0, "schedule"), ("A", 156.0, 216.0, "schedule"), ("C", 216.0, 276.0, "schedule"), ("B", 276.0, 301.0, "schedule")]
+    sc = result["stats"]["schedule"]
+    assert sc["used"] and sc["off"] == 601.0 and sc["periods"] == 5 and sc["read"] == 5 and sc["unread"] == [] and sc["tail"] == 0
+    n = po.compute(conn, 1, hud_frames=hud_frames("Atlantis", plan), chrono=chrono_of(45))
+    assert n > 0 and conn.execute("SELECT COUNT(*) FROM point_active WHERE source = 'schedule'").fetchone()[0] == 5
+
+
+def test_sans_chrono_lisible_le_point_actif_retombe_sur_le_hud_seul(tmp_path):
+    conn = make_game(tmp_path, "Atlantis")
+    plan = [{"A": {"letter": "white"}}] * 20 + [{"B": {"letter": "white"}}] * 20
+    result = po.analyse(conn, 1, hud_frames=hud_frames("Atlantis", plan), chrono=[(float(t), None) for t in range(40)])
+    assert [(a["point"], a["source"]) for a in result["active"]] == [("A", "hud"), ("B", "hud")]
+    assert result["stats"]["schedule"] == {"used": False}
+
+
+def test_outlaw_le_point_precedent_reste_allume_et_le_nouveau_est_quand_meme_lu(tmp_path):
+    conn = make_game(tmp_path, "Outlaw", start=100.0, end=600.0)
+    d_on = {"D": {"fill": BLUE}}
+    # off 721 : changements à 36, 126, 216, 306, 396, 486 s (685, 595, 505, 415, 325, 235) ; D reste allumé (bleu) au dernier changement, B s'allume à côté
+    plan = ([{}] * 37 + [{"C": {"letter": "white"}}] * 90 + [{"B": {"letter": "white"}}] * 90 + [{"A": {"letter": "white"}}] * 90 + [{"B": {"letter": "white"}}] * 90
+            + [dict(d_on)] * 90 + [dict(d_on, B={"letter": "white"})] * 60)
+    result = po.analyse(conn, 1, hud_frames=hud_frames("Outlaw", plan, zone=OUTLAW_ZONE), chrono=chrono_of(45, start=720))
+    assert [(a["point"], a["t0"]) for a in result["active"]] == [("C", 36.0), ("B", 126.0), ("A", 216.0), ("B", 306.0), ("D", 396.0), ("B", 486.0)]
+    assert result["stats"]["schedule"]["unread"] == []

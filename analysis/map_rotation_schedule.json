@@ -1,0 +1,35 @@
+{
+  "_remarque": "Instants de changement du point actif en CHRONO RESTANT (le chrono affiche cette valeur), par carte. Sur ces cartes les instants sont toujours les mêmes d'une game à l'autre, seul le point qui apparaît est aléatoire (indication de l'utilisateur, 14 octobre 2026) : le HUD ne sert qu'à lire quel point est allumé dans chaque période (analysis/rotation_schedule.py). Une carte sans entrée ou sans changement reste lue par le HUD seul. dernier_ouvert : après le dernier instant listé le calendrier n'est pas connu, la suite vient du HUD seul.",
+  "Outlaw": {
+    "chrono_depart": "12:00",
+    "dernier_ouvert": false,
+    "changements": [
+      { "restant": "11:25", "source": "indiqué" },
+      { "restant": "9:55", "source": "indiqué" },
+      { "restant": "8:25", "source": "indiqué" },
+      { "restant": "6:55", "source": "indiqué" },
+      { "restant": "5:25", "source": "indiqué" },
+      { "restant": "3:55", "source": "indiqué" },
+      { "restant": "2:25", "source": "déduit du rythme de 90 s" },
+      { "restant": "0:55", "source": "indiqué" }
+    ]
+  },
+  "Atlantis": {
+    "chrono_depart": "10:00",
+    "dernier_ouvert": true,
+    "changements": [
+      { "restant": "9:55", "source": "mesuré sur 1 game (31, relue en 43)" },
+      { "restant": "8:25", "source": "mesuré sur 2 games (15, 31 relue en 43)" },
+      { "restant": "7:25", "source": "mesuré sur 2 games (15, 31 relue en 43)" },
+      { "restant": "6:25", "source": "mesuré sur 2 games (15, 31 relue en 43)" },
+      { "restant": "5:25", "source": "mesuré sur 1 game (31, relue en 43)" },
+      { "restant": "4:25", "source": "mesuré sur 1 game (31, relue en 43)" }
+    ]
+  },
+  "Helios Station": {
+    "chrono_depart": null,
+    "dernier_ouvert": true,
+    "changements": [],
+    "source": "aucune game analysée (seulement un plan dans l'onglet Stratégie) : les instants sont à ajouter ici, ils ne sont ni mesurés ni indiqués"
+  }
+}

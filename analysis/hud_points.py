@@ -14,7 +14,10 @@ Les positions des hexagones sont écrites en fractions de l'ÉCRAN (pas de la zo
 
 Lissage : trous illisibles courts comblés quand les deux bords sont identiques, accidents d'une seconde effacés (`point_owner.clean_labels`) ; le point actif se lit avec des seuils plus larges (trou de
 MAX_ACTIVE_GAP_S entre deux lectures du même point, plage de moins de MIN_ACTIVE_RUN_S effacée) car la lettre blanche d'un point neutre est fine et se perd sur un décor clair.
-Sorties : segments de `point_owner` (source `hud`) et de `point_active` (source `hud`), en secondes depuis le début de la game. Écrites par `point_owner.compute` (contrat commun des modules Stats)."""
+Sorties : segments de `point_owner` (source `hud`) et de `point_active` (source `hud`), en secondes depuis le début de la game. Écrites par `point_owner.compute` (contrat commun des modules Stats).
+Point actif : là où la carte a un calendrier de changements (`rotation_schedule.py`, Outlaw, Atlantis), les BORNES des périodes viennent du calendrier et ce module ne sert qu'à lire QUEL point est allumé
+(`analyse` renvoie pour cela les états bruts « readings » et le point le plus lumineux lissé « best ») ; les segments `active_segments` d'ici restent le repli des cartes sans calendrier. Le HUD s'allume
+environ 0,5 s après l'instant du chrono (mesuré à 4 images par seconde), soit un échantillon de plus à une image par seconde."""
 
 import argparse
 import os
@@ -314,7 +317,8 @@ def read_series(frames, map_name, zone):
 
 def analyse(conn, game_id, frames=None):
     """Lit le HUD d'une game. `frames` : images [(t en secondes de game, image)] à la place de la vidéo (tests). Renvoie None si la game n'existe pas ou sans image, sinon
-    {"mode", "letters", "times", "owner": {lettre: [étiquettes]}, "active": [...], "contested": {...}, "owner_segments", "active_segments", "stats"}."""
+    {"mode", "letters", "times", "owner": {lettre: [étiquettes]}, "active": [...], "contested": {...}, "owner_segments", "active_segments", "stats", "readings" (états bruts par seconde),
+    "best" (point le plus lumineux de chaque seconde, lissé ; None hors mode « active_only »)}."""
     import db
     import point_owner as po
 
@@ -337,9 +341,11 @@ def analyse(conn, game_id, frames=None):
         "active_known": sum(1 for a in dec["active"] if a),
         "contested": {k: sum(dec["contested"][k]) for k in letters},
     }
+    best = clean_active(active_labels(readings, letters)) if mode == ACTIVE_ONLY else None  # le point le plus lumineux de chaque seconde (calendrier : rotation_schedule)
     return {
         "mode": mode, "letters": letters, "times": times, "owner": dec["owner"], "active": dec["active"], "contested": dec["contested"],
         "owner_segments": owner_segments(times, dec["owner"]), "active_segments": active_segments(times, dec["active"], letters), "stats": stats,
+        "readings": readings, "best": best,
     }
 
 

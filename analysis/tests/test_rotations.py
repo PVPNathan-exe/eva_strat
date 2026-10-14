@@ -22,7 +22,7 @@ BOXES = [  # (t0, t1, x, y, w, h, lettre) en secondes de game
 
 def make_conn(tracks, lives=None, map_name="Outlaw", boxes=BOXES, active=None, owners=()):
     """tracks : {slot: fonction t -> (x, y)} (défaut : loin de tout) ; lives : {slot: [(t0, t1, ended, killer)]} (défaut : vivant toute la game) ;
-    active : [(point, t0, t1)] lignes de point_active (source hud) ; owners : [(point, t0, t1, 'A'|'B'|'none')] lignes de point_owner."""
+    active : [(point, t0, t1[, source])] lignes de point_active (source hud par défaut) ; owners : [(point, t0, t1, 'A'|'B'|'none')] lignes de point_owner."""
     conn = sqlite3.connect(":memory:")
     conn.executescript(SCHEMA)
     conn.execute("INSERT INTO videos (id, path, duration_s, fps, width, height) VALUES (1, 'v.mp4', 500, 30, 1920, 1080)")
@@ -30,7 +30,7 @@ def make_conn(tracks, lives=None, map_name="Outlaw", boxes=BOXES, active=None, o
     for b in boxes:
         conn.execute("INSERT INTO capture_boxes (game_id, t0, t1, x, y, w, h, point) VALUES (1, ?, ?, ?, ?, ?, ?, ?)", b)
     for a in active or []:
-        conn.execute("INSERT INTO point_active (game_id, point, t0, t1, source) VALUES (1, ?, ?, ?, 'hud')", a)
+        conn.execute("INSERT INTO point_active (game_id, point, t0, t1, source) VALUES (1, ?, ?, ?, ?)", (a[0], a[1], a[2], a[3] if len(a) > 3 else "hud"))
     for o in owners:
         conn.execute("INSERT INTO point_owner (game_id, point, t0, t1, owner, source) VALUES (1, ?, ?, ?, ?, 'box')", o)
     frame = 0
@@ -161,6 +161,23 @@ def test_point_active_prime_sur_les_boites():
     rotations.compute(conn, 1)
     [a] = episodes(conn)
     assert a["data"]["switch_t"] == 100.0 and a["data"]["source"] == "hud" and (a["point"], a["point_to"]) == ("C", "B")
+
+
+def test_calendrier_du_chrono_les_periodes_se_suivent_sans_trou_et_le_changement_est_a_l_instant_du_calendrier():
+    # point_active écrit par rotation_schedule (source schedule) : bornes contiguës, instant du changement = début de la période (plus de retard de 2 s du HUD)
+    conn = make_conn({1: rotates(87, 98), 2: rotates(88, 99), 5: stays_on_c, 6: stays_on_c}, active=[("C", 0.0, 90.0, "schedule"), ("B", 90.0, 178.0, "schedule")])
+    rotations.compute(conn, 1)
+    a, b = episodes(conn)
+    assert a["data"]["switch_t"] == 90.0 and a["data"]["source"] == "schedule" and (a["point"], a["point_to"], a["team"]) == ("C", "B", "A")
+    assert a["data"]["flow"]["leave_phase"] == "au_changement" and -5.0 <= a["data"]["flow"]["leave_old_offset_s"] <= 0.0  # parti 3 s avant l'instant exact
+    assert b["team"] == "B"
+
+
+def test_periode_sans_point_lu_pas_de_rotation_de_ni_vers_cette_periode():
+    # C lu, la période suivante (90 s) sans point lu, puis A : le trou de 90 s dépasse MAX_SWITCH_GAP_S, aucun changement n'est affirmé
+    conn = make_conn({1: rotates(92, 100), 2: rotates(93, 104)}, boxes=[], map_name="Outlaw",
+                     active=[("C", 0.0, 90.0, "schedule"), ("B", 180.0, 270.0, "schedule")])
+    assert rotations.compute(conn, 1) == 0
 
 
 def test_point_active_sans_boite_prend_les_cadres_de_la_carte():
