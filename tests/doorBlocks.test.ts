@@ -1,15 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { blockCorners, doorView, initialStates, isMoving, press, settledState, totalSeconds, type DoorAnim, type DoorButton, type DoorSetup } from '../src/lib/doorBlocks.ts';
+import { doorPassable, doorView, initialStates, isMoving, leafCorners, MIN_LEAF, press, settledState, totalSeconds, type DoorAnim, type DoorButton, type DoorSetup } from '../src/lib/doorBlocks.ts';
 
 const anim: DoorAnim = { hold_s: 3.3, move_s: 5.7 };
 const setup: DoorSetup = {
   plan: [1000, 500],
   anim,
   doors: [
-    { id: 'G', cx: 100, cy: 100, len: 100, depth: 40, angle: 0, initial: 'closed' },
-    { id: 'C', cx: 500, cy: 100, len: 80, depth: 40, angle: 90, initial: 'open' },
+    { id: 'G', cx: 100, cy: 100, along: 100, across: 40, angle: 0, initial: 'closed' },
+    { id: 'C', cx: 500, cy: 100, along: 80, across: 40, angle: 90, initial: 'open' },
   ],
   buttons: [],
 };
@@ -68,12 +68,34 @@ test('une porte en mouvement ignore les boutons ; une fois finie elle repart dan
   assert.deepEqual(doorView(s2.G, 29000, anim), { closed: 1, active: false }); // et se referme
 });
 
-test('coins du bloc : toute la longueur, épaisseur proportionnelle à la fermeture, centre fixe', () => {
-  const door = setup.doors[0];
-  const full = blockCorners(door, 1);
-  assert.deepEqual(full[0], [50, 80]);
-  assert.deepEqual(full[2], [150, 120]);
-  const half = blockCorners(door, 0.5);
-  assert.deepEqual(half[0], [50, 90]);
-  assert.deepEqual(half[2], [150, 110]);
+test('deux battants : fermés ils se touchent au milieu, ouverts à moitié ils sont plus minces et gardent leur bord extérieur', () => {
+  const door = setup.doors[0]; // 100 de long dans le sens du chemin (x), 40 de large (y), centre (100, 100)
+  const [a, b] = leafCorners(door, 1);
+  assert.deepEqual(a, [[50, 80], [100, 80], [100, 120], [50, 120]]);
+  assert.deepEqual(b, [[100, 80], [150, 80], [150, 120], [100, 120]]);
+  const [c, d] = leafCorners(door, 0.5);
+  assert.deepEqual(c, [[50, 80], [75, 80], [75, 120], [50, 120]]); // bord extérieur (x = 50) fixe, bord intérieur qui recule
+  assert.deepEqual(d, [[125, 80], [150, 80], [150, 120], [125, 120]]);
+  const [e] = leafCorners(door, 0);
+  assert.equal(e[0][0], e[1][0]); // épaisseur nulle
+  assert.ok(MIN_LEAF > 0 && MIN_LEAF < 0.3);
+});
+
+test('une porte tournée de 90 degrés : les battants se rangent dans le sens y', () => {
+  const [a, b] = leafCorners(setup.doors[1], 1); // along 80, across 40, angle 90, centre (500, 100)
+  const ys = [...a, ...b].map((p) => Math.round(p[1]));
+  assert.equal(Math.min(...ys), 60);
+  assert.equal(Math.max(...ys), 140);
+});
+
+test('passage : impossible porte complètement fermée (y compris pendant le délai avant son ouverture), possible dès qu\'elle est un peu ouverte', () => {
+  const s = press(initialStates(setup), rouge, 0, anim);
+  assert.equal(doorPassable(doorView(s.G, 100, anim)), false); // fermée, battants verts pendant le délai
+  assert.equal(doorPassable(doorView(s.G, 3300, anim)), false); // le mouvement commence : pas encore ouverte
+  assert.equal(doorPassable(doorView(s.G, 3300 + 50, anim)), true); // un peu ouverte : on passe
+  assert.equal(doorPassable(doorView(s.G, 9000, anim)), true); // ouverte
+  // la porte du centre se ferme : on passe jusqu'à ce qu'elle soit complètement fermée
+  assert.equal(doorPassable(doorView(s.C, 100, anim)), true);
+  assert.equal(doorPassable(doorView(s.C, 8999, anim)), true);
+  assert.equal(doorPassable(doorView(s.C, 9000, anim)), false);
 });

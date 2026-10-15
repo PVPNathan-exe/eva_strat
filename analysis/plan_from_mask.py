@@ -1,6 +1,6 @@
 """Dessine le plan stratégique d'une carte, net et lisse comme ceux des autres cartes (Polaris, Atlantis) : murs blancs en polygones simples, portes hachurées, tyroliennes vertes.
 
-  python analysis/plan_from_mask.py --map "Reef Point" --reference chemin/image.png [--check]   part d'un plan de référence (image gardée HORS du dépôt)
+  python analysis/plan_from_mask.py --map "Reef Point" --reference chemin/image.png [--fine] [--check]   part d'un plan de référence (image gardée HORS du dépôt ; --fine : image déjà nette, lissage léger)
   python analysis/plan_from_mask.py --map "Reef Point" [--check]                                 sans référence : murs tirés du masque de la minimap (analysis/map_masks/<Carte>.png)
 
 Avec une référence, les murs sont ses grands blancs (sans pastilles ni logo) plus la bande de fenêtre du spawn (grise dans la référence, MUR sur le plan : une fenêtre n'a pas de couleur de tir à
@@ -27,8 +27,12 @@ STRAIGHT_DEG, OUTLINE_DEG = 14, 18  # un segment à moins de 14 degrés (18 pour
 NUB_PX = 12  # une saillie ou un filet de mur plus étroit que cela (pixels du plan) est du bruit, effacé
 ISLAND_PX = 1500  # un îlot de mur isolé plus petit que cela (pixels du plan au carré) est effacé (reste de caisse ou de pastille)
 GRID_PX = 4  # les sommets des blocs sont posés sur une grille de cette taille (pixels du plan) : blocs alignés entre eux
-DOOR_DEPTH = 44  # épaisseur (pixels du plan) d'un bloc de porte, dans le sens du chemin
-DOOR_MAX_SPAN = 260  # une ouverture plus large que cela (pixels du plan) n'est pas un chemin : le bloc garde la longueur du trait de porte
+DOOR_SNAP_PX = 15  # un bord de porte mesuré sur la vidéo est recollé au mur du plan s'il en est à moins de cela (pixels du plan)
+DOOR_SNAP_SPREAD = 8  # écart maximal (pixels du plan) entre les rayons qui trouvent le mur : au-delà le mur n'est pas droit, on ne recolle pas
+# Portes de Reef Point mesurées sur la minimap de la vidéo « NCT vs OR » (game 23, images à 20 par seconde, 2998,2 s et 3006,9 s, battants entièrement verts) : centre, longueur dans le sens
+# du chemin (deux battants), largeur du chemin, direction du chemin (degrés), en pixels de la minimap (424 x 228). La porte de droite est le miroir de celle de gauche (mesurée à 12,5 degrés
+# d'écart d'angle, 3 de plus : bruit) ; celle du centre est sur l'axe.
+MEASURED_DOORS = {"Reef Point": {"G": (127.4, 60.3, 25.5, 19.6, 11.0), "C": (212.5, 79.5, 25.0, 19.0, 0.0)}}
 FRAME_PX = 12  # cadre blanc posé sur le bord du plan (l'arène est toujours fermée)
 EDGE_PX, EDGE_SMOOTH = 100, 30  # bandes gauche et droite du plan (pixels) où les dents du bord de l'arène sont effacées par ouverture et fermeture de cette taille
 CODE_WALL, CODE_SHOOT = 2, 3  # codes de <Carte>_classes.png (map_annotations.CODES : mur, tir par-dessus)
@@ -39,7 +43,7 @@ CRATE_BGR = (210, 210, 210)
 REF_WHITE_V, REF_WHITE_S = 235, 40  # mur blanc d'une référence
 REF_MIN_PX = 400  # un blanc plus petit que cela dans la référence (pastille, logo, point) n'est pas un mur
 REF_WINDOW_V, REF_WINDOW_S, REF_WINDOW_R = 100, 70, 40  # gris de la bande de fenêtre (le sol est plus sombre et plus coloré), rayon autour du trait de fenêtre (pixels du plan)
-REF_LOGO = (312, 686, 385, 719)  # logo de la source dans la référence de Reef Point (x0, y0, x1, y1), posé sur un mur
+REF_LOGO = (312, 686, 385, 719)  # logo de la source dans la référence d'EBP.GG de Reef Point (x0, y0, x1, y1), posé sur un mur (sans objet avec --fine)
 DOOR_CARVE = 56  # épaisseur (pixels du plan) du passage rendu au sol autour d'une porte (sans référence)
 DOORS_OUT = HERE / "map_door_blocks.json"  # blocs de porte et boutons lus par le site (animation de l'onglet Stratégie)
 DOOR_ANIM = {"hold_s": 3.3, "move_s": 5.7}  # mesuré sur la vidéo NCT vs OR, game 23 de Reef Point : voir CLAUDE.md
@@ -81,16 +85,17 @@ def walkable(mask, inset, scale):
     return keep
 
 
-def reference_plan(path, map_name, inset, scale):
+def reference_plan(path, map_name, inset, scale, logo=True):
     """Murs (booléen à l'échelle `scale`) et zones de départ (rectangles en pixels du plan) d'une référence : grands blancs, plus la bande de fenêtre du spawn."""
     ref = cv2.imread(str(path))
     if ref is None:
         raise SystemExit(f"Image de référence illisible : {path}")
-    ref = cv2.resize(ref, SIZE, interpolation=cv2.INTER_AREA)
+    ref = cv2.resize(ref, SIZE, interpolation=cv2.INTER_AREA if ref.shape[1] >= SIZE[0] else cv2.INTER_CUBIC)
     hsv = cv2.cvtColor(ref, cv2.COLOR_BGR2HSV)
     white = ((hsv[:, :, 2] >= REF_WHITE_V) & (hsv[:, :, 1] <= REF_WHITE_S)).astype(np.uint8)
-    x0, y0, x1, y1 = REF_LOGO
-    white[y0:y1, x0:x1] = 1  # le logo (lettres noires) est posé sur un mur blanc
+    if logo:
+        x0, y0, x1, y1 = REF_LOGO
+        white[y0:y1, x0:x1] = 1  # le logo (lettres noires) est posé sur un mur blanc
     n, lab, stats, _ = cv2.connectedComponentsWithStats(white)
     for i in range(1, n):
         if stats[i, 4] < REF_MIN_PX:
@@ -233,28 +238,57 @@ def span(floor, p, v, limit):
     return float(limit)
 
 
-def door_blocks(map_name, floor, px, scale):
-    """Blocs de porte : rectangles qui couvrent TOUTE la largeur du chemin à l'endroit de la porte (portée entre les deux murs, mesurée sur le plan), épaisseur DOOR_DEPTH.
-    Le trait de porte de map_doors.json donne le point et le sens ; si l'ouverture est plus étroite dans l'autre sens, c'est celui-là qui traverse le chemin."""
-    blocks = []
-    for d in _load("map_doors.json", map_name):
-        if d["kind"] != "porte":
+def snap_extent(floor, c, axis, offsets_dir, offsets, half, scale):
+    """Distance (pixels du plan) du centre `c` au mur le long de `axis`, médiane de plusieurs rayons parallèles décalés ; None s'il n'y a pas de mur proche ou si les rayons ne s'accordent pas."""
+    tol = DOOR_SNAP_PX * scale
+    hits = []
+    for o in offsets:
+        d = span(floor, c + offsets_dir * o * scale, axis, (half + DOOR_SNAP_PX) * scale)
+        if d >= (half + DOOR_SNAP_PX) * scale - 1:
+            return None
+        hits.append(d)
+    if max(hits) - min(hits) > DOOR_SNAP_SPREAD * scale or abs(np.median(hits) - half * scale) > tol:
+        return None
+    return float(np.median(hits)) / scale
+
+
+def snap_door(floor, door, scale):
+    """Colle une porte mesurée au passage du plan : chaque bord (dans le sens du chemin, puis en travers) est ramené sur le mur voisin quand on en trouve un, sinon la mesure est gardée."""
+    a = np.radians(door["angle"])
+    u, n = np.array([np.cos(a), np.sin(a)]), np.array([-np.sin(a), np.cos(a)])
+    c = np.array([door["cx"], door["cy"]]) * scale
+    half_l, half_w = door["along"] / 2, door["across"] / 2
+    shift = np.zeros(2)
+    for axis, off_dir, spread, half, key in ((u, n, half_w, half_l, "along"), (n, u, half_l, half_w, "across")):
+        offsets = (-0.3 * spread * 2, 0.0, 0.3 * spread * 2)
+        pos = snap_extent(floor, c, axis, off_dir, offsets, half, scale)
+        neg = snap_extent(floor, c, -axis, off_dir, offsets, half, scale)
+        if pos is None and neg is None:
             continue
-        a, b = np.array(px(*d["from"]), float), np.array(px(*d["to"]), float)
-        mid = (a + b) / 2
-        u = (b - a) / max(np.linalg.norm(b - a), 1e-6)
-        n = np.array([-u[1], u[0]])
-        lim = DOOR_MAX_SPAN * scale
-        along = (span(floor, mid, u, lim), span(floor, mid, -u, lim))
-        across = (span(floor, mid, n, lim), span(floor, mid, -n, lim))
-        best = along if sum(along) <= sum(across) else across
-        axis = u if best is along else n
-        if sum(best) >= lim:  # pas de murs de part et d'autre : on garde le trait tracé
-            best, axis = (np.linalg.norm(b - a) / 2,) * 2, u
-        center = mid + axis * (best[0] - best[1]) / 2
-        angle = float(np.degrees(np.arctan2(axis[1], axis[0])) % 180)
-        blocks.append({"cx": float(center[0]) / scale, "cy": float(center[1]) / scale, "len": float(sum(best)) / scale, "depth": DOOR_DEPTH, "angle": round(angle, 1)})
-    return blocks
+        pos, neg = pos if pos is not None else half, neg if neg is not None else half
+        door[key] = pos + neg
+        shift += axis * (pos - neg) / 2 * scale
+    door["cx"], door["cy"] = (c + shift) / scale
+    return door
+
+
+def measured_doors(map_name, inset, floor, scale):
+    """Portes de la carte (pixels du plan) : mesures de la vidéo posées avec le cadre, recollées au passage, celle de droite en miroir de celle de gauche, celle du centre sur l'axe."""
+    m = MEASURED_DOORS.get(map_name)
+    if not m:
+        return []
+    l, t, r, b = inset
+    sx, sy = SIZE[0] * (1 - l - r) / 424, SIZE[1] * (1 - t - b) / 228  # pixels du plan par pixel de minimap
+    axis_x = (SIZE[0] * scale - 1) / 2 / scale
+
+    def to_plan(cx, cy, along, across, angle):
+        return {"cx": (l + cx / 424 * (1 - l - r)) * SIZE[0], "cy": (t + cy / 228 * (1 - t - b)) * SIZE[1], "along": along * sx, "across": across * sy, "angle": angle}
+
+    left = snap_door(floor, to_plan(*m["G"]), scale)
+    center = snap_door(floor, {**to_plan(*m["C"]), "cx": axis_x}, scale)
+    center["cx"] = axis_x
+    right = {**left, "cx": 2 * axis_x - left["cx"], "angle": (180 - left["angle"]) % 180}
+    return [left, center, right]
 
 
 def mirror_points(pts, width):
@@ -278,7 +312,7 @@ def symmetric_crates(crates, axis_x, s):
     return out
 
 
-def draw_plan(map_name, inset, reference=None):
+def draw_plan(map_name, inset, reference=None, fine=False):
     """Renvoie (image, masque du sol, infos) ; `infos` : blocs de porte et boutons en pixels du plan (écrits par main pour le site)."""
     w, h = SIZE
     s = SS
@@ -287,7 +321,7 @@ def draw_plan(map_name, inset, reference=None):
     px = to_px(inset, s)
     crates, crate_cover = free_crates(map_name, inset, s)
     if reference is not None:
-        walls, ref_spawns = reference_plan(reference, map_name, inset, s)
+        walls, ref_spawns = reference_plan(reference, map_name, inset, s, logo=not fine)
         walk = (~walls).astype(np.uint8)
         spawns = {side: tuple(v * s for v in box) for side, box in ref_spawns.items()}
     else:
@@ -298,10 +332,12 @@ def draw_plan(map_name, inset, reference=None):
     walk = cv2.morphologyEx(walk, cv2.MORPH_CLOSE, np.ones((NUB_PX * s, NUB_PX * s), np.uint8))  # efface les ergots et filets de mur trop étroits
     walk[: FRAME_PX * s], walk[-FRAME_PX * s :], walk[:, : FRAME_PX * s], walk[:, -FRAME_PX * s :] = 0, 0, 0, 0
     k = np.ones((EDGE_SMOOTH * s, EDGE_SMOOTH * s), np.uint8)  # dents du bord gauche et droit de l'arène effacées
-    smooth = cv2.morphologyEx(cv2.morphologyEx(walk, cv2.MORPH_OPEN, k), cv2.MORPH_CLOSE, k)
-    edge = np.zeros(walk.shape, bool)
-    edge[:, : EDGE_PX * s] = edge[:, -EDGE_PX * s :] = True
-    walk = mirror_left(np.where(edge, smooth, walk).astype(np.uint8))  # la carte est symétrique : la moitié gauche fait foi
+    if EDGE_PX:
+        smooth = cv2.morphologyEx(cv2.morphologyEx(walk, cv2.MORPH_OPEN, k), cv2.MORPH_CLOSE, k)
+        edge = np.zeros(walk.shape, bool)
+        edge[:, : EDGE_PX * s] = edge[:, -EDGE_PX * s :] = True
+        walk = np.where(edge, smooth, walk).astype(np.uint8)
+    walk = mirror_left(walk)  # la carte est symétrique : la moitié gauche fait foi
     floor = mirror_left(straight_floor(walk, s)).astype(bool)
     # sol en dégradé horizontal à teinte d'équipe, tout le reste en blanc (murs, blocs, extérieur de l'arène)
     t = np.linspace(0, 1, W)[None, :, None]
@@ -342,13 +378,7 @@ def draw_plan(map_name, inset, reference=None):
             tri = np.array([[c[0], c[1] - 11 * s], [c[0] - 11 * s, c[1] + 8 * s], [c[0] + 11 * s, c[1] + 8 * s]], np.int32)
             cv2.fillPoly(img, [tri], (255, 255, 255), cv2.LINE_AA)
     # portes : blocs de la largeur du chemin, dessinés par le site (animation) ; le plan n'a ni porte ni fenêtre (une fenêtre est un mur)
-    doors = door_blocks(map_name, floor, px, s)
-    if len(doors) == 3:  # Reef Point : deux portes de côté symétriques et une au centre
-        doors.sort(key=lambda d: d["cx"])
-        left, center = doors[0], doors[1]
-        right = {**left, "cx": (W - 1) / s - left["cx"], "angle": round((180 - left["angle"]) % 180, 1)}
-        center = {**center, "cx": axis_x / s}
-        doors = [left, center, right]
+    doors = measured_doors(map_name, inset, floor, s)
     # boutons
     buttons = []
     for pos, color in BUTTONS.get(map_name, []):
@@ -378,6 +408,7 @@ def superposition(img, map_name, inset):
 DOOR_RULES = {
     "Reef Point": {
         "ids": ["G", "C", "D"],  # gauche, centre, droite
+        "names": {"G": "gauche", "C": "centre", "D": "droite"},
         "initial": {"G": "closed", "C": "open", "D": "closed"},
         "buttons": [{"id": "rouge", "toggles": ["G", "C", "D"]}, {"id": "vert", "toggles": ["C"]}],  # même ordre que BUTTONS : haut puis bas
     }
@@ -390,7 +421,7 @@ def write_doors(map_name, info):
     if rules is None:
         return
     out = json.loads(DOORS_OUT.read_text(encoding="utf-8")) if DOORS_OUT.exists() else {}
-    doors = [{"id": i, **{k: round(v, 1) for k, v in d.items()}, "initial": rules["initial"][i]} for i, d in zip(rules["ids"], info["doors"])]
+    doors = [{"id": i, "name": rules["names"][i], **{k: round(float(v), 1) for k, v in d.items()}, "initial": rules["initial"][i]} for i, d in zip(rules["ids"], info["doors"])]
     buttons = [{**r, "x": round(b["x"], 1), "y": round(b["y"], 1), "color": b["color"]} for r, b in zip(rules["buttons"], info["buttons"])]
     out[map_name] = {"plan": info["plan"], "doors": doors, "buttons": buttons, "anim": DOOR_ANIM}
     DOORS_OUT.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -402,6 +433,7 @@ def main(argv=None):
     parser.add_argument("--map", required=True)
     parser.add_argument("--check", action="store_true", help="écrit aussi la planche de superposition")
     parser.add_argument("--reference", help="plan d'une autre source (hors du dépôt) dont on part pour les murs")
+    parser.add_argument("--fine", action="store_true", help="la référence est déjà un plan propre (le nôtre retouché à la main) : lissage léger, pas de logo à effacer")
     args = parser.parse_args(argv)
     insets = json.loads((HERE / "map_plan_insets.json").read_text(encoding="utf-8"))
     if args.map not in insets:
@@ -409,7 +441,10 @@ def main(argv=None):
         return 1
     i = insets[args.map]
     inset = (i["l"], i["t"], i["r"], i["b"])
-    img, _, info = draw_plan(args.map, inset, args.reference)
+    global BLOCK_EPS, OUTLINE_EPS, NUB_PX, ISLAND_PX, EDGE_PX
+    if args.fine:  # image déjà nette : on garde les retouches, le lissage ne fait que redresser
+        BLOCK_EPS, OUTLINE_EPS, NUB_PX, ISLAND_PX, EDGE_PX = 3.0, 4.0, 5, 300, 0
+    img, _, info = draw_plan(args.map, inset, args.reference, args.fine)
     if info["doors"]:
         write_doors(args.map, info)
     out = PLANS / f"{args.map.replace(' ', '_')}.png"

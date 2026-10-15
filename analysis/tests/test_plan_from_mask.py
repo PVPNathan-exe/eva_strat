@@ -39,8 +39,9 @@ def test_plan_de_reef_point():
     assert len(info["doors"]) == 3 and len(info["buttons"]) == 2
     left, center, right = info["doors"]
     assert abs(left["cx"] + right["cx"] - 2 * center["cx"]) < 0.5
-    assert all(d["len"] > 40 for d in info["doors"])  # un bloc de porte couvre la largeur du chemin
+    assert all(d["across"] > 40 and d["along"] > 40 for d in info["doors"])  # deux battants aussi larges que le chemin
     assert info["buttons"][0]["x"] == info["buttons"][1]["x"]
+    assert abs(left["angle"] + right["angle"] - 180) < 1e-6 and center["angle"] == 0  # porte de droite en miroir
 
 
 def test_mirror_left_recopie_la_moitie_gauche():

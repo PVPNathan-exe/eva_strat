@@ -1,20 +1,24 @@
 // Portes à boutons d'une carte (Reef Point) : blocs de porte, boutons et animation d'ouverture. Données écrites par analysis/plan_from_mask.py (analysis/map_door_blocks.json) ;
 // (les données elles-mêmes sont lues par doorData.ts) ; durées mesurées sur la vidéo « NCT vs OR », game 23 de Reef Point (voir CLAUDE.md). Fonctions pures : le temps est passé en millisecondes, aucune horloge ici.
 //
-// Une pression sur un bouton inverse les portes qu'il commande. Pour chaque porte : le bloc se colore en vert dès la pression et reste plein `hold_s` secondes, puis le bloc se
-// rétrécit (porte qui s'ouvre) ou grandit (porte qui se ferme) pendant `move_s` secondes. Pendant ce temps la porte ne réagit plus aux boutons.
+// Une porte est faite de DEUX BATTANTS posés l'un contre l'autre dans le sens du chemin, chacun aussi large que le chemin (mesuré sur la minimap de la vidéo : deux cases en série). Ils
+// s'ouvrent en coulissant chacun vers son bord du chemin, en s'amincissant jusqu'à une fine barre contre le bord ; à la fermeture ils reviennent l'un contre l'autre.
+// Une pression sur un bouton inverse les portes qu'il commande. Pour chaque porte : les battants deviennent verts dès la pression et restent pleins `hold_s` secondes, puis ils bougent pendant
+// `move_s` secondes. Pendant ce temps la porte ne réagit plus aux boutons. Un joueur peut passer dès que la porte est un peu ouverte (voir doorPassable), pas si elle est complètement fermée.
 
 export type DoorState = 'open' | 'closed';
 
 export interface DoorBlock {
   id: string;
-  /** Centre du bloc, en pixels du plan. */
+  /** Nom à afficher (gauche, centre, droite). */
+  name?: string;
+  /** Centre de la porte, en pixels du plan. */
   cx: number;
   cy: number;
-  /** Longueur du bloc, en travers du chemin (toute la largeur du chemin), et épaisseur, dans le sens du chemin. Pixels du plan. */
-  len: number;
-  depth: number;
-  /** Angle de la longueur du bloc, en degrés. */
+  /** Longueur de la porte dans le sens du chemin (les deux battants ensemble) et largeur du chemin à cet endroit (largeur d'un battant). Pixels du plan. */
+  along: number;
+  across: number;
+  /** Direction du chemin (de `along`), en degrés. */
   angle: number;
   initial: DoorState;
 }
@@ -106,17 +110,29 @@ export function press(states: DoorStates, button: DoorButton, nowMs: number, ani
   return changed ? next : states;
 }
 
-/** Quatre coins du bloc (pixels du plan) pour une fermeture de 0 à 1 : l'épaisseur est proportionnelle à `closed`, le centre ne bouge pas. */
-export function blockCorners(door: DoorBlock, closed = 1): [number, number][] {
+/** Épaisseur minimale (part d'un demi-bloc) d'un battant en mouvement : à moitié ouvert il reste une barre contre le bord, comme sur la minimap. */
+export const MIN_LEAF = 0.12;
+
+/** Un joueur peut passer dès que la porte est un peu ouverte ; complètement fermée (`closed` = 1), non. Pendant le délai d'une porte qui va s'ouvrir elle est encore fermée. */
+export const doorPassable = (view: DoorView) => view.closed < 1;
+
+/**
+ * Battants d'une porte pour une fermeture de 0 (ouverte) à 1 (fermée) : deux rectangles (pixels du plan), un contre chaque bord du chemin. À `closed` = 1 ils se touchent au milieu ;
+ * en dessous ils s'amincissent vers leur bord extérieur (le bord extérieur ne bouge pas). Le plus mince fait MIN_LEAF d'un demi-bloc tant que la porte bouge.
+ */
+export function leafCorners(door: DoorBlock, closed = 1): [number, number][][] {
   const a = (door.angle * Math.PI) / 180;
   const u = [Math.cos(a), Math.sin(a)];
   const n = [-Math.sin(a), Math.cos(a)];
-  const hl = door.len / 2;
-  const hd = (door.depth * closed) / 2;
-  return [
-    [door.cx - u[0] * hl - n[0] * hd, door.cy - u[1] * hl - n[1] * hd],
-    [door.cx + u[0] * hl - n[0] * hd, door.cy + u[1] * hl - n[1] * hd],
-    [door.cx + u[0] * hl + n[0] * hd, door.cy + u[1] * hl + n[1] * hd],
-    [door.cx - u[0] * hl + n[0] * hd, door.cy - u[1] * hl + n[1] * hd],
-  ];
+  const half = door.along / 2;
+  const w = door.across / 2;
+  const t = half * Math.max(0, Math.min(1, closed));
+  const leaf = (from: number, to: number): [number, number][] =>
+    [
+      [from, -w],
+      [to, -w],
+      [to, w],
+      [from, w],
+    ].map(([s, c]) => [door.cx + u[0] * s + n[0] * c, door.cy + u[1] * s + n[1] * c] as [number, number]);
+  return [leaf(-half, -half + t), leaf(half - t, half)];
 }

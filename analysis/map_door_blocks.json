@@ -7,29 +7,32 @@
     "doors": [
       {
         "id": "G",
-        "cx": 434.0,
-        "cy": 204.3,
-        "len": 103.3,
-        "depth": 44,
-        "angle": 13.1,
+        "name": "gauche",
+        "cx": 435.3,
+        "cy": 200.7,
+        "along": 93.9,
+        "across": 72.0,
+        "angle": 11.0,
         "initial": "closed"
       },
       {
         "id": "C",
+        "name": "centre",
         "cx": 746.3,
-        "cy": 271.0,
-        "len": 75.4,
-        "depth": 44,
-        "angle": 2.5,
+        "cy": 271.2,
+        "along": 92.1,
+        "across": 69.8,
+        "angle": 0.0,
         "initial": "open"
       },
       {
         "id": "D",
-        "cx": 1058.7,
-        "cy": 204.3,
-        "len": 103.3,
-        "depth": 44,
-        "angle": 166.9,
+        "name": "droite",
+        "cx": 1057.4,
+        "cy": 200.7,
+        "along": 93.9,
+        "across": 72.0,
+        "angle": 169.0,
         "initial": "closed"
       }
     ],

@@ -10,6 +10,7 @@ import type Konva from 'konva';
 import { useMapStore } from '../store/mapStore';
 import type { Shape } from '../types/map';
 import { findStuff, bandLabel, falloffColor } from '../lib/stuffs';
+import { doorPassable, doorView } from '../lib/doorBlocks';
 import { DoorBlocksLayer, DoorButtonsLayer } from './DoorLayers';
 import { useDoors } from './useDoors';
 
@@ -284,8 +285,13 @@ export function MapCanvas() {
       {doors && bgImage && (
         <p className="doors-note">
           <span>
-            Boutons rouge (les 3 portes) et vert (porte du centre) : clic avec l'outil Sélection ; chaque porte s'inverse en {doors.setup.anim.hold_s + doors.setup.anim.move_s} s (bloc vert {doors.setup.anim.hold_s} s, puis il
-            bouge {doors.setup.anim.move_s} s).
+            Boutons rouge (les 3 portes) et vert (porte du centre) : clic avec l'outil Sélection ; chaque porte s'inverse en {doors.setup.anim.hold_s + doors.setup.anim.move_s} s (battants verts {doors.setup.anim.hold_s} s, puis
+            ils bougent {doors.setup.anim.move_s} s). Un joueur passe dès que la porte est un peu ouverte, pas si elle est complètement fermée.
+          </span>
+          <span>
+            {doors.setup.doors
+              .map((d) => `${d.name ?? d.id} : ${doorPassable(doorView(doors.states[d.id] ?? { state: d.initial }, doors.now, doors.setup.anim)) ? 'passage possible' : 'fermée'}`)
+              .join(' · ')}
           </span>
           <button type="button" onClick={doors.reset}>
             Remettre les portes

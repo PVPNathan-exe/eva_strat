@@ -2,7 +2,7 @@
 // l'utilisateur, les boutons au-dessus. Un clic sur un bouton inverse les portes qu'il commande (voir lib/doorBlocks.ts pour l'animation).
 
 import { Circle, Layer, Line } from 'react-konva';
-import { blockCorners, doorView, isMoving } from '../lib/doorBlocks';
+import { doorView, isMoving, leafCorners, MIN_LEAF } from '../lib/doorBlocks';
 import type { Doors } from './useDoors';
 
 const HATCH = 14; // période des rayures (pixels de l'écran)
@@ -56,12 +56,15 @@ export function DoorBlocksLayer({ doors, stage }: Props) {
         if (!entry) return null;
         const view = doorView(entry, now, setup.anim);
         if (view.closed < 0.02 && !view.active) return null; // porte ouverte : rien à voir
-        const points = blockCorners(door, Math.max(view.closed, view.active ? 0.12 : 0)).flatMap(([x, y]) => [x * sx, y * sy]);
-        return view.active ? (
-          <Line key={door.id} points={points} closed fill={ACTIVE_FILL} stroke={ACTIVE_STROKE} strokeWidth={1.5} />
-        ) : (
-          <Line key={door.id} points={points} closed fillPatternImage={hatchPattern() as unknown as HTMLImageElement} stroke="#e8e8e8" strokeWidth={1} />
-        );
+        // En mouvement les battants gardent au moins une fine barre contre le bord du chemin (comme sur la minimap)
+        return leafCorners(door, view.active ? Math.max(view.closed, MIN_LEAF) : view.closed).map((leaf, i) => {
+          const points = leaf.flatMap(([x, y]) => [x * sx, y * sy]);
+          return view.active ? (
+            <Line key={`${door.id}-${i}`} points={points} closed fill={ACTIVE_FILL} stroke={ACTIVE_STROKE} strokeWidth={1.5} />
+          ) : (
+            <Line key={`${door.id}-${i}`} points={points} closed fillPatternImage={hatchPattern() as unknown as HTMLImageElement} stroke="#e8e8e8" strokeWidth={1} />
+          );
+        });
       })}
     </Layer>
   );
