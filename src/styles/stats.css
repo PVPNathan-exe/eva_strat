@@ -115,6 +115,13 @@
   stroke: var(--c-owner-b);
 }
 
+.statsmap__door {
+  fill: var(--c-border-strong);
+  stroke: var(--c-text-muted);
+  stroke-width: 1.2;
+  opacity: 0.9;
+}
+
 .statsmap__ride {
   stroke: var(--c-text-muted);
   stroke-width: 1;

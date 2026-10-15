@@ -5,6 +5,8 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { loadTinted, readingOf, type MapReading } from '../../lib/mapReading';
+import { blockCorners } from '../../lib/doorBlocks';
+import { doorSetup } from '../../lib/doorData';
 import { defaultInset, isAligned, project } from '../../lib/planInsets';
 import { tokenRgb } from './useStats';
 
@@ -54,6 +56,7 @@ export function StatsMapBase({ map, corridors = false, stations = false, spawns 
   const background = (aligned ? builtinMaps.find((m) => m.name === map)?.src : undefined) ?? reading.medianUrl;
   const inset = aligned ? defaultInset(map) : { l: 0, t: 0, r: 0, b: 0 };
   const at = (x: number, y: number) => project(inset, x, y);
+  const doors = doorSetup(map); // portes à boutons (Reef Point) dans leur état de départ : les portes fermées sont des blocs, les ouvertes ne se voient pas
   const boxStyle: CSSProperties = { left: `${inset.l * 100}%`, top: `${inset.t * 100}%`, width: `${(1 - inset.l - inset.r) * 100}%`, height: `${(1 - inset.t - inset.b) * 100}%` };
   if (!background) return <p className="stats__empty">Pas de plan ni de minimap pour la carte {map}.</p>;
   return (
@@ -65,6 +68,11 @@ export function StatsMapBase({ map, corridors = false, stations = false, spawns 
         </div>
       )}
       <svg className="statsmap__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+        {doors?.doors
+          .filter((d) => d.initial === 'closed')
+          .map((d) => (
+            <polygon key={d.id} points={blockCorners(d).map(([x, y]) => `${(x / doors.plan[0]) * 100},${(y / doors.plan[1]) * 100}`).join(' ')} className="statsmap__door" vectorEffect="non-scaling-stroke" />
+          ))}
         {spawns &&
           reading.spawns.map((s, i) => {
             const a = at(s.rect[0], s.rect[1]);

@@ -28,7 +28,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 - `Toolbar.tsx` : barre du haut, choix de carte, export et import JSON.
 - `FloorSelector.tsx` : sélecteur d'étage (jusqu'à 3).
 - `DrawToolbar.tsx` : outils de dessin, couleur, épaisseur.
-- `MapCanvas.tsx` (516 lignes) : canevas Konva, image de fond et formes de l'étage courant.
+- `MapCanvas.tsx` (516 lignes) : canevas Konva, image de fond et formes de l'étage courant. `DoorLayers.tsx` (blocs de porte hachurés, verts pendant leur mouvement, et boutons cliquables), `useDoors.ts` (états des portes, horloge d'animation) : portes à boutons de Reef Point.
 - `WeaponPanel.tsx` : panneau des armes (stats, échelle, portée).
 
 ### src/components/analysis (onglets Analyse et Armes)
@@ -54,6 +54,7 @@ Les nombres de lignes ne sont donnés que pour les fichiers de plus de 300 ligne
 ### src/lib, src/store, src/types
 
 - `lib/analysisApi.ts` : client HTTP de l'onglet Analyse et `subscribeJob` (SSE). `lib/timeline.ts` : fonctions pures de temps (axe de la vidéo ou d'une game). `lib/captureTimeline.ts` : équipe qui capture à chaque instant d'après la hausse des scores (`captureSegments`, seuils `CAPTURE_GAP_S`, `CAPTURE_SMOOTH_S`, `CAPTURE_IDLE_S`). `lib/killTimeline.ts` : rangée d'un kill, sous-rangées et regroupement, infobulle, `KILL_LEAD_S`. `lib/comments.ts` : catégories et export. `lib/teams.ts` : diminutif d'équipe proposé par les pseudos.
+- `lib/doorBlocks.ts` : portes à boutons (types, états, animation de 9 s : délai de 3,3 s puis mouvement de 5,7 s, coins d'un bloc), fonctions pures ; `lib/doorData.ts` : lecture de `analysis/map_door_blocks.json` (écrit par `plan_from_mask.py`).
 - `lib/planInsets.ts` : cadre de la minimap sur le plan (aligné par `plan_align.py`, sinon approximatif) et projection. `lib/mapReading.ts` : masque, murs, tyroliennes et zones de départ d'une carte. `lib/pinShape.ts` : contour disque plus pointe d'un joueur.
 - `lib/replayFlags.ts` : fonctions pures du contrôle à la minimap, du joueur observé et des cases douteuses. `lib/builtinMaps.ts`, `lib/storage.ts` (export JSON d'une carte), `lib/videoRef.ts` (référence au `<video>`), `lib/vision.ts` (calques).
 - `lib/stuffs.ts` (371 lignes) : données des armes de l'onglet Stratégie. `lib/weaponCatalog.ts` : suggestions de noms. `lib/weaponNames.ts` : `canonicalName`.

@@ -1,0 +1,63 @@
+{
+  "Reef Point": {
+    "plan": [
+      1493,
+      746
+    ],
+    "doors": [
+      {
+        "id": "G",
+        "cx": 434.0,
+        "cy": 204.3,
+        "len": 103.3,
+        "depth": 44,
+        "angle": 13.1,
+        "initial": "closed"
+      },
+      {
+        "id": "C",
+        "cx": 746.3,
+        "cy": 271.0,
+        "len": 75.4,
+        "depth": 44,
+        "angle": 2.5,
+        "initial": "open"
+      },
+      {
+        "id": "D",
+        "cx": 1058.7,
+        "cy": 204.3,
+        "len": 103.3,
+        "depth": 44,
+        "angle": 166.9,
+        "initial": "closed"
+      }
+    ],
+    "buttons": [
+      {
+        "id": "rouge",
+        "toggles": [
+          "G",
+          "C",
+          "D"
+        ],
+        "x": 746.3,
+        "y": 100.7,
+        "color": "#822b24"
+      },
+      {
+        "id": "vert",
+        "toggles": [
+          "C"
+        ],
+        "x": 746.3,
+        "y": 676.7,
+        "color": "#64ff64"
+      }
+    ],
+    "anim": {
+      "hold_s": 3.3,
+      "move_s": 5.7
+    }
+  }
+}

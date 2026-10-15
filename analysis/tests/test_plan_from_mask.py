@@ -28,9 +28,22 @@ def test_straighten_laisse_une_direction_franche_tranquille():
 def test_plan_de_reef_point():
     insets = json.loads((pm.HERE / "map_plan_insets.json").read_text(encoding="utf-8"))["Reef Point"]
     inset = (insets["l"], insets["t"], insets["r"], insets["b"])
-    img, floor = pm.draw_plan("Reef Point", inset)
+    img, floor, info = pm.draw_plan("Reef Point", inset)
     assert img.shape == (pm.SIZE[1], pm.SIZE[0], 3)
     green = (np.abs(img.astype(int) - np.array(pm.TP_GREEN)).sum(axis=2) < 12).sum()
     assert green > 2 * 3.14 * pm.TP_DISK ** 2 * 0.8  # deux disques de tyrolienne
     # la fenêtre du spawn n'est pas dessinée : aucun pixel de la couleur des traits de vue
     assert floor.any() and not floor.all()
+    # plan symétrique : le sol est exactement le miroir de lui-même, les blocs de porte et les boutons aussi
+    assert (floor == floor[:, ::-1]).all()
+    assert len(info["doors"]) == 3 and len(info["buttons"]) == 2
+    left, center, right = info["doors"]
+    assert abs(left["cx"] + right["cx"] - 2 * center["cx"]) < 0.5
+    assert all(d["len"] > 40 for d in info["doors"])  # un bloc de porte couvre la largeur du chemin
+    assert info["buttons"][0]["x"] == info["buttons"][1]["x"]
+
+
+def test_mirror_left_recopie_la_moitie_gauche():
+    a = np.array([[1, 2, 3, 9, 9], [4, 5, 6, 9, 9]])
+    out = pm.mirror_left(a)
+    assert (out == out[:, ::-1]).all() and (out[:, :3] == a[:, :3]).all()

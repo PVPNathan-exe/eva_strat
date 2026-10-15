@@ -28,3 +28,27 @@
   color: #6b7385;
   pointer-events: none;
 }
+
+/* Portes à boutons : note sous le plan */
+.map-canvas .doors-note {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+.map-canvas .doors-note button {
+  padding: 0.15rem 0.6rem;
+  background: var(--c-bg);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  cursor: pointer;
+}

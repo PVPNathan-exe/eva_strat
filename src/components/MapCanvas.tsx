@@ -10,6 +10,8 @@ import type Konva from 'konva';
 import { useMapStore } from '../store/mapStore';
 import type { Shape } from '../types/map';
 import { findStuff, bandLabel, falloffColor } from '../lib/stuffs';
+import { DoorBlocksLayer, DoorButtonsLayer } from './DoorLayers';
+import { useDoors } from './useDoors';
 
 // Cadre de dessin : la map est affichée SANS déformation, ajustée à l'intérieur
 // de cette boîte max en conservant son ratio. Le Stage prend donc la taille de
@@ -39,6 +41,7 @@ export function MapCanvas() {
   const orientPlacedStuff = useMapStore((s) => s.orientPlacedStuff);
   const clearPlacedStuff = useMapStore((s) => s.clearPlacedStuff);
 
+  const doors = useDoors(map?.name); // portes à boutons de la carte (Reef Point) : blocs animés et boutons cliquables
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [stageSize, setStageSize] = useState({ width: MAX_WIDTH, height: MAX_HEIGHT });
   const [draft, setDraft] = useState<Shape | null>(null);
@@ -232,6 +235,7 @@ export function MapCanvas() {
             <KonvaImage image={bgImage} width={stageSize.width} height={stageSize.height} />
           )}
         </Layer>
+        {doors && bgImage && <DoorBlocksLayer doors={doors} stage={stageSize} />}
         {ghostShapes.length > 0 && (
           <Layer listening={false} opacity={0.35}>
             {ghostShapes.map((shape) => (
@@ -274,8 +278,20 @@ export function MapCanvas() {
             ))}
           </Layer>
         )}
+        {doors && bgImage && <DoorButtonsLayer doors={doors} stage={stageSize} enabled={tool === 'select'} />}
       </Stage>
 
+      {doors && bgImage && (
+        <p className="doors-note">
+          <span>
+            Boutons rouge (les 3 portes) et vert (porte du centre) : clic avec l'outil Sélection ; chaque porte s'inverse en {doors.setup.anim.hold_s + doors.setup.anim.move_s} s (bloc vert {doors.setup.anim.hold_s} s, puis il
+            bouge {doors.setup.anim.move_s} s).
+          </span>
+          <button type="button" onClick={doors.reset}>
+            Remettre les portes
+          </button>
+        </p>
+      )}
       {!map && <p className="hint">Crée ou importe une carte pour commencer.</p>}
       {map && !bgImage && (
         <p className="hint">Importe une image de plan, puis dessine tes murs.</p>
