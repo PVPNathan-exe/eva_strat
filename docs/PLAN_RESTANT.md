@@ -107,7 +107,7 @@ Erreurs connues, classées par ce que j'ai vu sur 47 images de 9 cartes :
   changements est affiché dans l'onglet Lecture ; reste à brancher ces points sur les analyses complètes (qui tient quel point à quel moment) et à voir le point E (jamais vu sur les games lues).
 - « Ce que voit le programme » : ajouter l'état des bandeaux, une vue filtrée (l'inversion de couleurs a été testée : aucun gain de détection, utile seulement à l'affichage).
 - Commentaires : édition (aujourd'hui création, état résolu, suppression).
-- Image réelle de Reef Point à remplacer par la vraie (celle de l'onglet Stratégie est une image de substitution de 6 Ko).
+- Reef Point : plan stratégique dessiné par `analysis/plan_from_mask.py` (murs lissés d'une image de référence hors du dépôt, départs, boîte A, tyroliennes, portes, boutons depuis nos données). Reste : l'effet des boutons sur les portes n'est pas modélisé (voir ARCHITECTURE.md, portes à bouton). Le plan n'a pas été relu dans le navigateur (onglet Stratégie, replay).
 - Boutons de contrôle d'analyse : l'analyse lancée en ligne de commande n'apparaît pas sur le site ; seule celle lancée depuis la page s'y reconnecte.
 
 ## Points d'attention
