@@ -1,31 +1,28 @@
-// Onglet Stats : filtres communs (carte, games, équipe suivie par nom, côté, joueur) et une vue à la fois : Parcours, Morts, Présence, Retakes, Rotations, Zones sûres, Plans (import EBP.GG).
-// Par défaut, une seule game est retenue (la plus récente de la carte) ; le menu Games en ajoute. Parcours, Morts et Zones sûres rejouent une game à la fois (sélecteur « Game rejouée »),
-// Présence et les cumuls additionnent les games retenues. Retakes et Rotations rejouent aussi une game (chronologie des points et des épisodes) ; Rotations garde un mode Cumul sur les games retenues.
+// Onglet Stats : filtres communs (carte, games, équipe suivie par nom, côté, joueur) et une vue à la fois : Récap (une game), Joueurs et Équipes (stats globales, toutes cartes), Équipe et Global (positions par carte),
+// Présence, Rotations, Zones sûres, Plans (import EBP.GG). Par défaut, une seule game est retenue (la plus récente de la carte) ; le menu Games en ajoute. Récap, Rotations et Zones sûres rejouent une game à la fois
+// (sélecteur « Game rejouée »), Présence additionne les games retenues ; Rotations garde un mode Cumul. Les vues Parcours, Morts et Retakes ont été retirées (16 octobre 2026).
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { ClipboardList, Flame, Globe, ListChecks, Repeat, Route, ShieldCheck, Skull, Swords, User, Users, UsersRound } from 'lucide-react';
+import { ClipboardList, Flame, Globe, ListChecks, Repeat, ShieldCheck, User, Users, UsersRound } from 'lucide-react';
 import { eligibleGames, pickGames, teamNames } from '../../lib/teamFollow';
 import { StatsFilters, type StatsFilterState } from './StatsFilters';
-import { StatsDeaths } from './StatsDeaths';
 import { StatsGlobal } from './StatsGlobal';
-import { StatsPaths } from './StatsPaths';
 import { StatsPlans } from './StatsPlans';
 import { StatsPlayers } from './StatsPlayers';
 import { StatsPresence } from './StatsPresence';
 import { StatsRecap } from './StatsRecap';
-import { StatsRetakes } from './StatsRetakes';
 import { StatsRotations } from './StatsRotations';
 import { StatsSafe } from './StatsSafe';
 import { StatsTeam } from './StatsTeam';
 import { StatsTeams } from './StatsTeams';
 import { gameLabel, INITIAL_FILTERS, mapsOf, noticeOf, specOf, useStatsGames } from './useStats';
 
-type View = 'recap' | 'joueurs' | 'equipes' | 'equipe' | 'global' | 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe' | 'plans';
+type View = 'recap' | 'joueurs' | 'equipes' | 'equipe' | 'global' | 'presence' | 'rotations' | 'safe' | 'plans';
 
-const REPLAY_VIEWS: View[] = ['recap', 'parcours', 'morts', 'retakes', 'rotations', 'safe'];
+const REPLAY_VIEWS: View[] = ['recap', 'rotations', 'safe'];
 
 export function StatsTab() {
-  const [view, setView] = useState<View>('parcours');
+  const [view, setView] = useState<View>('recap');
   const [filters, setFilters] = useState<StatsFilterState>(INITIAL_FILTERS);
   const [replayId, setReplayId] = useState<number | null>(null);
   const gamesLoad = useStatsGames();
@@ -58,10 +55,7 @@ export function StatsTab() {
         {tab('equipes', <UsersRound className="ic" />, 'Équipes')}
         {tab('equipe', <Users className="ic" />, 'Équipe')}
         {tab('global', <Globe className="ic" />, 'Global')}
-        {tab('parcours', <Route className="ic" />, 'Parcours')}
-        {tab('morts', <Skull className="ic" />, 'Morts')}
         {tab('presence', <Flame className="ic" />, 'Présence')}
-        {tab('retakes', <Swords className="ic" />, 'Retakes')}
         {tab('rotations', <Repeat className="ic" />, 'Rotations')}
         {tab('safe', <ShieldCheck className="ic" />, 'Zones sûres')}
         {tab('plans', <ClipboardList className="ic" />, 'Plans')}
@@ -99,14 +93,8 @@ export function StatsTab() {
             </p>
           ) : view === 'recap' ? (
             <StatsRecap map={map} replay={replay} spec={spec} />
-          ) : view === 'parcours' ? (
-            <StatsPaths map={map} games={selected} replay={replay} spec={spec} />
-          ) : view === 'morts' ? (
-            <StatsDeaths map={map} games={selected} replay={replay} spec={spec} />
           ) : view === 'presence' ? (
             <StatsPresence map={map} games={selected} spec={spec} />
-          ) : view === 'retakes' ? (
-            <StatsRetakes map={map} replay={replay} spec={spec} />
           ) : view === 'rotations' ? (
             <StatsRotations map={map} games={selected} replay={replay} spec={spec} />
           ) : (
