@@ -1,25 +1,37 @@
-// Replay des positions d'une game sur le plan de sa carte.
+// Reconstruction d'une game sur le plan de sa carte, sous la vidéo : positions, regards, traînées, calques (zones peu fiables, zone de tir d'un joueur).
 // Le temps suit la vidéo, ou une horloge propre (lecture, vitesse) pour rejouer sans la vidéo.
 // Les positions sont normalisées sur la minimap du jeu : un cadre réglable (par carte) les ramène sur l'image du plan.
+// Les morceaux sont dans review/ : horloge, données, plan, joueur choisi (corrections, commentaire), zone de tir.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftRight, ArrowRight, Crosshair, Layers, Pause, Play, X } from 'lucide-react';
-import { analysisApi } from '../../lib/analysisApi';
+import { useMemo, useState } from 'react';
+import { Layers, Pause, Play } from 'lucide-react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { defaultInset, insetStorageKey, project, type Inset } from '../../lib/planInsets';
-import { flagKey, observedAt, unconfirmedSet } from '../../lib/replayFlags';
+import { observedAt, unconfirmedSet } from '../../lib/replayFlags';
+import type { ZoneColors } from '../../lib/safeZones';
 import { formatTime } from '../../lib/timeline';
-import { getVideoElement } from '../../lib/videoRef';
+import { DOOR_OPEN_M } from '../../lib/visibility';
+import { USEFUL_FRACTION } from '../../lib/weaponRange';
 import { useAnalysisStore } from '../../store/analysisStore';
-import type { CaptureSeries, Correction, Game, Sample } from '../../types/analysis';
-import { ReliabilityLayer } from './ReliabilityLayer';
+import type { Game } from '../../types/analysis';
+import { SafeZoneLayer } from '../stats/SafeZoneLayer';
+import { tokenRgb } from '../stats/useStats';
+import { FixForm } from './review/FixForm';
+import { KillList } from './review/KillList';
+import { boxStyleOf, marksNear } from './review/markPlacement';
+import { PlayerPanel } from './review/PlayerPanel';
+import { computeTrails, formatFine, groupFrames, numberOfSlot, shownAt } from './review/replayFrames';
+import { ReplayStage } from './review/ReplayStage';
+import { ScoreChart } from './review/ScoreChart';
+import { WEAPON_CHOICES, type WeaponChoice } from './review/shotZone';
+import { useMarkDrag } from './review/useMarkDrag';
+import { useReplayClock, RATES } from './review/useReplayClock';
+import { useReplayData } from './review/useReplayData';
+import { useReviewMarks } from './review/useReviewMarks';
+import { useShotZone } from './review/useShotZone';
 import { useGameFlags } from './useGameFlags';
 
-const TEAM_COLOR = { A: '#ff9f1c', B: '#3d8bff' } as const;
-const RATES = [0.5, 1, 2, 4, 8];
-const TRAIL_S = 12;
-const MAX_JUMP = 0.3; // au-delà, pas d'interpolation ni de trait (réapparition)
-const MAX_GAP_S = 2.5; // trou entre deux lectures au-delà duquel on ne relie plus les points
+const ZONE_ALPHA = 130; // opacité de la zone de tir, 0 à 255
 
 // Cadre de la minimap dans l'image du plan (fractions des bords) : aligné automatiquement quand la carte a des traits de murs (planInsets.ts), sinon approximatif.
 // Réglable à la main, mémorisé par carte.
@@ -33,139 +45,63 @@ function loadInset(map: string): Inset {
   return defaultInset(map);
 }
 
-const numberOfSlot = (slot: number) => (slot <= 4 ? slot : slot + 1);
-
-interface Frame {
-  t: number;
-  bySlot: Map<number, Sample>;
-}
-
-function groupFrames(samples: Sample[]): Frame[] {
-  const frames = new Map<number, Frame>();
-  for (const s of samples) {
-    let f = frames.get(s.frame);
-    if (!f) frames.set(s.frame, (f = { t: s.t, bySlot: new Map() }));
-    f.bySlot.set(s.slot, s);
-  }
-  return [...frames.values()].sort((a, b) => a.t - b.t);
-}
-
-function frameIndexAt(frames: Frame[], t: number): number {
-  let lo = 0;
-  let hi = frames.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (frames[mid].t <= t) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo;
-}
-
-interface Shown {
-  frame: number;
-  slot: number;
-  team: 'A' | 'B';
-  x: number;
-  y: number;
-  angle: number | null;
-  alive: boolean;
-  confidence: number | null;
-  coherence: number | null;
-}
-
-/** Angle intermédiaire par le plus court chemin (359° -> 1° ne fait pas le tour). */
-function lerpAngle(a: number, b: number, k: number): number {
-  const d = ((((b - a) % 360) + 540) % 360) - 180;
-  return (a + d * k + 360) % 360;
-}
-
-function shownAt(frames: Frame[], t: number): Shown[] {
-  if (frames.length === 0) return [];
-  const i = frameIndexAt(frames, t);
-  const a = frames[i];
-  const b = frames[i + 1];
-  const k = b && b.t > a.t ? Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t))) : 0;
-  const out: Shown[] = [];
-  for (const [slot, s] of a.bySlot) {
-    let { x, y } = s;
-    let angle = s.angle;
-    const n = b?.bySlot.get(slot);
-    if (n && s.alive && n.alive && n.t - s.t <= MAX_GAP_S && Math.hypot(n.x - s.x, n.y - s.y) < MAX_JUMP) {
-      x = s.x + (n.x - s.x) * k;
-      y = s.y + (n.y - s.y) * k;
-      if (s.angle !== null && n.angle !== null) angle = lerpAngle(s.angle, n.angle, k);
-    }
-    out.push({ frame: s.frame, slot, team: s.team, x, y, angle, alive: !!s.alive, confidence: s.confidence, coherence: s.gaze_coh ?? null });
-  }
-  return out;
-}
-
-/** Instant avec le dixième de seconde (0:12.3) : les boutons « image » avancent de moins d'une seconde. */
-function formatFine(sec: number): string {
-  const t = Math.max(0, sec);
-  return `${formatTime(Math.floor(t))}.${Math.floor((t % 1) * 10)}`;
-}
+const metres = (m: number) => `${m.toFixed(m % 1 ? 1 : 0).replace('.', ',')} m`;
 
 export function ReplayPanel({ game, large = false }: { game: Game; large?: boolean }) {
-  const currentTime = useAnalysisStore((s) => s.currentTime);
-  const [samples, setSamples] = useState<Sample[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [follow, setFollow] = useState(true);
-  const [t, setT] = useState(game.start_s);
-  const [playing, setPlaying] = useState(false);
-  const [rate, setRate] = useState(1);
+  const requestSeek = useAnalysisStore((s) => s.requestSeek);
+  const { samples, error, capture, corrections, refresh } = useReplayData(game);
+  const clock = useReplayClock(game);
+  const { time } = clock;
+  const review = useReviewMarks(game);
+
   const [trails, setTrails] = useState(false);
-  const [capture, setCapture] = useState<CaptureSeries | null>(null);
-  const [fixing, setFixing] = useState(false); // mode correction : un clic sur une pastille la sélectionne
+  const [fixing, setFixing] = useState(false); // volet « échanger deux joueurs » : un clic sur une pastille la propose à l'échange
   const [pickA, setPickA] = useState<number | null>(null);
   const [pickB, setPickB] = useState<number | null>(null);
-  const [corrections, setCorrections] = useState<Correction[]>([]);
-  const [reload, setReload] = useState(0);
-  const dataVersion = useAnalysisStore((s) => s.dataVersion);
   const [labels, setLabels] = useState(large); // pseudos affichés d'emblée dans la vue agrandie
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [inset, setInset] = useState<Inset>(() => loadInset(game.map ?? ''));
   const [zonesPos, setZonesPos] = useState(false); // calque : positions peu fiables
   const [zonesGaze, setZonesGaze] = useState(false); // calque : regards peu fiables
   const [marks, setMarks] = useState(true); // anneau rouge sur les positions non confirmées par la vraie minimap
-  const raf = useRef(0);
-  // Position de la vidéo lue à chaque image affichée (et non toutes les ~250 ms comme l'événement timeupdate) : mouvement continu.
-  const [live, setLive] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(null); // joueur choisi : zone de tir, corrections, commentaire
+  const [showZone, setShowZone] = useState(false); // calque : zone de tir de l'arme équipée du joueur choisi
+  const [choice, setChoice] = useState<WeaponChoice>('longest');
 
-  const requestSeek = useAnalysisStore((s) => s.requestSeek);
   const nameOf = useMemo(() => new Map(game.players.map((p) => [p.slot, p.name])), [game.players]);
   const plan = useMemo(() => builtinMaps.find((m) => m.name === game.map), [game.map]);
   const frames = useMemo(() => (samples ? groupFrames(samples) : []), [samples]);
   const { flags, reliability } = useGameFlags(game.id, game.map, game.samples);
   const unconfirmed = useMemo(() => unconfirmedSet(flags), [flags]);
 
-  useEffect(() => {
-    analysisApi
-      .capture(game.id)
-      .then(setCapture)
-      .catch(() => setCapture(null));
-  }, [game.id]);
+  const place = (x: number, y: number) => project(inset, x, y);
+  const shown = useMemo(() => shownAt(frames, time).filter((p) => !hidden.has(p.slot)), [frames, time, hidden]);
+  const observed = observedAt(flags, time);
+  const trailPaths = useMemo(() => (trails ? computeTrails(frames, time, hidden, (x, y) => project(inset, x, y)) : null), [trails, frames, time, hidden, inset]);
+  const slotsPresent = useMemo(() => {
+    const set = new Set<number>();
+    for (const f of frames) for (const s of f.bySlot.keys()) set.add(s);
+    return [...set].sort((a, b) => a - b);
+  }, [frames]);
 
-  useEffect(() => {
-    let cancelled = false;
-    analysisApi
-      .samples(game.id)
-      .then((rows) => !cancelled && (setSamples(rows), setError(null)))
-      .catch((err: Error) => !cancelled && setError(err.message));
-    return () => {
-      cancelled = true;
-    };
-  }, [game.id, game.samples, reload, dataVersion]);
+  // Zone de tir du joueur choisi (calculée seulement quand le calque est affiché)
+  const zone = useShotZone({ game, enabled: showZone, slot: selected, choice, frames, time });
+  const zoneColors = useMemo<ZoneColors>(
+    () => ({ a: tokenRgb('--c-owner-a', [255, 159, 28]), b: tokenRgb('--c-owner-b', [61, 139, 255]), contested: tokenRgb('--c-owner-none', [91, 99, 120]), alpha: ZONE_ALPHA }),
+    [],
+  );
+  const zoneLayer =
+    showZone && zone.zone && selected !== null ? (
+      <SafeZoneLayer result={zone.zone.result} colors={zoneColors} boxStyle={boxStyleOf(inset)} outlines={selected} pins={false} show="shot" outlineKind="tir" />
+    ) : null;
 
-  useEffect(() => {
-    analysisApi
-      .corrections(game.id)
-      .then(setCorrections)
-      .catch(() => setCorrections([]));
-  }, [game.id, reload]);
+  // Corrections à la main : le plan reçoit le geste quand un joueur est choisi et que le mode correction est ouvert.
+  const marking = review.correcting && selected !== null && !fixing;
+  const { drag, handlers } = useMarkDrag(selected, marking, inset, (slot, x, y, angle) => void review.place(slot, time, x, y, angle));
 
-  // Clic sur une pastille en mode correction : la première choisie est A, la suivante de la même équipe est B.
-  const pick = (slot: number) => {
+  // Clic sur une pastille : pendant l'échange la première choisie est A et la suivante de la même équipe est B ; sinon elle devient le joueur choisi.
+  const onDot = (slot: number) => {
+    if (!fixing) return setSelected(slot === selected ? null : slot);
     if (pickA === null || (pickB !== null && slot !== pickA && slot !== pickB) || (slot <= 4) !== (pickA <= 4)) {
       setPickA(slot);
       setPickB(null);
@@ -177,84 +113,6 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     }
   };
 
-  useEffect(() => {
-    if (!follow) return;
-    let id = 0;
-    const tick = () => {
-      const el = getVideoElement();
-      if (el) setLive((prev) => (prev === el.currentTime ? prev : el.currentTime));
-      id = requestAnimationFrame(tick);
-    };
-    id = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(id);
-  }, [follow]);
-
-  // Horloge propre : avance en temps réel × vitesse, s'arrête à la fin de la game.
-  useEffect(() => {
-    if (!playing || follow) return;
-    let last = performance.now();
-    const tick = (now: number) => {
-      const dt = (now - last) / 1000;
-      last = now;
-      setT((cur) => {
-        const next = cur + dt * rate;
-        if (next >= game.end_s) {
-          setPlaying(false);
-          return game.end_s;
-        }
-        return next;
-      });
-      raf.current = requestAnimationFrame(tick);
-    };
-    raf.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf.current);
-  }, [playing, follow, rate, game.end_s]);
-
-  const time = follow ? Math.min(Math.max(live ?? currentTime, game.start_s), game.end_s) : t;
-  const shown = useMemo(() => shownAt(frames, time).filter((p) => !hidden.has(p.slot)), [frames, time, hidden]);
-  const observed = observedAt(flags, time);
-
-  const trailPaths = useMemo(() => {
-    if (!trails || frames.length === 0) return [];
-    // Une traînée s'interrompt à une mort, une disparition (combat, pastille cachée) ou une réapparition :
-    // on ne relie jamais deux points séparés, sinon le trait traverserait les murs.
-    const i = frameIndexAt(frames, time);
-    const out: { key: string; team: 'A' | 'B'; points: string }[] = [];
-    const slots = new Set<number>();
-    for (let j = i; j >= 0 && frames[j].t >= time - TRAIL_S; j--) for (const s of frames[j].bySlot.keys()) slots.add(s);
-    for (const slot of slots) {
-      let run: string[] = [];
-      let prev: Sample | null = null;
-      let team: 'A' | 'B' = slot <= 4 ? 'A' : 'B';
-      let n = 0;
-      const flush = () => {
-        if (run.length > 1) out.push({ key: `${slot}-${n++}`, team, points: run.join(' ') });
-        run = [];
-      };
-      for (let j = Math.max(0, frameIndexAt(frames, time - TRAIL_S)); j <= i; j++) {
-        const s = frames[j].bySlot.get(slot);
-        if (!s || !s.alive || hidden.has(slot)) {
-          flush();
-          prev = null;
-          continue;
-        }
-        if (prev && (s.t - prev.t > MAX_GAP_S || Math.hypot(s.x - prev.x, s.y - prev.y) > MAX_JUMP)) flush();
-        team = s.team;
-        const p = pos(inset, s.x, s.y);
-        run.push(`${p.x},${p.y}`);
-        prev = s;
-      }
-      flush();
-    }
-    return out;
-  }, [trails, frames, time, hidden, inset]);
-
-  const slotsPresent = useMemo(() => {
-    const set = new Set<number>();
-    for (const f of frames) for (const s of f.bySlot.keys()) set.add(s);
-    return [...set].sort((a, b) => a - b);
-  }, [frames]);
-
   const changeInset = (patch: Partial<Inset>) => {
     const next = { ...inset, ...patch };
     setInset(next);
@@ -265,335 +123,200 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     }
   };
 
-  const seek = (value: number) => {
-    setFollow(false);
-    setPlaying(false);
-    setT(value);
-  };
-
-  const togglePlay = () => {
-    if (follow) {
-      setFollow(false);
-      setT(time >= game.end_s - 0.5 ? game.start_s : time);
-      setPlaying(true);
-    } else {
-      if (!playing && t >= game.end_s - 0.5) setT(game.start_s);
-      setPlaying(!playing);
-    }
-  };
-
   if (error) return <p className="games__error">{error}</p>;
   if (samples === null) return <p className="games__empty">Chargement des positions…</p>;
   if (frames.length === 0) return <p className="games__empty">Aucune position lue pour cette game. Lance « Analyser ».</p>;
 
+  const range = zone.range;
   return (
     <div className={`replay${large ? ' replay--large' : ''}`}>
-      <div className="replay__stage">
-        {plan ? <img src={plan.src} alt={`Plan ${plan.name}`} draggable={false} /> : <div className="replay__noplan" />}
-        {trails && (
-          <svg className="replay__trails" viewBox="0 0 100 100" preserveAspectRatio="none">
-            {trailPaths.map((p) => (
-              <polyline key={p.key} points={p.points} fill="none" stroke={TEAM_COLOR[p.team]} strokeWidth={2} vectorEffect="non-scaling-stroke" opacity={0.7} />
-            ))}
-          </svg>
-        )}
-        {(zonesPos || zonesGaze) && <ReliabilityLayer reliability={reliability} project={(x, y) => pos(inset, x, y)} showPos={zonesPos} showGaze={zonesGaze} />}
-        {shown.map((p) => {
-          const { x, y } = pos(inset, p.x, p.y);
-          return (
-            <div
-              key={p.slot}
-              className={`replay__dot${p.alive ? '' : ' is-dead'}${(p.confidence ?? 1) < 0.5 ? ' is-unsure' : ''}${marks && p.alive && unconfirmed.has(flagKey(p.frame, p.slot)) ? ' is-unconfirmed' : ''}${p.slot === observed ? ' is-observed' : ''}${fixing ? ' is-pickable' : ''}${p.slot === pickA || p.slot === pickB ? ' is-picked' : ''}`}
-              onClick={fixing ? () => pick(p.slot) : undefined}
-              style={{ left: `${x}%`, top: `${y}%`, ['--c' as string]: TEAM_COLOR[p.team] }}
-              title={`${nameOf.get(p.slot) ?? 'Joueur'} · n° ${numberOfSlot(p.slot)}${p.alive ? '' : ' (mort)'}${p.slot === observed ? ' · observé dans la vidéo' : ''}${marks && p.alive && unconfirmed.has(flagKey(p.frame, p.slot)) ? ' · non confirmé par la vraie minimap' : ''}${p.confidence !== null && p.confidence < 1 ? ` · fiabilité ${Math.round(p.confidence * 100)} %` : ''}${p.alive && p.coherence !== null ? ` · cohérence du regard ${Math.round(p.coherence * 100)} %` : ''}`}
-            >
-              {p.alive && p.angle !== null && <i className={`replay__dir${p.coherence !== null && p.coherence < 0.4 ? ' is-doubtful' : ''}`} style={{ transform: `rotate(${p.angle}deg)`, opacity: p.coherence === null ? 1 : 0.35 + 0.65 * p.coherence }} />}
-              <b>{p.alive ? numberOfSlot(p.slot) : <X className="ic" strokeWidth={3} />}</b>
-              {labels && nameOf.get(p.slot) && <em className="replay__name">{nameOf.get(p.slot)}</em>}
-            </div>
-          );
-        })}
-        {!plan && <p className="replay__hint">Choisis la carte de la game pour afficher son plan.</p>}
-      </div>
-
-      <div className="replay__bar">
-        <button onClick={togglePlay} title={follow ? 'Rejouer sans la vidéo' : playing ? 'Pause' : 'Lecture'}>
-          {!follow && playing ? <Pause className="ic" /> : <Play className="ic" />}
-        </button>
-        <input
-          type="range"
-          min={game.start_s}
-          max={game.end_s}
-          step={0.1}
-          value={time}
-          onChange={(e) => seek(Number(e.target.value))}
-        />
-        <span className="replay__time">
-          {formatFine(time - game.start_s)} / {formatTime(game.end_s - game.start_s)}
-        </span>
-        <select value={rate} onChange={(e) => setRate(Number(e.target.value))} disabled={follow}>
-          {RATES.map((r) => (
-            <option key={r} value={r}>{r}×</option>
-          ))}
-        </select>
-      </div>
-
-      {capture && (capture.A.length > 1 || capture.B.length > 1) && (
-        <ScoreChart capture={capture} start={game.start_s} end={game.end_s} time={time} onSeek={seek} />
-      )}
-
-      <div className="replay__opts">
-        <label>
-          <input type="checkbox" checked={follow} onChange={(e) => { setFollow(e.target.checked); setPlaying(false); setT(time); }} />
-          Suivre la vidéo
-        </label>
-        <details className="menu replay__display">
-          <summary>
-            <Layers className="ic" /> Affichage
-          </summary>
-          <div className="menu__panel">
-            <label>
-              <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} />
-              Pseudos
-            </label>
-            <label>
-              <input type="checkbox" checked={trails} onChange={(e) => setTrails(e.target.checked)} />
-              Traînées
-            </label>
-            <label title="Anneau rouge : la vraie minimap n'a aucune pastille de cette équipe autour de la position calculée">
-              <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} />
-              Positions non confirmées
-            </label>
-            {reliability && (
-              <>
-                <label title="Cases de la carte où les positions se calculent mal">
-                  <input type="checkbox" checked={zonesPos} onChange={(e) => setZonesPos(e.target.checked)} />
-                  Zones : positions
-                </label>
-                <label title="Cases de la carte où les regards se lisent mal">
-                  <input type="checkbox" checked={zonesGaze} onChange={(e) => setZonesGaze(e.target.checked)} />
-                  Zones : regards
-                </label>
-              </>
-            )}
-          </div>
-        </details>
-        {observed !== null && (
-          <span className="replay__observed">
-            Observé : n° {numberOfSlot(observed)}
-            {nameOf.get(observed) ? ` · ${nameOf.get(observed)}` : ''}
-          </span>
-        )}
-      </div>
-      {(marks || zonesPos || zonesGaze) && (
-        <div className="replay__key">
-          {marks && <span><i className="key-unconfirmed" />position non confirmée par la vraie minimap</span>}
-          {zonesPos && <span><i className="key-zone-pos" />zone où les positions se calculent mal</span>}
-          {zonesGaze && <span><i className="key-zone-gaze" />zone où les regards se lisent mal</span>}
-        </div>
-      )}
-
-      <div className="replay__legend">
-        {slotsPresent.map((slot) => (
-          <button
-            key={slot}
-            className={hidden.has(slot) ? 'is-off' : ''}
-            style={{ ['--c' as string]: TEAM_COLOR[slot <= 4 ? 'A' : 'B'] }}
-            onClick={() => setHidden((h) => { const n = new Set(h); if (n.has(slot)) n.delete(slot); else n.add(slot); return n; })}
-            title={`${nameOf.get(slot) ?? 'Joueur'} · n° ${numberOfSlot(slot)} : afficher / masquer`}
-          >
-            {numberOfSlot(slot)}
-          </button>
-        ))}
-      </div>
-
-      <details className="replay__fix" open={fixing} onToggle={(e) => setFixing((e.currentTarget as HTMLDetailsElement).open)}>
-        <summary>Corriger le suivi</summary>
-        <p>
-          Si deux joueurs de la même équipe se sont échangé leurs numéros, clique sur leurs deux pastilles (ou choisis-les ci-dessous), puis la
-          durée à partir de l'instant affiché.
-        </p>
-        <FixForm
-          game={game}
-          time={time}
+      <div className="replay__main">
+        <ReplayStage
+          plan={plan}
+          place={place}
+          trails={trailPaths}
+          reliability={reliability}
+          showPos={zonesPos}
+          showGaze={zonesGaze}
+          zoneLayer={zoneLayer}
+          shown={shown}
           nameOf={nameOf}
-          slots={slotsPresent}
+          labels={labels}
+          observed={observed}
+          unconfirmed={unconfirmed}
+          showUnconfirmed={marks}
+          selected={selected}
+          swapping={fixing}
           pickA={pickA}
           pickB={pickB}
-          setPickA={setPickA}
-          setPickB={setPickB}
-          corrections={corrections}
-          onChanged={() => {
-            setPickA(null);
-            setPickB(null);
-            setReload((n) => n + 1);
-          }}
+          marking={marking}
+          userMarks={marksNear(review.marks, time)}
+          drag={drag}
+          dragHandlers={handlers}
+          onDot={onDot}
         />
-      </details>
 
-      {game.kills.length > 0 && (
-        <div className="replay__kills">
-          <strong>Kills ({game.kills.length})</strong>
-          <ul>
-            {game.kills.map((k) => (
-              <li key={`${k.t}-${k.victim}`} className={Math.abs(time - k.t) < 3 ? 'is-now' : ''}>
-                <button onClick={() => { setFollow(true); setPlaying(false); requestSeek(Math.max(game.start_s, k.t - 2)); }} title="Aller à ce kill dans la vidéo">
-                  {formatTime(k.t - game.start_s)}
-                </button>
-                {k.kind === 'environment' ? (
-                  <span className="kill__env" title="Aucun tueur sur la ligne du killfeed : mort du décor ou action d'un admin">décor</span>
-                ) : k.killer === null ? (
-                  <span className="kill__env" title="Un tueur est affiché mais son pseudo n'a pas pu être lu">tueur ?</span>
-                ) : k.killer === k.victim ? (
-                  <span className="kill__env" title="Même pseudo des deux côtés">suicide</span>
-                ) : (
-                  <span
-                    style={{ color: TEAM_COLOR[k.killer > 4 ? 'B' : 'A'], fontStyle: k.kind === 'inferred' ? 'italic' : undefined }}
-                    title={k.kind === 'inferred' ? "Tueur déduit par élimination : adversaire en vie, arme tenue et distance cohérentes (le pseudo n'a pas pu être lu)" : undefined}
-                  >
-                    {nameOf.get(k.killer) ?? `n° ${numberOfSlot(k.killer)}`}
-                    {k.kind === 'inferred' && ' ?'}
-                  </span>
-                )}
-                <i title={k.weapon ? `${k.stuff ?? k.weaponName ?? 'arme non nommée'} (icône ${k.weapon})` : 'arme inconnue'}>{k.stuff ?? k.weaponName ?? k.weapon ?? '·'}
-                  {k.headshot && <Crosshair className="ic ic--hs" aria-label="Headshot" />}
-                </i>
-                <span style={{ color: TEAM_COLOR[k.victim > 4 ? 'B' : 'A'] }}>{nameOf.get(k.victim) ?? `n° ${numberOfSlot(k.victim)}`}</span>
-              </li>
+        <div className="replay__bar">
+          <button onClick={clock.togglePlay} title={clock.follow ? 'Rejouer sans la vidéo' : clock.playing ? 'Pause' : 'Lecture'}>
+            {!clock.follow && clock.playing ? <Pause className="ic" /> : <Play className="ic" />}
+          </button>
+          <input type="range" min={game.start_s} max={game.end_s} step={0.1} value={time} onChange={(e) => clock.seek(Number(e.target.value))} />
+          <span className="replay__time">
+            {formatFine(time - game.start_s)} / {formatTime(game.end_s - game.start_s)}
+          </span>
+          <select value={clock.rate} onChange={(e) => clock.setRate(Number(e.target.value))} disabled={clock.follow}>
+            {RATES.map((r) => (
+              <option key={r} value={r}>{r}×</option>
             ))}
-          </ul>
+          </select>
         </div>
-      )}
 
-      <details className="replay__align">
-        <summary>Alignement sur le plan</summary>
-        {(['l', 't', 'r', 'b'] as const).map((k) => (
-          <label key={k}>
-            {{ l: 'Gauche', t: 'Haut', r: 'Droite', b: 'Bas' }[k]}
-            <input type="range" min={-0.05} max={0.2} step={0.002} value={inset[k]} onChange={(e) => changeInset({ [k]: Number(e.target.value) })} />
+        {capture && (capture.A.length > 1 || capture.B.length > 1) && <ScoreChart capture={capture} start={game.start_s} end={game.end_s} time={time} onSeek={clock.seek} />}
+      </div>
+
+      <div className="replay__side">
+        <div className="replay__opts">
+          <label>
+            <input type="checkbox" checked={clock.follow} onChange={(e) => clock.setFollowing(e.target.checked)} />
+            Suivre la vidéo
           </label>
-        ))}
-        <button onClick={() => changeInset(defaultInset(game.map ?? ''))}>Réinitialiser</button>
-      </details>
-    </div>
-  );
-}
+          <details className="menu replay__display">
+            <summary>
+              <Layers className="ic" /> Affichage
+            </summary>
+            <div className="menu__panel">
+              <label>
+                <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} />
+                Pseudos
+              </label>
+              <label>
+                <input type="checkbox" checked={trails} onChange={(e) => setTrails(e.target.checked)} />
+                Traînées
+              </label>
+              <label title="Anneau rouge : la vraie minimap n'a aucune pastille de cette équipe autour de la position calculée">
+                <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} />
+                Positions non confirmées
+              </label>
+              {reliability && (
+                <>
+                  <label title="Cases de la carte où les positions se calculent mal">
+                    <input type="checkbox" checked={zonesPos} onChange={(e) => setZonesPos(e.target.checked)} />
+                    Zones : positions
+                  </label>
+                  <label title="Cases de la carte où les regards se lisent mal">
+                    <input type="checkbox" checked={zonesGaze} onChange={(e) => setZonesGaze(e.target.checked)} />
+                    Zones : regards
+                  </label>
+                </>
+              )}
+              <label title="Cases que les balles du joueur choisi peuvent atteindre, avec l'arme équipée à cet instant">
+                <input type="checkbox" checked={showZone} onChange={(e) => setShowZone(e.target.checked)} />
+                Zone de tir du joueur choisi
+              </label>
+              {showZone && (
+                <label className="replay__field">
+                  Arme
+                  <select value={choice} onChange={(e) => setChoice(e.target.value as WeaponChoice)}>
+                    {WEAPON_CHOICES.map((c) => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          </details>
+          {observed !== null && (
+            <span className="replay__observed">
+              Observé : n° {numberOfSlot(observed)}
+              {nameOf.get(observed) ? ` · ${nameOf.get(observed)}` : ''}
+            </span>
+          )}
+        </div>
 
-const pos = project
-
-/** Courbe du score de capture de chaque équipe (0 à 100 %), avec la position courante. Un clic déplace le replay. */
-function ScoreChart({ capture, start, end, time, onSeek }: { capture: CaptureSeries; start: number; end: number; time: number; onSeek: (t: number) => void }) {
-  const span = Math.max(end - start, 1);
-  const line = (pts: { t: number; v: number }[]) => pts.map((p) => `${(((p.t - start) / span) * 100).toFixed(2)},${(100 - p.v).toFixed(2)}`).join(' ');
-  const last = (pts: { t: number; v: number }[]) => (pts.length ? Math.round(pts[pts.length - 1].v) : 0);
-  const at = (pts: { t: number; v: number }[]) => {
-    let v = 0;
-    for (const p of pts) if (p.t <= time) v = p.v;
-    return Math.round(v);
-  };
-  return (
-    <div className="replay__score" title="Score de capture de chaque équipe">
-      <svg
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          onSeek(start + ((e.clientX - r.left) / r.width) * span);
-        }}
-      >
-        <polyline points={line(capture.A)} fill="none" stroke={TEAM_COLOR.A} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-        <polyline points={line(capture.B)} fill="none" stroke={TEAM_COLOR.B} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-        <line x1={((time - start) / span) * 100} x2={((time - start) / span) * 100} y1={0} y2={100} stroke="#fff" strokeWidth={1} vectorEffect="non-scaling-stroke" opacity={0.7} />
-      </svg>
-      <span>
-        <b style={{ color: TEAM_COLOR.A }}>{at(capture.A)} %</b> · <b style={{ color: TEAM_COLOR.B }}>{at(capture.B)} %</b>
-        <em> (fin : {last(capture.A)} % / {last(capture.B)} %)</em>
-      </span>
-    </div>
-  );
-}
-
-const DURATIONS = [
-  { label: 'jusqu\'à la fin de la game', seconds: Infinity },
-  { label: 'pendant 60 s', seconds: 60 },
-  { label: 'pendant 30 s', seconds: 30 },
-  { label: 'pendant 10 s', seconds: 10 },
-];
-
-/** Échange deux joueurs d'une équipe à partir de l'instant affiché ; les échanges déjà faits sont listés et annulables. */
-function FixForm(props: {
-  game: Game;
-  time: number;
-  nameOf: Map<number, string>;
-  slots: number[];
-  pickA: number | null;
-  pickB: number | null;
-  setPickA: (s: number | null) => void;
-  setPickB: (s: number | null) => void;
-  corrections: Correction[];
-  onChanged: () => void;
-}) {
-  const { game, time, nameOf, slots, pickA, pickB, corrections } = props;
-  const [duration, setDuration] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const label = (slot: number) => `${numberOfSlot(slot)} · ${nameOf.get(slot) ?? 'joueur'}`;
-  const sameTeam = pickA !== null && pickB !== null && (pickA <= 4) === (pickB <= 4);
-  const optionsFor = (other: number | null) => slots.filter((s) => other === null || ((s <= 4) === (other <= 4) && s !== other));
-
-  const run = async (action: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-      props.onChanged();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const swap = () => {
-    if (pickA === null || pickB === null) return;
-    const end = DURATIONS[duration].seconds === Infinity ? game.end_s : Math.min(game.end_s, time + DURATIONS[duration].seconds);
-    void run(() => analysisApi.swapPlayers(game.id, pickA, pickB, time, end));
-  };
-
-  return (
-    <div className="replay__fixform">
-      <div className="replay__fixrow">
-        <select value={pickA ?? ''} onChange={(e) => { props.setPickA(e.target.value ? Number(e.target.value) : null); props.setPickB(null); }}>
-          <option value="">Joueur A…</option>
-          {slots.map((s) => <option key={s} value={s}>{label(s)}</option>)}
-        </select>
-        <ArrowLeftRight className="ic" />
-        <select value={pickB ?? ''} disabled={pickA === null} onChange={(e) => props.setPickB(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">Joueur B…</option>
-          {optionsFor(pickA).map((s) => <option key={s} value={s}>{label(s)}</option>)}
-        </select>
-      </div>
-      <div className="replay__fixrow">
-        <span>À partir de {formatTime(time - game.start_s)}</span>
-        <select value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
-          {DURATIONS.map((d, i) => <option key={d.label} value={i}>{d.label}</option>)}
-        </select>
-        <button disabled={!sameTeam || busy} onClick={swap}>Échanger</button>
-      </div>
-      {error && <p className="games__error">{error}</p>}
-      {corrections.length > 0 && (
-        <ul className="replay__fixlist">
-          {corrections.map((c) => (
-            <li key={c.id}>
+        {(marks || zonesPos || zonesGaze || showZone) && (
+          <div className="replay__key">
+            {marks && <span><i className="key-unconfirmed" />position non confirmée par la vraie minimap</span>}
+            {zonesPos && <span><i className="key-zone-pos" />zone où les positions se calculent mal</span>}
+            {zonesGaze && <span><i className="key-zone-gaze" />zone où les regards se lisent mal</span>}
+            {showZone && zone.notice && <span>{zone.notice}</span>}
+            {showZone && !zone.notice && range && selected !== null && (
               <span>
-                {formatTime(c.t0 - game.start_s)} <ArrowRight className="ic" /> {formatTime(c.t1 - game.start_s)} : {nameOf.get(c.slot_a) ?? `n° ${numberOfSlot(c.slot_a)}`} <ArrowLeftRight className="ic" /> {nameOf.get(c.slot_b) ?? `n° ${numberOfSlot(c.slot_b)}`}
+                <i className="key-zone-shot" />
+                zone de tir n° {numberOfSlot(selected)}
+                {nameOf.get(selected) ? ` (${nameOf.get(selected)})` : ''} : {range.estimated ? 'portée estimée' : range.weapon} {range.open ? 'sans limite' : metres(range.rangeM)}
+                {range.estimated && choice === 'held' ? ' (arme tenue non lue : médiane des armes de la game)' : range.estimated ? ' (équipement non lu : médiane des armes de la game)' : ''}
+                {zone.equipment?.source === 'vie' ? `, équipement de sa vie ${(zone.equipment.lifeIdx ?? 0) + 1}` : ', équipement de la game'}
               </span>
-              <button disabled={busy} onClick={() => void run(() => analysisApi.undoCorrection(c.id))}>Annuler</button>
-            </li>
+            )}
+          </div>
+        )}
+        {showZone && (
+          <details className="help">
+            <summary>Comment lire la zone de tir</summary>
+            <p className="help__body">
+              La zone colorée est celle que les balles du joueur choisi peuvent atteindre à l'instant affiché, dans toutes les directions (le regard n'est pas utilisé). Sa limite est la portée utile de l'arme :
+              la distance jusqu'à laquelle les dégâts restent à {Math.round(USEFUL_FRACTION * 100)} % ou plus du maximum, d'après les bandes de dégâts de l'onglet Stratégie (sans limite s'ils ne tombent jamais sous ce seuil, ce qui est
+              une hypothèse non vérifiée). Les murs, les vitres, les fenêtres et les portes fermées bloquent les balles ; une porte s'ouvre quand un joueur vivant, de n'importe quelle équipe, est à moins de {DOOR_OPEN_M} m (hypothèse).
+              L'équipement vient de la lecture du bandeau pour chaque vie du joueur. <strong>L'arme tenue n'est fiable qu'à la mort du joueur</strong> : le choix « arme tenue » donne l'arme lue à sa mort, appliquée à toute la vie
+              (une portée estimée est montrée quand elle n'est pas lue) ; pendant la vie, « la plus longue des deux armes » est la lecture prudente, la même que celle des zones sûres de l'onglet Stats. La zone est recalculée au quart
+              de seconde : pendant la lecture elle avance par petits pas. Sur Atlantis et The Cliff le niveau du joueur vient des tyroliennes (étages mélangés quand il est inconnu). Une position peu sûre du suivi décale la zone.
+            </p>
+          </details>
+        )}
+
+        <div className="replay__legend">
+          {slotsPresent.map((slot) => (
+            <button
+              key={slot}
+              className={hidden.has(slot) ? 'is-off' : ''}
+              style={{ ['--c' as string]: slot <= 4 ? 'var(--c-team-a)' : 'var(--c-team-b)' }}
+              onClick={() => setHidden((h) => { const n = new Set(h); if (n.has(slot)) n.delete(slot); else n.add(slot); return n; })}
+              title={`${nameOf.get(slot) ?? 'Joueur'} · n° ${numberOfSlot(slot)} : afficher / masquer`}
+            >
+              {numberOfSlot(slot)}
+            </button>
           ))}
-        </ul>
-      )}
+        </div>
+
+        <PlayerPanel game={game} time={time} slots={slotsPresent} nameOf={nameOf} selected={selected} onSelect={setSelected} review={review} onRecomputed={refresh} />
+
+        <details className="replay__fix" open={fixing} onToggle={(e) => setFixing((e.currentTarget as HTMLDetailsElement).open)}>
+          <summary>Échanger deux joueurs (numéros mélangés)</summary>
+          <p>
+            Si deux joueurs de la même équipe se sont échangé leurs numéros, clique sur leurs deux pastilles (ou choisis-les ci-dessous), puis la
+            durée à partir de l'instant affiché.
+          </p>
+          <FixForm
+            game={game}
+            time={time}
+            nameOf={nameOf}
+            slots={slotsPresent}
+            pickA={pickA}
+            pickB={pickB}
+            setPickA={setPickA}
+            setPickB={setPickB}
+            corrections={corrections}
+            onChanged={() => {
+              setPickA(null);
+              setPickB(null);
+              refresh();
+            }}
+          />
+        </details>
+
+        <KillList game={game} time={time} nameOf={nameOf} onSeek={(t) => { clock.backToVideo(); requestSeek(t); }} />
+
+        <details className="replay__align">
+          <summary>Alignement sur le plan</summary>
+          {(['l', 't', 'r', 'b'] as const).map((k) => (
+            <label key={k}>
+              {{ l: 'Gauche', t: 'Haut', r: 'Droite', b: 'Bas' }[k]}
+              <input type="range" min={-0.05} max={0.2} step={0.002} value={inset[k]} onChange={(e) => changeInset({ [k]: Number(e.target.value) })} />
+            </label>
+          ))}
+          <button onClick={() => changeInset(defaultInset(game.map ?? ''))}>Réinitialiser</button>
+        </details>
+      </div>
     </div>
   );
 }

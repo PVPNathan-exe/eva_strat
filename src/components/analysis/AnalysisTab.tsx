@@ -6,9 +6,12 @@ import { CommentsPanel } from './CommentsPanel';
 import { AnalysisPlan } from './AnalysisPlan';
 import { IngestBar } from './IngestBar';
 import { ReplayPanel } from './ReplayPanel';
+import { ReviewScreen } from './review/ReviewScreen';
 import { SegmentTimeline } from './SegmentTimeline';
 import { VideoPlayer } from './VideoPlayer';
 
+// Mise en page : la colonne principale empile la vidéo, sa barre de temps, la reconstruction (écran de review) puis le plan et les commentaires ;
+// la liste des games reste à droite (sous la colonne principale quand l'écran est étroit, voir analysis-shell.css).
 export function AnalysisTab() {
   const loadVideos = useAnalysisStore((s) => s.loadVideos);
   const loadTeams = useAnalysisStore((s) => s.loadTeams);
@@ -35,6 +38,7 @@ export function AnalysisTab() {
             <>
               <VideoPlayer key={videoId} videoId={videoId} duration={video.duration_s} />
               <SegmentTimeline duration={video.duration_s} />
+              <ReviewScreen game={selectedGame} number={gameNumber} onEnlarge={() => setReplayLarge(true)} />
               <AnalysisPlan />
               <CommentsPanel videoName={video.path.split(/[\\/]/).pop() ?? ''} />
             </>
@@ -44,15 +48,6 @@ export function AnalysisTab() {
         </section>
         {videoId !== null && video && (
           <aside className="analysis__side">
-            {selectedGame && selectedGame.samples > 0 && (
-              <section className="replay-box">
-                <header>
-                  <strong>Replay · Game {gameNumber}</strong>
-                  <button onClick={() => setReplayLarge(true)}>Agrandir</button>
-                </header>
-                <ReplayPanel key={`${selectedGame.id}-${selectedGame.map}`} game={selectedGame} />
-              </section>
-            )}
             <GameList videoId={videoId} duration={video.duration_s} />
           </aside>
         )}

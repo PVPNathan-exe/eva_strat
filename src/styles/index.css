@@ -15,12 +15,14 @@
 @import './analysis-player.css';
 @import './analysis-vision.css';
 @import './analysis-timeline.css';
+@import './timeline-marks.css';
 @import './analysis-games.css';
 @import './analysis-teams.css';
 @import './analysis-plan.css';
 @import './analysis-calibration.css';
 @import './replay.css';
 @import './replay-flags.css';
+@import './review.css';
 @import './analysis-reading.css';
 @import './analysis-mapping.css';
 @import './data-tab.css';

@@ -26,6 +26,15 @@
   .analysis__side {
     overflow: visible;
   }
+
+  /* Une colonne : chaque bloc prend la hauteur de son contenu (sinon la liste des games recouvre le bas de l'écran de review) */
+  .analysis__body {
+    grid-auto-rows: max-content;
+  }
+
+  .analysis__main {
+    min-height: auto;
+  }
 }
 
 .analysis__empty {

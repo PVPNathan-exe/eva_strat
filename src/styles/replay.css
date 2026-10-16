@@ -1,4 +1,4 @@
-/* Replay des positions */
+/* Replay des positions (reconstruction sous la vidéo : ReplayPanel et components/analysis/review/) */
 
 .replay-box {
   padding: 0.5rem;
@@ -14,10 +14,32 @@
   margin-bottom: 0.4rem;
 }
 
+/* Une colonne (écran étroit) : le plan et sa barre, puis les options et les panneaux du joueur choisi. */
 .replay {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.6rem 0.9rem;
+  align-items: start;
+}
+
+.replay__main,
+.replay__side {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  min-width: 0;
+}
+
+/* Deux colonnes quand la colonne principale est assez large : plus de 1280 px d'écran, ou l'écran étroit à une colonne entre 760 et 1000 px. */
+@media (min-width: 1280px), (min-width: 760px) and (max-width: 1000px) {
+  .replay {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  .replay__main {
+    position: sticky;
+    top: 0;
+  }
 }
 
 .replay__stage {
@@ -65,11 +87,11 @@
   margin: -10px 0 0 -10px;
   border-radius: 50%;
   background: var(--c);
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  border: 2px solid var(--c-text);
+  box-shadow: 0 0 0 1px var(--c-shadow);
   display: grid;
   place-items: center;
-  color: #111;
+  color: var(--c-bg);
   font-size: 11px;
   line-height: 1;
   will-change: left, top;
@@ -89,9 +111,9 @@
   transform: translateX(-50%);
   margin-top: 1px;
   padding: 0 3px;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--c-surface-deep);
   border-radius: 3px;
-  color: #fff;
+  color: var(--c-text);
   font-size: 9px;
   font-style: normal;
   line-height: 1.3;
@@ -108,7 +130,7 @@
 }
 
 .replay__dot.is-dead {
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--c-surface-deep);
   border-color: var(--c);
   color: var(--c);
 }
@@ -140,7 +162,7 @@
   right: -2px;
   top: 50%;
   margin-top: -5px;
-  border-left: 9px solid #fff;
+  border-left: 9px solid var(--c-text);
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
 }
@@ -162,10 +184,37 @@
   white-space: nowrap;
 }
 
+/* Courbe du score de capture : couleurs des équipes et curseur */
+.replay__score-a {
+  stroke: var(--c-team-a);
+}
+
+.replay__score-b {
+  stroke: var(--c-team-b);
+}
+
+.replay__score-cursor {
+  stroke: var(--c-timeline-cursor);
+}
+
+.replay__team-a {
+  color: var(--c-team-a);
+}
+
+.replay__team-b {
+  color: var(--c-team-b);
+}
+
 .replay__opts {
   display: flex;
   gap: 0.9rem;
   font-size: 0.85rem;
+}
+
+/* Choix de l'arme dans le menu Affichage */
+.replay__field select {
+  flex: 1;
+  min-width: 0;
 }
 
 .replay__legend {
@@ -201,6 +250,7 @@
 
 .replay__kills li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
   padding: 0.1rem 0.2rem;

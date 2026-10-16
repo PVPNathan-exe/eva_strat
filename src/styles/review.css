@@ -1,0 +1,135 @@
+/* Écran de review : joueur choisi, corrections sur le plan, commentaire, légende de la zone de tir (components/analysis/review/) */
+
+.review {
+  min-width: 0;
+}
+
+/* Joueur choisi : anneau clair autour de sa pastille */
+.replay__dot.is-selected {
+  box-shadow: 0 0 0 3px var(--c-cyan), 0 0 10px 3px var(--c);
+  z-index: 2;
+}
+
+.replay__dot.is-selected.is-unconfirmed {
+  box-shadow: 0 0 0 3px var(--c-cyan), 0 0 0 6px var(--c-danger);
+}
+
+/* Mode correction : le plan reçoit le geste, les pastilles laissent passer le pointeur */
+.replay__stage.is-marking {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.replay__dot.is-passive {
+  pointer-events: none;
+}
+
+/* Correction posée à la main (et geste en cours) */
+.replay__mark {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 2px solid var(--c-cyan);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c-bg) 55%, transparent);
+  color: var(--c-cyan);
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.replay__mark.is-drag {
+  border-style: dashed;
+}
+
+.replay__mark .replay__dir::after {
+  border-left-color: var(--c-cyan);
+}
+
+.replay__dragline {
+  stroke: var(--c-cyan);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+/* Légende de la zone de tir */
+.replay__key .key-zone-shot {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--c-owner-none) 55%, transparent);
+  border: 1px solid var(--c-text-muted);
+}
+
+/* Panneau du joueur choisi */
+.review__player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.review__pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: var(--c-text-soft);
+}
+
+.review__pick select {
+  width: 100%;
+  min-width: 0;
+}
+
+.review__fold {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+
+.review__fold > summary {
+  cursor: pointer;
+  color: var(--c-text-soft);
+}
+
+/* Commentaire */
+.review__comment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.review__comment textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+}
+
+.review__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.review__at {
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+.review__link {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.review__send {
+  margin-left: auto;
+}
+
+.review__done {
+  margin: 0;
+  color: var(--c-ok);
+}

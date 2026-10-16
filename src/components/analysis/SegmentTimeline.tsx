@@ -5,10 +5,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Maximize2, RefreshCw } from 'lucide-react';
 import { KILL_LEAD_S, KILLS_STATUS_TEXT, killRow, killsStatus } from '../../lib/killTimeline';
+import { hasNoPointChange } from '../../lib/pointChangeMarks';
 import { formatTime, pctToSpan, spanToPct } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { TimelineCapture } from './TimelineCapture';
 import { TimelineKills } from './TimelineKills';
+import { TimelinePointChanges } from './TimelinePointChanges';
 
 /** Largeur réelle d'un élément en pixels, suivie quand la fenêtre change de taille. */
 function useWidth(ref: React.RefObject<HTMLDivElement | null>): number {
@@ -46,6 +48,7 @@ export function SegmentTimeline({ duration }: { duration: number }) {
   const pct = (t: number) => spanToPct(t, from, to);
   const inView = (t: number) => t >= from && t <= to;
   const doubts = zoomed ? zoomed.doubts.map((d, i) => ({ ...d, key: `${zoomed.id}-${i}` })) : games.flatMap((g) => g.doubts.map((d, i) => ({ ...d, key: `${g.id}-${i}` })));
+  const noPointChange = !!zoomed && hasNoPointChange(zoomed.map);
   const status = zoomed ? killsStatus(zoomed) : null; // 'shown' : rangées de kills ; sinon un message dit pourquoi il n'y en a pas
   const hasNeutral = !!zoomed && zoomed.kills.some((k) => killRow(k) === 'neutral' && inView(k.t));
 
@@ -71,6 +74,10 @@ export function SegmentTimeline({ duration }: { duration: number }) {
               (pseudo non lu). Une pastille chiffrée : plusieurs kills trop proches regroupés (l'infobulle les liste tous). Un clic sur un kill place la vidéo
               {` ${KILL_LEAD_S} s avant.`}
             </p>
+            <p className="help__body">
+              Trait jaune : changement du point de capture actif, avec une bande de 10 s avant ; un clic place la vidéo au début de la bande.
+              {noPointChange ? ' Aucun changement de point sur cette carte : pas de repères.' : ''}
+            </p>
           </details>
           <button
             type="button"
@@ -93,9 +100,12 @@ export function SegmentTimeline({ duration }: { duration: number }) {
       {zoomed && status === 'shown' && <TimelineKills game={zoomed} row="A" width={width} />}
       <div className="timeline__bar" ref={bar} onClick={onBarClick}>
         {zoomed ? (
-          <TimelineCapture game={zoomed} />
+          <>
+            <TimelineCapture game={zoomed} />
+            {!noPointChange && <TimelinePointChanges game={zoomed} />}
+          </>
         ) : (
-          games.map((g) => (
+          games.map((g, i) => (
             <div
               key={g.id}
               className={`timeline__game${g.id === selectedGameId ? ' is-selected' : ''}`}
@@ -107,7 +117,9 @@ export function SegmentTimeline({ duration }: { duration: number }) {
                 zoomGame(g.id);
                 requestSeek(g.start_s);
               }}
-            />
+            >
+              <span className="timeline__game-label">{g.map ?? `Game ${i + 1}`}</span>
+            </div>
           ))
         )}
         {doubts
