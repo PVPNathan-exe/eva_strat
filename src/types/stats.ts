@@ -110,3 +110,49 @@ export interface TeamAggregate {
   games: number;
   min: number;
 }
+
+/** État du gadget d'un joueur pendant une période (docs/PLAN_STATS_2.md) : disponible, utilisé (icône grise) ou inconnu. */
+export interface GadgetState {
+  game_id: number;
+  slot: number;
+  t0: number;
+  t1: number;
+  gadget: string | null;
+  state: 'ready' | 'used' | 'unknown';
+}
+
+/** Duel entre deux joueurs ; `winner_slot` null si personne ne meurt. */
+export interface Duel {
+  id: number;
+  game_id: number;
+  t0: number;
+  t1: number;
+  slot_a: number;
+  slot_b: number;
+  winner_slot: number | null;
+  outcome: string | null;
+  data: Record<string, unknown> | null;
+}
+
+/** Note d'un kill du point de vue de l'équipe du tueur (convention, aucune vérité terrain). */
+export interface KillScore {
+  game_id: number;
+  t: number;
+  killer_slot: number | null;
+  victim_slot: number;
+  impact: number;
+  reasons: string[] | null;
+}
+
+/** Bilan d'un joueur sur une game ; vitesses en m/s. */
+export interface PlayerGameStats {
+  game_id: number;
+  slot: number;
+  kills: number;
+  deaths: number;
+  alive_s: number | null;
+  dist_m: number | null;
+  v_mean: number | null;
+  v_p98: number | null;
+  v_max: number | null;
+}

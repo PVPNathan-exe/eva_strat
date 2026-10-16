@@ -314,3 +314,54 @@ CREATE TABLE IF NOT EXISTS player_levels (
   source TEXT CHECK (source IN ('default', 'tp', 'zone', 'grey')),
   PRIMARY KEY (game_id, slot, t0)
 );
+
+-- Vague 2 de Stats (docs/PLAN_STATS_2.md). Temps en secondes depuis le début de la game, slot 1 à 8.
+
+-- État du gadget (secondaire) d'un joueur : l'icône du bandeau passe de noire (disponible) à grise (utilisé, en recharge), comme l'arme tenue et l'arme rangée. Un segment par période (analysis/gadget_state.py).
+CREATE TABLE IF NOT EXISTS gadget_state (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  gadget TEXT,
+  state TEXT NOT NULL CHECK (state IN ('ready', 'used', 'unknown')),
+  PRIMARY KEY (game_id, slot, t0)
+);
+
+-- Duel : un joueur en pousse un autre (ou deux) sans aide proche ; `winner_slot` NULL si personne ne meurt ; `outcome` en texte libre (analysis/duels.py), `data` JSON (points de vie perdus de chacun, aide proche).
+CREATE TABLE IF NOT EXISTS duels (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  t0 REAL NOT NULL,
+  t1 REAL NOT NULL,
+  slot_a INTEGER NOT NULL CHECK (slot_a BETWEEN 1 AND 8),
+  slot_b INTEGER NOT NULL CHECK (slot_b BETWEEN 1 AND 8),
+  winner_slot INTEGER,
+  outcome TEXT,
+  data TEXT
+);
+
+-- Note d'un kill (donc de la mort qui l'accompagne) : `impact` du point de vue de l'équipe du tueur, `reasons` JSON (analysis/kill_scores.py). Une convention, pas une vérité terrain.
+CREATE TABLE IF NOT EXISTS kill_scores (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  t REAL NOT NULL,
+  killer_slot INTEGER,
+  victim_slot INTEGER NOT NULL CHECK (victim_slot BETWEEN 1 AND 8),
+  impact REAL NOT NULL,
+  reasons TEXT,
+  PRIMARY KEY (game_id, t, victim_slot)
+);
+
+-- Bilan d'un joueur sur une game (analysis/player_game_stats.py) : vitesses en mètres par seconde (v_p98 : 98e centile, plus sûr que le maximum brut qui garde les erreurs de lecture).
+CREATE TABLE IF NOT EXISTS player_game_stats (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  kills INTEGER NOT NULL DEFAULT 0,
+  deaths INTEGER NOT NULL DEFAULT 0,
+  alive_s REAL,
+  dist_m REAL,
+  v_mean REAL,
+  v_p98 REAL,
+  v_max REAL,
+  PRIMARY KEY (game_id, slot)
+);

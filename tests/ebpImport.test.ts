@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gazeFromEbp, minimapFromPlan, parseEbp, pawnsAt, planDuration, slotOfEbp, stepStarts } from '../src/lib/ebpImport.ts';
+import { gazeFromEbp, isEbpExport, minimapFromPlan, parseEbp, pawnsAt, planDuration, slotOfEbp, stepStarts } from '../src/lib/ebpImport.ts';
 
 // Cadre d'Atlantis de analysis/map_plan_insets.json, recopié ici (planInsets.ts charge un JSON que le lanceur de tests ne sait pas importer) ; `project` est sa formule
 const inset = { l: 0.0078, t: 0.0158, r: -0.0074, b: 0.0042 };
@@ -82,4 +82,13 @@ test('pawnsAt : le regard tourne par le plus court chemin (350 degrés vers 10 p
   const wrap = parseEbp({ steps: [mk(90 + 350), mk(90 + 10)], stepsDetails: [{ time: 1000 }] }, inset);
   const mid = pawnsAt(wrap, 0.5)[0].gaze;
   assert.ok(mid < 1 || mid > 359, `milieu ${mid}`);
+});
+
+test('isEbpExport : reconnaît un export EBP.GG, pas une carte de l\'application ni autre chose', () => {
+  assert.equal(isEbpExport(EXPORT), true);
+  assert.equal(isEbpExport({ id: 'x', name: 'Atlantis', floors: [] }), false);
+  assert.equal(isEbpExport({ steps: [] }), false);
+  assert.equal(isEbpExport({ steps: [{ yellowTeam: [] }] }), false);
+  assert.equal(isEbpExport(null), false);
+  assert.equal(isEbpExport('texte'), false);
 });

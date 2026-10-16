@@ -19,17 +19,20 @@ export function exportMapToJSON(map: MapConfig): void {
   URL.revokeObjectURL(url);
 }
 
+/** Contrôle un JSON déjà lu et le renvoie comme MapConfig (rejette si invalide). */
+export function parseMapConfig(json: unknown): MapConfig {
+  const parsed = json as MapConfig;
+  if (!parsed || !parsed.id || !Array.isArray(parsed.floors)) throw new Error('Fichier de carte invalide.');
+  return parsed;
+}
+
 /** Lit un fichier `.json` et le parse en MapConfig (rejette si invalide). */
 export function importMapFromJSON(file: File): Promise<MapConfig> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(String(reader.result)) as MapConfig;
-        if (!parsed.id || !Array.isArray(parsed.floors)) {
-          throw new Error('Fichier de carte invalide.');
-        }
-        resolve(parsed);
+        resolve(parseMapConfig(JSON.parse(String(reader.result))));
       } catch (err) {
         reject(err instanceof Error ? err : new Error('JSON illisible.'));
       }

@@ -61,6 +61,13 @@ function readPawn(raw: unknown, team: TeamSide, inset: Inset, where: string): Pl
   return { slot, team, x, y, gaze: gazeFromEbp(typeof angle === 'number' ? angle : 0), dead: raw.dead === true, floor: typeof raw.floor === 'number' ? raw.floor : 0 };
 }
 
+/** Vrai si le JSON a la forme d'un export EBP.GG (étapes avec les deux équipes), pour le distinguer d'un fichier de carte de l'application. */
+export function isEbpExport(json: unknown): boolean {
+  if (!isRec(json) || !Array.isArray(json.steps) || json.steps.length === 0) return false;
+  const first = json.steps[0];
+  return isRec(first) && Array.isArray(first.yellowTeam) && Array.isArray(first.blueTeam);
+}
+
 /** Lit un export EBP.GG. `inset` : cadre de la minimap dans le plan de la carte. Lève une erreur au message clair si le fichier n'est pas un export lisible. */
 export function parseEbp(json: unknown, inset: Inset): ImportedPlan {
   if (!isRec(json) || !Array.isArray(json.steps) || json.steps.length === 0) throw new Error("Ce fichier n'est pas un export EBP.GG (pas d'étapes)");
