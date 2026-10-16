@@ -242,3 +242,26 @@ test('paramètres invalides : 400', () => {
   }
   assert.equal(playersSummary(ctx, q(`player=${'x'.repeat(200)}`)).status, 400);
 });
+
+test('players-summary : un pseudo lu SNVXGLEN5 dans une game et SNVXGLENS dans une autre est un seul joueur (5 et S confondus par la lecture du texte)', () => {
+  const ctx = testContext();
+  const g1 = insertGame(ctx, 'Polaris', 'SNV', 'NCT');
+  const g2 = insertGame(ctx, 'Polaris', 'SNV', 'NCT');
+  const g3 = insertGame(ctx, 'Polaris', 'SNV', 'NCT');
+  const pl = ctx.db.prepare('INSERT INTO players (game_id, slot, name) VALUES (?, ?, ?)');
+  pl.run(g1, 3, 'SNVXGLEN5');
+  pl.run(g2, 3, 'SNVXGLEN5');
+  pl.run(g3, 3, 'SNVXGLENS');
+  const st = ctx.db.prepare('INSERT INTO player_game_stats (game_id, slot, kills, deaths) VALUES (?, 3, ?, ?)');
+  st.run(g1, 4, 2);
+  st.run(g2, 1, 1);
+  st.run(g3, 2, 2);
+  const res = playersSummary(ctx, q());
+  const players = (res.json as { players: { key: string; name: string; games: number; kills: number | null }[] }).players;
+  assert.equal(players.length, 1);
+  assert.equal(players[0].name, 'SNVXGLEN5'); // l'écriture la plus fréquente
+  assert.equal(players[0].games, 3);
+  assert.equal(players[0].kills, 7);
+  const one = playersSummary(ctx, q('player=snvxglens')); // le filtre accepte l'autre écriture
+  assert.equal((one.json as { per_game: unknown[] }).per_game.length, 3);
+});

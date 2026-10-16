@@ -14,6 +14,7 @@ import {
   gamesParam,
   Grid,
   nameKey,
+  playerIdentity,
   reply,
   TallyBuilder,
   TEAM_MIN_GAMES,
@@ -242,7 +243,7 @@ function playerNames(ctx: ApiContext, gameId: number): Map<number, string> {
 
 /** Le cumul d'un joueur (pseudo normalisé + côté) dans `acc`, créé au besoin. */
 function playerAcc(acc: SideAcc, name: string, side: SideName, n: number): PlayerAcc {
-  const key = `${side}|${nameKey(name)}`;
+  const key = `${side}|${playerIdentity(name)}`;
   let p = acc.players.get(key);
   if (!p) acc.players.set(key, (p = { name, side, games: new Set(), presence: new Grid(n), seconds: 0, duels: { won: 0, lost: 0, other: 0 } }));
   return p;

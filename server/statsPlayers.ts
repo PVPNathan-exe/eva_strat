@@ -2,7 +2,7 @@
 // Sources : player_game_stats (bilan), kill_scores (notes), capture_state (dernier pourcentage lu), point_active (via pointChanges). Aucune victoire n'est déduite (games.winner est presque toujours vide).
 
 import type { ApiContext, ApiResult } from './api.ts';
-import { fail, gamesParam, nameKey, pointChanges, reply, TEAM_MIN_GAMES } from './statsGame.ts';
+import { fail, gamesParam, nameKey, playerIdentity, pointChanges, reply, TEAM_MIN_GAMES } from './statsGame.ts';
 import type { Row } from './statsGame.ts';
 
 const NAME_MAX = 80;
@@ -234,9 +234,10 @@ function playerRow(key: string, rows: Appearance[]) {
   const withStats = rows.filter((a) => a.stats);
   const killScore = sumOf(rows.map((a) => a.killScore));
   const deathScore = sumOf(rows.map((a) => a.deathScore));
+  const name = commonName(rows.map((a) => a.name)) ?? key;
   return {
-    key,
-    name: commonName(rows.map((a) => a.name)) ?? key,
+    key: nameKey(name), // clé lisible (l'écriture la plus fréquente) ; le regroupement se fait sur l'identité repliée, et le filtre `player` accepte n'importe quelle écriture
+    name,
     team: commonName(rows.map((a) => a.team)),
     games: new Set(rows.map((a) => a.game.id)).size,
     games_with_stats: new Set(withStats.map((a) => a.game.id)).size,
@@ -260,7 +261,7 @@ export function playersSummary(ctx: ApiContext, query: URLSearchParams): ApiResu
   const scope = readScope(query, true);
   if ('error' in scope) return fail(scope.error);
   const teamKey = scope.team === null ? null : nameKey(scope.team);
-  const playerKey = scope.player === null ? null : nameKey(scope.player);
+  const playerKey = scope.player === null ? null : playerIdentity(scope.player);
 
   let games = scopedGames(ctx, scope);
   if (teamKey !== null) games = games.filter((g) => nameKey(g.team_a) === teamKey || nameKey(g.team_b) === teamKey);
@@ -268,7 +269,7 @@ export function playersSummary(ctx: ApiContext, query: URLSearchParams): ApiResu
 
   const groups = new Map<string, Appearance[]>();
   for (const a of seen) {
-    const key = nameKey(a.name);
+    const key = playerIdentity(a.name);
     if (playerKey !== null && key !== playerKey) continue;
     groups.set(key, [...(groups.get(key) ?? []), a]);
   }

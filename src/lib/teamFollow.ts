@@ -46,6 +46,11 @@ export function nameKey(name: string | null | undefined): string {
     .trim();
 }
 
+/** Clé d'identité d'un joueur : le pseudo normalisé, avec les caractères que la lecture du texte confond ramenés à un seul (5 et S, 0 et O, 1 I et L, 8 et B, 2 et Z) : « SNVXGLEN5 » et « SNVXGLENS » sont le même joueur. */
+export function playerIdentity(name: string | null | undefined): string {
+  return nameKey(name).replace(/s/g, '5').replace(/o/g, '0').replace(/[il]/g, '1').replace(/b/g, '8').replace(/z/g, '2');
+}
+
 /** Côté d'un numéro de joueur : 1 à 4 à gauche (A, orange), 5 à 8 à droite (B, bleue). */
 export const sideOfSlot = (slot: number): TeamSide => (slot <= 4 ? 'A' : 'B');
 const other = (side: TeamSide): TeamSide => (side === 'A' ? 'B' : 'A');
@@ -106,7 +111,7 @@ export function keptSides(game: Pick<FollowGame, 'teamA' | 'teamB'>, spec: Follo
 
 /** Numéro de joueur de ce pseudo dans la game (null : il n'y joue pas). */
 export function slotOfPlayer(game: Pick<FollowGame, 'players'>, player: string): number | null {
-  return game.players.find((p) => nameKey(p.name) === player)?.slot ?? null;
+  return game.players.find((p) => playerIdentity(p.name) === player)?.slot ?? null;
 }
 
 /** Numéro de joueur demandé par le filtre Joueur dans cette game : 0 pour tous, null si ce joueur n'y est pas. */
@@ -140,15 +145,19 @@ export function filterByScope<T extends { game_id: number; slot: number }>(rows:
 
 /** Pseudos (normalisés, avec leur écriture) des joueurs montrés dans ces games : choix du filtre Joueur quand une équipe est suivie. */
 export function playerChoices(games: FollowGame[], spec: FollowSpec): { key: string; label: string }[] {
-  const out = new Map<string, string>();
+  const spellings = new Map<string, Map<string, number>>(); // identité -> écritures vues et leur nombre : on garde la plus fréquente
   for (const g of games) {
     const sides = keptSides(g, { ...spec, show: 'both' });
     for (const p of g.players) {
-      const key = nameKey(p.name);
-      if (key && sides.includes(sideOfSlot(p.slot)) && !out.has(key)) out.set(key, p.name.trim());
+      const key = playerIdentity(p.name);
+      if (!key || !sides.includes(sideOfSlot(p.slot))) continue;
+      const seen = spellings.get(key) ?? new Map<string, number>();
+      seen.set(p.name.trim(), (seen.get(p.name.trim()) ?? 0) + 1);
+      spellings.set(key, seen);
     }
   }
-  return [...out.entries()].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
+  const label = (seen: Map<string, number>) => [...seen.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+  return [...spellings.entries()].map(([key, seen]) => ({ key, label: label(seen) })).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 /** Noms à écrire dans les légendes d'une game pour chaque palette. */

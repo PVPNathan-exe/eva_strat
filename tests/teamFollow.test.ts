@@ -14,6 +14,7 @@ import {
   palClass,
   pickGames,
   playerChoices,
+  playerIdentity,
   presenceGroups,
   sideOfTeam,
   teamNames,
@@ -151,4 +152,19 @@ test('playerChoices : pseudos des deux équipes, une seule fois chacun', () => {
 test('paletteNames : le nom de l\'équipe suivie est toujours en a', () => {
   assert.deepEqual(paletteNames(G2, follow({})), { a: 'Nct', b: ' snv ' });
   assert.deepEqual(paletteNames(G1, NO_FOLLOW), { a: 'NCT', b: 'SNV' });
+});
+
+test('playerIdentity : le 5 et le S, le 0 et le O, le 1, le I et le L, le 8 et le B, le 2 et le Z sont le même caractère (SNVXGLEN5 et SNVXGLENS : un seul joueur)', () => {
+  assert.equal(playerIdentity('SNVXGLEN5'), playerIdentity('SNVXGLENS'));
+  assert.equal(playerIdentity(' snvxglens '), playerIdentity('SNVXGLEN5'));
+  assert.equal(playerIdentity('NCTXV0X'), playerIdentity('NCTXVOX'));
+  assert.notEqual(playerIdentity('SNVXPRIME'), playerIdentity('SNVXALEXO'));
+  assert.equal(playerIdentity(null), '');
+});
+
+test('playerChoices : un joueur lu de deux façons ne paraît qu\'une fois, sous l\'écriture la plus fréquente', () => {
+  const mk = (id: number, glen: string): FollowGame => ({ id, teamA: 'SNV', teamB: 'NCT', players: players(['SNVXPRIME', 'SNVXLAIDEEN', glen, 'SNVXALEXO', 'n1', 'n2', 'n3', 'n4']) });
+  const choices = playerChoices([mk(1, 'SNVXGLEN5'), mk(2, 'SNVXGLEN5'), mk(3, 'SNVXGLENS')], NO_FOLLOW);
+  const glens = choices.filter((c) => c.label.startsWith('SNVXGLEN'));
+  assert.deepEqual(glens, [{ key: playerIdentity('SNVXGLEN5'), label: 'SNVXGLEN5' }]);
 });

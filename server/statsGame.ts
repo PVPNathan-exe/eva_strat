@@ -25,6 +25,11 @@ export function nameKey(name: string | null | undefined): string {
     .trim();
 }
 
+/** Clé d'identité d'un joueur : le pseudo normalisé, avec les caractères que la lecture du texte confond ramenés à un seul (5 et S, 0 et O, 1 I et L, 8 et B, 2 et Z) : « SNVXGLEN5 » et « SNVXGLENS » sont le même joueur. */
+export function playerIdentity(name: string | null | undefined): string {
+  return nameKey(name).replace(/s/g, '5').replace(/o/g, '0').replace(/[il]/g, '1').replace(/b/g, '8').replace(/z/g, '2');
+}
+
 /** Équipe d'un numéro de joueur : 1 à 4 = A (gauche, orange), 5 à 8 = B (droite, bleue). */
 export const teamOfSlot = (slot: number): 'A' | 'B' => (slot <= 4 ? 'A' : 'B');
 
