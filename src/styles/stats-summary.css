@@ -1,0 +1,147 @@
+/* Vues Joueurs et Équipes de l'onglet Stats (StatsPlayers, StatsTeams, global-stats/*) : tableaux globaux triables et détail game par game.
+   Couleurs uniquement par les jetons de tokens.css et la palette .pal de stats.css (--pal) : l'équipe suivie par son nom est toujours « a ». */
+
+.sum__h {
+  margin: 0.4rem 0 0;
+  color: var(--c-text);
+  font-size: 0.95rem;
+}
+
+.sum__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* Pastille de couleur d'équipe (légende, nom de la ligne) */
+.sum__dot {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.35rem;
+  vertical-align: baseline;
+  background: var(--pal, var(--c-text-muted));
+  border-radius: 50%;
+}
+
+/* Tableau : défile en largeur dans son cadre (jamais plus large que l'écran) */
+.sum__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+
+.sum__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.sum__table th,
+.sum__table td {
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sum__table .sum__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sum__table thead th {
+  color: var(--c-text-muted);
+  font-weight: 600;
+  white-space: normal;
+  vertical-align: bottom;
+}
+
+.sum__table tbody th,
+.sum__table tfoot th {
+  color: var(--c-text);
+  font-weight: 500;
+}
+
+.sum__table td[title],
+.sum__table thead th[title] {
+  cursor: help;
+}
+
+/* En-tête cliquable : le bouton prend l'allure du titre */
+.sum__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.sum__sort:hover {
+  color: var(--c-text);
+}
+
+/* Trait de la couleur de l'équipe à gauche de chaque ligne */
+.sum__table tbody tr th:first-child {
+  border-left: 3px solid var(--pal, transparent);
+}
+
+.sum__pick {
+  cursor: pointer;
+}
+
+.sum__pick:hover th,
+.sum__pick:hover td,
+.sum__table tr.is-selected th,
+.sum__table tr.is-selected td {
+  background: var(--c-surface-2);
+}
+
+.sum__table tr.is-selected th {
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+
+.sum__name {
+  padding: 0;
+  background: transparent;
+  color: var(--c-text);
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sum__total th,
+.sum__total td {
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-weight: 600;
+  border-bottom: 0;
+}
+
+/* Lien « ouvrir dans la vidéo » */
+.sum__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.sum__open:hover {
+  border-color: var(--c-text-muted);
+}
