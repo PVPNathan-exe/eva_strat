@@ -88,6 +88,7 @@ class SideAcc {
   readonly duelCount = { won: 0, lost: 0, other: 0 };
   readonly totals = { kills: 0, deaths: 0, gadget_uses: 0, gadget_unused_at_death: 0, gadget_possible: 0 };
   private readonly seen = { stats: 0, gadget: 0, possible: 0 };
+  private possibleIncomplete = false; // un joueur sans délai de gadget établi : le total des possibles n'est pas donné (pas de somme partielle)
   games = 0;
   /** `shared` : compteurs de vagues communs à plusieurs camps (global), sinon propres à ce camp. */
   constructor(n: number, shared?: { tally: TallyBuilder; bySpeed: Map<string, TallyBuilder>; bySize: Map<string, TallyBuilder> }) {
@@ -112,6 +113,7 @@ class SideAcc {
       this.totals.gadget_uses += Number(r.gadget_uses);
       this.totals.gadget_unused_at_death += Number(r.gadget_unused_at_death ?? 0);
     }
+    if (Number(r.possible_players ?? 0) < Number(r.players)) this.possibleIncomplete = true;
     if (r.gadget_possible !== null) {
       this.seen.possible++;
       this.totals.gadget_possible += Number(r.gadget_possible);
@@ -124,7 +126,7 @@ class SideAcc {
       deaths: this.seen.stats > 0 ? this.totals.deaths : null,
       gadget_uses: this.seen.gadget > 0 ? this.totals.gadget_uses : null,
       gadget_unused_at_death: this.seen.gadget > 0 ? this.totals.gadget_unused_at_death : null,
-      gadget_possible: this.seen.possible > 0 ? Math.round(this.totals.gadget_possible * 1000) / 1000 : null,
+      gadget_possible: this.seen.possible > 0 && !this.possibleIncomplete ? Math.round(this.totals.gadget_possible * 1000) / 1000 : null,
     };
   }
 }
@@ -162,7 +164,7 @@ function gatherSide(ctx: ApiContext, g: GameRow, side: Side, n: number, acc: Sid
   acc.addStats(
     ctx.db
       .prepare(
-        `SELECT COUNT(*) AS players, SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(gadget_uses) AS gadget_uses, SUM(gadget_unused_at_death) AS gadget_unused_at_death, SUM(gadget_possible) AS gadget_possible
+        `SELECT COUNT(*) AS players, SUM(kills) AS kills, SUM(deaths) AS deaths, SUM(gadget_uses) AS gadget_uses, SUM(gadget_unused_at_death) AS gadget_unused_at_death, SUM(gadget_possible) AS gadget_possible, COUNT(gadget_possible) AS possible_players
          FROM player_game_stats WHERE game_id = ? AND slot BETWEEN ? AND ?`,
       )
       .get(g.id, lo, hi) as Row,

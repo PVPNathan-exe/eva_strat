@@ -138,7 +138,7 @@ test('game-summary : bilan par joueur, notes vues des deux équipes, totaux par 
   assert.equal(j.players[3].has_stats, false); // joueur 6 : mort notée, aucune ligne de bilan
   assert.equal(j.teams.A.kills, 4);
   assert.equal(j.teams.A.gadget_uses, 2); // une seule valeur lue : le null est ignoré, pas compté comme zéro
-  assert.equal(j.teams.A.gadget_possible, 4);
+  assert.equal(j.teams.A.gadget_possible, null); // un joueur de l'équipe sans valeur : pas de total partiel
   assert.equal(j.teams.A.duels_won, 2);
   assert.equal(j.teams.B.deaths, 3);
   assert.equal(j.teams.A.kill_score_sum, 3);

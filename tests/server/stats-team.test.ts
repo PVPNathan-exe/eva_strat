@@ -132,7 +132,7 @@ test('team-summary : sommes de player_game_stats, grilles de morts et de kills, 
   assert.equal(j.stats.deaths, 2);
   assert.equal(j.stats.gadget_uses, 3);
   assert.equal(j.stats.gadget_unused_at_death, 1);
-  assert.equal(j.stats.gadget_possible, 5);
+  assert.equal(j.stats.gadget_possible, null); // le joueur 2 de g1 n'a pas de délai de gadget établi : pas de total partiel (2 + 3 = 5 ferait un total sans lui)
   assert.deepEqual(j.duels, { won: 1, lost: 1, other: 1 });
   // Morts d'Éclair : le 1 de g1 en case (1, 1), le 5 de g2 en case (5, 5)
   assert.equal(cell(j.death_grid, 1, 1), 1);

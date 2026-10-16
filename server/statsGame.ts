@@ -277,7 +277,8 @@ export function gameSummary(ctx: ApiContext, query: URLSearchParams): ApiResult 
       deaths: sum(col('deaths')),
       gadget_uses: sum(col('gadget_uses')),
       gadget_unused_at_death: sum(col('gadget_unused_at_death')),
-      gadget_possible: sum(col('gadget_possible')),
+      // Total des possibles : seulement si TOUS les joueurs de l'équipe ont une valeur (jamais de somme partielle, elle ferait passer les utilisés au-dessus des possibles)
+      gadget_possible: col('gadget_possible').every((v) => v !== null) ? sum(col('gadget_possible')) : null,
       duels_won: sum(col('duels_won')),
       duels_lost: sum(col('duels_lost')),
       duels_other: sum(col('duels_other')),
