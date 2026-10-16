@@ -35,6 +35,9 @@ TP_R = 0.07  # une paire dont chaque bout est à moins de 0,07 (fraction de la m
 JUMP_V = 14.0  # plafond de vitesse du suivi (tracking) : au-dessus, ce n'est pas un déplacement
 JUMP_M = 2.0
 MIN_CYCLES = 3  # cycles prêt, utilisé, prêt pour établir le délai d'un gadget
+# Délais donnés par l'utilisateur (16/10/2026), faute de mesure établie ni de valeur dans les patch notes : le shield (45 s de recharge, 10 s de durée, 400 PV ; voir analysis/patch_reference.json).
+# Servent seulement quand la mesure sur les vidéos n'établit pas de délai ; une mesure établie l'emporte.
+KNOWN_DELAYS_S = {"SHIELD": 45.0}
 CYCLE_TOL = 0.25  # un cycle est « proche » du délai médian à 25 % près
 MIN_LIFE_S = 3.0  # une vie plus courte n'est pas comptée dans les utilisations possibles (comme gadget_state.life_stats)
 NOT_KILLS = ("suicide", "environment")  # genres de killfeed qui ne sont pas un kill de joueur
@@ -134,8 +137,12 @@ def delay_of(cycles):
 
 
 def gadget_delays(conn):
-    """{nom du gadget: délai en s ou None}."""
-    return {name: delay_of(c) for name, c in gadget_cycles(conn).items()}
+    """{nom du gadget: délai en s ou None} : mesuré quand il est établi, sinon le délai connu (KNOWN_DELAYS_S), sinon None."""
+    delays = {name: delay_of(c) for name, c in gadget_cycles(conn).items()}
+    for name, known in KNOWN_DELAYS_S.items():
+        if delays.get(name) is None:
+            delays[name] = known
+    return delays
 
 
 def gadget_totals(conn, game_id, delays):

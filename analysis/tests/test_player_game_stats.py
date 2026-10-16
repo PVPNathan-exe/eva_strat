@@ -11,7 +11,7 @@ import weapons
 SCHEMA = (Path(__file__).resolve().parent.parent / "schema.sql").read_text(encoding="utf-8")
 START = 100.0  # début de la game dans la vidéo
 STEP = 0.1
-NAMES = {"G5": "STICKY", "G10": "DX3", "G12": "DX3", "G7": "SHIELD"}
+NAMES = {"G5": "STICKY", "G10": "DX3", "G12": "DX3", "G7": "SONAR", "G8": "SHIELD"}
 M_PER_X = ec.ARENA_M[0]  # un déplacement de 1/31 en x fait 1 m
 
 
@@ -113,7 +113,7 @@ def test_les_cycles_sont_groupes_par_nom_de_gadget_sur_toutes_les_games(monkeypa
     add_cycles(conn, 2, 2, "G12", [45.0])
     add_cycles(conn, 1, 3, "G5", [20.0, 20.0, 20.0])
     add_cycles(conn, 1, 4, "G7", [10.0, 45.0])  # deux cycles seulement
-    assert P.gadget_delays(conn) == {"DX3": 45.0, "STICKY": 20.0, "SHIELD": None}
+    assert P.gadget_delays(conn) == {"DX3": 45.0, "STICKY": 20.0, "SONAR": None, "SHIELD": 45.0}  # SHIELD : délai donné par l'utilisateur, sans cycle mesuré
 
 
 def test_une_mort_coupe_le_cycle(monkeypatch):
@@ -198,7 +198,7 @@ def test_gadget_sans_delai_etabli_donne_un_possible_nul_et_pas_une_somme_partiel
     monkeypatch.setattr(weapons, "display_names", lambda folder=weapons.ICON_DIR: NAMES)
     conn = make_conn()
     build_game(conn)
-    add_cycles(conn, 1, 5, "G7", [10.0, 45.0])  # SHIELD : deux cycles, délai non établi
+    add_cycles(conn, 1, 5, "G7", [10.0, 45.0])  # SONAR : deux cycles, délai non établi
     P.compute(conn, 1)
     s = stat(conn, 5)
     assert s["gadget_uses"] == 2 and s["gadget_possible"] is None
@@ -219,3 +219,12 @@ def test_le_calcul_est_idempotent_et_ecrit_la_version(monkeypatch):
 def test_une_game_sans_aucune_ligne_ne_donne_rien():
     conn = make_conn()
     assert P.compute(conn, 1) == 0
+
+
+def test_le_delai_du_shield_donne_par_l_utilisateur_sert_sans_mesure_etablie_et_une_mesure_etablie_l_emporte(monkeypatch):
+    monkeypatch.setattr(weapons, "display_names", lambda folder=weapons.ICON_DIR: NAMES)
+    conn = make_conn()
+    add_cycles(conn, 1, 1, "G8", [10.0, 45.0])  # deux cycles : non établi, le délai connu (45 s) s'applique
+    assert P.gadget_delays(conn)["SHIELD"] == 45.0
+    add_cycles(conn, 2, 2, "G8", [30.0, 30.0, 30.0])  # trois cycles proches de 30 s : la mesure établie l'emporte
+    assert P.gadget_delays(conn)["SHIELD"] == 30.0
