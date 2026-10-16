@@ -24,6 +24,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import paths
+import priority
 
 HERE = Path(__file__).parent
 ROTORS = HERE / "map_rotors.json"
@@ -144,7 +145,7 @@ def grab_frames(video, t0, seconds, zone, folder, fps=5):
     for f in glob.glob(folder + "/*.png"):
         os.remove(f)
     crop = f"fps={fps},crop=iw*{zone['w']}:ih*{zone['h']}:iw*{zone['x']}:ih*{zone['y']}"
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", str(t0), "-t", str(seconds), "-i", str(video), "-vf", crop, folder + "/s_%03d.png"], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", str(t0), "-t", str(seconds), "-i", str(video), "-vf", crop, folder + "/s_%03d.png"], check=True, creationflags=priority.creation_flags())
     return sorted(glob.glob(folder + "/s_*.png"))
 
 

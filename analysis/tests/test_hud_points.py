@@ -257,10 +257,10 @@ def test_engine_est_lu_sur_le_hud_et_ecrit_les_tables(tmp_path):
     assert n == len(rows) == 4
     assert rows == [("A", 0.0, 20.0, "B", "hud"), ("B", 0.0, 20.0, "A", "hud"), ("C", 0.0, 8.0, "none", "hud"), ("C", 8.0, 20.0, "B", "hud")]
     active = [tuple(r) for r in conn.execute("SELECT point, t0, t1, source FROM point_active ORDER BY point")]
-    assert active == [("A", 0.0, 20.0, "hud"), ("B", 0.0, 20.0, "hud"), ("C", 0.0, 20.0, "hud")]  # tous les points sont toujours actifs
+    assert active == []  # Engine n'a aucun changement de point (information de l'utilisateur) : les trois hexagones toujours allumés ne font pas de point actif
     assert tuple(conn.execute("SELECT module, revision FROM stats_meta WHERE game_id = 1").fetchone()) == ("point_owner", po.REVISION)
     assert po.compute(conn, 1, hud_frames=hud_frames("Engine", plan)) == 4  # idempotent
-    assert conn.execute("SELECT COUNT(*) FROM point_owner").fetchone()[0] == 4 and conn.execute("SELECT COUNT(*) FROM point_active").fetchone()[0] == 3
+    assert conn.execute("SELECT COUNT(*) FROM point_owner").fetchone()[0] == 4 and conn.execute("SELECT COUNT(*) FROM point_active").fetchone()[0] == 0
 
 
 def test_atlantis_le_point_actif_tourne_et_le_proprietaire_se_lit_sur_le_point_allume(tmp_path):

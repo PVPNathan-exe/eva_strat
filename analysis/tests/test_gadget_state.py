@@ -232,3 +232,15 @@ def test_un_kill_de_gadget_tombe_dans_un_segment_utilise_a_2_s_pres(monkeypatch)
     # utilisé de 9,75 à 29,75 s de game (vidéo 109,75 à 129,75) : 115 dedans, 131,5 à 1,75 s après la fin (toléré), 140 trop tard ; le joueur 8 n'a rien utilisé ; sonar et arme ignorés
     assert (check["n"], check["hit"]) == (4, 2)
     assert {(m["slot"], m["state_at_kill"]) for m in check["misses"]} == {(7, "ready"), (8, "ready")}
+
+
+def test_une_utilisation_coupee_par_des_trous_illisibles_ne_compte_qu_une_fois():
+    seg = lambda t0, t1, state: {"t0": t0, "t1": t1, "state": state}
+    # disponible, utilisé, inconnu, utilisé, inconnu, utilisé : une seule utilisation (cas du joueur 1 d'Atlantis, game 31 : 3 segments utilisé pour 1 utilisation)
+    assert G.count_uses([seg(0, 8, "ready"), seg(8, 15, "used"), seg(15, 18, "unknown"), seg(18, 23, "used"), seg(23, 25, "unknown"), seg(25, 27, "used")]) == 1
+    # deux recharges, deux utilisations
+    assert G.count_uses([seg(0, 8, "ready"), seg(8, 15, "used"), seg(15, 55, "ready"), seg(55, 60, "used"), seg(60, 100, "ready")]) == 2
+    # une vie qui commence déjà utilisée compte une utilisation ; un trou inconnu entre deux disponibles n'en crée pas
+    assert G.count_uses([seg(0, 5, "used"), seg(5, 9, "unknown"), seg(9, 20, "ready")]) == 1
+    assert G.count_uses([seg(0, 5, "ready"), seg(5, 9, "unknown"), seg(9, 20, "ready")]) == 0
+    assert G.count_uses([]) == 0

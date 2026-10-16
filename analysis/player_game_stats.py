@@ -28,7 +28,7 @@ import sys
 import episode_common as ec
 
 MODULE = "player_game_stats"
-REVISION = 1
+REVISION = 2  # 2 : gadget_uses = passages de disponible à utilisé (plus les segments utilisé), délai du shield donné par l'utilisateur
 PAIR_S = 0.5  # écart de temps des deux lectures d'une vitesse
 PAIR_TOL_S = 0.06  # tolérance sur cet écart (les lignes arrivent toutes les 0,1 s)
 TP_R = 0.07  # une paire dont chaque bout est à moins de 0,07 (fraction de la minimap) d'une station de la paire est une tyrolienne (un joueur entre en marchant, ressort 0,4 s plus tard)

@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 MODULE = "gadget_state"
-REVISION = 1
+REVISION = 2  # 2 : les utilisations ne sont plus les segments « utilisé » mais les passages de « disponible » à « utilisé » (life_stats.uses)
 
 STEP_S = 0.5  # une image toutes les 0,5 s : précision des bornes de segment
 # Seuils de lecture (relief de la case gadget, bandeau vivant). Deux conditions chacun : le 95e centile ET le maximum.
@@ -252,11 +252,25 @@ def _overlap(seg, t0, t1):
     return max(0.0, min(seg["t1"], t1) - max(seg["t0"], t0))
 
 
+def count_uses(segments):
+    """Nombre d'utilisations dans des segments d'une vie : chaque entrée dans l'état « utilisé » depuis « disponible » (ou depuis le début de la vie) ; « inconnu » est ignoré, il ne sépare pas deux utilisations."""
+    uses, prev = 0, None
+    for s in sorted(segments, key=lambda x: x["t0"]):
+        if s["state"] == "unknown":
+            continue
+        if s["state"] == "used" and prev != "used":
+            uses += 1
+        prev = s["state"]
+    return uses
+
+
 def life_stats(conn, game_id, cooldown_s=None):
     """Une ligne par vie (table `lives`) : {slot, idx, t0, t1, ended, gadget, readable (part de la vie lisible), uses, first_use_s, ready_s, used_s, max_ready_run_s,
     held_too_long, unused_at_death (1, 0 ou None : mort sans que l'état soit lu, ou fin de game), possible_uses}.
 
-    uses : segments « utilisé » qui recouvrent la vie (un bandeau mort coupe les segments, donc aucun ne passe d'une vie à l'autre). possible_uses : au plus 1 + vie / délai (usage dès l'apparition,
+    uses : utilisations de la vie = passages de « disponible » à « utilisé » (les trous illisibles « inconnu » entre deux segments « utilisé » ne font pas une nouvelle utilisation : avant, `uses` comptait
+    les segments « utilisé » et une utilisation coupée par des trous illisibles comptait plusieurs fois, jusqu'à dépasser la borne haute) ; une vie qui commence déjà « utilisé » compte une utilisation (un bandeau mort
+    coupe les segments, donc aucun ne passe d'une vie à l'autre). possible_uses : au plus 1 + vie / délai (usage dès l'apparition,
     puis un à chaque recharge) : une borne haute, pas une attente."""
     segments = _segments_by_slot(conn, game_id)
     cooldown = cooldown_s if cooldown_s is not None else cooldown_of(segments)[0]
@@ -268,6 +282,7 @@ def life_stats(conn, game_id, cooldown_s=None):
         ready_s = sum(_overlap(s, t0, t1) for s in inside if s["state"] == "ready")
         used_s = sum(_overlap(s, t0, t1) for s in inside if s["state"] == "used")
         used = [s for s in inside if s["state"] == "used"]
+        uses = count_uses(inside)
         run = max([_overlap(s, t0, t1) for s in inside if s["state"] == "ready"], default=0.0)
         unused = None
         if r["ended"] == "death":
@@ -275,7 +290,7 @@ def life_stats(conn, game_id, cooldown_s=None):
             unused = (1 if last[-1]["state"] == "ready" else 0) if last else None
         out.append({
             "slot": slot, "idx": r["idx"], "t0": t0, "t1": t1, "ended": r["ended"], "gadget": gadget_of(slot, (t0 + t1) / 2),
-            "readable": round((ready_s + used_s) / length, 3) if length else 0.0, "uses": len(used),
+            "readable": round((ready_s + used_s) / length, 3) if length else 0.0, "uses": uses,
             "first_use_s": round(max(used[0]["t0"] - t0, 0.0), 2) if used else None,
             "ready_s": round(ready_s, 2), "used_s": round(used_s, 2), "max_ready_run_s": round(run, 2),
             "held_too_long": run >= HOLD_WARN_S and not used, "unused_at_death": unused,

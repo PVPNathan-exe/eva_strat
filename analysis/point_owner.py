@@ -31,7 +31,7 @@ import hud_points
 import rotation_schedule
 
 MODULE = "point_owner"
-REVISION = 3  # 2 : source HUD (hud_points.py), Atlantis et Engine calculés, table point_active ; 3 : bornes du point actif tirées du calendrier (rotation_schedule.py)
+REVISION = 4  # 4 : aucune période de point actif sur les cartes sans changement de point (Engine, Helios Station) ; 3 : bornes du point actif tirées du calendrier (rotation_schedule.py) ; 2 : source HUD (hud_points.py), Atlantis et Engine calculés, table point_active ; 3 : bornes du point actif tirées du calendrier (rotation_schedule.py)
 HERE = Path(__file__).parent
 CAPTURE = HERE / "map_capture.json"  # zones des points de capture tracées à la main (polygones, fractions de la minimap), une par point
 MULTI_POINT_MAPS = {"Atlantis", "Engine"}  # trois points : propriétaire lu sur le HUD seulement (la boîte de la minimap ne dit rien du propriétaire de chaque point)
@@ -368,6 +368,9 @@ def _ensure_hud_source(conn):
 def _write(conn, game_id, segments, active=()):
     """Efface puis réécrit les segments de la game (point_owner), les plages du point actif (point_active) et la révision du module. Renvoie le nombre de segments de point_owner."""
     _ensure_hud_source(conn)
+    row = conn.execute("SELECT map FROM games WHERE id = ?", (game_id,)).fetchone()
+    if row is not None and rotation_schedule.has_no_change(row["map"]):
+        active = ()  # Engine, Helios Station : aucun changement de point, donc aucune période de point actif (les trois hexagones sont toujours allumés : le HUD en faisait trois périodes parasites)
     with conn:
         conn.execute("DELETE FROM point_owner WHERE game_id = ?", (game_id,))
         conn.executemany(

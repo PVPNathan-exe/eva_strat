@@ -20,6 +20,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import paths
+import priority
 
 HERE = Path(__file__).parent
 POINTS = HERE / "map_capture_points.json"
@@ -182,7 +183,7 @@ def grab_minimap(video, t0, seconds, zone, folder, size):
     for f in glob.glob(folder + "/*.png"):
         os.remove(f)
     filt = f"fps=1/{SAMPLE_S},crop=iw*{zone['w']}:ih*{zone['h']}:iw*{zone['x']}:ih*{zone['y']},scale={size[0]}:{size[1]}"
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", str(t0), "-t", str(seconds), "-i", str(video), "-vf", filt, folder + "/s_%04d.png"], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", str(t0), "-t", str(seconds), "-i", str(video), "-vf", filt, folder + "/s_%04d.png"], check=True, creationflags=priority.creation_flags())
     return [(t0 + k * SAMPLE_S, cv2.imread(f)) for k, f in enumerate(sorted(glob.glob(folder + "/s_*.png")))]
 
 

@@ -196,3 +196,20 @@ def test_outlaw_lit_chaque_boite_dans_sa_plage(tmp_path):
 def test_la_ligne_de_commande_ecrit_dans_la_base_donnee(tmp_path):
     make_game(tmp_path, "Atlantis").close()
     assert po.main(["--game", "1", "--db", str(tmp_path / "t.db")]) == 0
+
+
+def test_aucune_periode_de_point_actif_sur_une_carte_sans_changement_de_point():
+    import sqlite3
+    from pathlib import Path
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript((Path(__file__).resolve().parent.parent / "schema.sql").read_text(encoding="utf-8"))
+    conn.execute("INSERT INTO videos (id, path, duration_s, fps, width, height) VALUES (1, 'v.mp4', 300, 60, 1920, 1080)")
+    conn.execute("INSERT INTO games (id, video_id, start_s, end_s, map) VALUES (1, 1, 0, 200, 'Engine')")
+    conn.execute("INSERT INTO games (id, video_id, start_s, end_s, map) VALUES (2, 1, 300, 500, 'Atlantis')")
+    active = [{"point": "A", "t0": 0.0, "t1": 90.0, "source": "hud"}]
+    po._write(conn, 1, [], active)
+    po._write(conn, 2, [], active)
+    assert conn.execute("SELECT COUNT(*) FROM point_active WHERE game_id = 1").fetchone()[0] == 0  # Engine : les trois hexagones sont toujours allumés, ce n'est pas un point actif
+    assert conn.execute("SELECT COUNT(*) FROM point_active WHERE game_id = 2").fetchone()[0] == 1  # Atlantis garde sa période
