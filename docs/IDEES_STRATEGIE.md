@@ -42,3 +42,13 @@ Conversions retenues (vérifiées sur l'export Atlantis de l'utilisateur) :
 Ignoré : dessins, texte, spécialités, icônes, éléments de carte, étages (gardés tels quels mais non utilisés), équipements, bloc `immersive` (17 éléments non décodés).
 
 Prochaine étape quand l'analyse sera complète : comparer le plan aux positions d'une game (écart de position et de regard par joueur et par étape, premier moment où un joueur s'écarte du plan, cause probable : mort, retard, autre chemin).
+
+## Constantes de début de game et de capture (relevés de l'utilisateur, 16 octobre 2026)
+
+Importantes pour le jeu d'échecs (le temps exact d'un geste, d'un lancer, d'une prise de point), sans effet sur les statistiques globales : on ne décale donc pas `games.start_s` ni les données déjà calculées.
+
+- **Début des actions :** le jeu autorise les actions quand « En avant » s'affiche (fin du compte à rebours), pas quand le chrono quitte 10:00. Sur Polaris (game 26 de NCT contre SNV) la grenade (SONAR) est lancée 71 images après l'affichage de « En avant » : à 60 images par seconde cela fait 1,18 s (l'utilisateur dit environ 1 s). Ce délai est le **temps de réaction humain** (le ping et le doigt : même en martelant le bouton de lancer, rien n'est instantané) : pour un joueur simulé, prévoir environ 1 s entre « En avant » et la première action.
+- **Ce que disent les données de la même game (mesuré) :** le chrono affiche encore 10:00 de 0 à 2,5 s de game (09:59 à 3,0 s), un éclair de SONAR est visible à 2,5 s, les premiers SONAR sont lus à 2,25 s (`gadget_state`). Le temps de game zéro est donc environ 2 s avant le départ du chrono.
+- **Capture sur Engine (revue de SNV, game 30) :** la capture du point de départ prend effet 10 images (environ 0,17 s) avant l'affichage de 9:54 du chrono, soit environ 6 s après le départ du chrono ; les données donnent le passage du point B à l'équipe A à 9,0 s de game.
+- **À mesurer :** le temps de capture d'un point selon le nombre de joueurs dessus (1, 2, 3 : plus on est nombreux, plus c'est rapide). Agent P12 : `analysis/capture_speed.py`, résultat dans `analysis/capture_speed.json`.
+
