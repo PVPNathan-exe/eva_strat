@@ -61,7 +61,6 @@ export function StatsRotations(props: Props) {
 function RotationsView({ map, games, replay, spec }: Props) {
   const [mode, setMode] = useState<Mode>('game');
   const [corridors, setCorridors] = useState(false);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
   const [verdicts, setVerdicts] = useState<Record<number, Verdict>>({});
   const load = useLoad(`rotations:${map}`, () => statsApi.episodesOfMap(map, 'rotation'));
   const strip = useStripData(replay.id);
@@ -73,10 +72,10 @@ function RotationsView({ map, games, replay, spec }: Props) {
   // Changements de point actif de la game rejouée (au moins un des deux épisodes dans le réglage d'équipe et de joueur)
   const replayEps = useMemo(() => (load.data ?? []).filter((e) => e.game_id === replay.id && episodeInScope(e, replay, spec)), [load.data, replay, spec]);
   const events = useMemo(() => rotationEvents(replayEps), [replayEps]);
-  const lanes = useMemo(() => buildLanes(pointsOf(strip.owners, strip.active, replayEps), strip.owners, strip.active, events.map((ev) => rotationMark(ev, clock.duration)), clock.duration, toneOf), [strip, replayEps, events, clock.duration, toneOf]);
-  const active = events.find((ev) => ev.key === activeKey) ?? null;
-  // Changement montré sur le plan : celui qui est choisi, sinon celui dont la fenêtre contient le curseur
-  const shown = active ?? events.find((ev) => clock.t >= ev.switchT - ROT_BEFORE_S && clock.t <= ev.switchT + ROT_AFTER_S) ?? null;
+  const knownPoints = useMemo(() => Object.keys(rects), [rects]); // tous les points de la carte, même ceux qui ne s'allument jamais dans cette game
+  const lanes = useMemo(() => buildLanes(pointsOf(strip.owners, strip.active, replayEps, knownPoints), strip.owners, strip.active, events.map((ev) => rotationMark(ev, clock.duration)), clock.duration, toneOf), [strip, replayEps, events, clock.duration, toneOf, knownPoints]);
+  // Changement mis en avant : celui dont la fenêtre (20 s avant, 20 s après) contient le curseur. La frise, la liste et le panneau avancent donc avec la lecture et quand on déplace le curseur.
+  const shown = events.find((ev) => clock.t >= ev.switchT - ROT_BEFORE_S && clock.t <= ev.switchT + ROT_AFTER_S) ?? null;
   const pawns = useMemo(() => positionsAt(positions.index, clock.t), [positions.index, clock.t]);
   const rings = useMemo<Ring[]>(() => {
     if (!shown) return [];
@@ -86,9 +85,18 @@ function RotationsView({ map, games, replay, spec }: Props) {
     return list;
   }, [shown, rects]);
 
-  const pick = (ev: RotationEvent) => {
-    setActiveKey(ev.key);
-    clock.seek(rotationSeek(ev)); // le curseur se place 20 s avant le changement
+  const pick = (ev: RotationEvent) => clock.seek(rotationSeek(ev)); // le curseur se place 20 s avant le changement
+  // Moments où un point devient actif : les périodes du point actif lues, à défaut les changements de point actif qui y mènent (rotations calculées sans période lue)
+  const arrivalsAt = (point: string): number[] => {
+    const lit = strip.active.filter((a) => a.point === point).map((a) => a.t0);
+    return (lit.length > 0 ? lit : events.filter((e) => e.pointTo === point).map((e) => e.switchT)).sort((a, b) => a - b);
+  };
+  // Clic sur le nom d'un point : le curseur se place 20 s avant le prochain moment où il devient actif (le premier si le curseur est déjà après le dernier)
+  const pickPoint = (point: string) => {
+    const times = arrivalsAt(point);
+    if (times.length === 0) return;
+    const next = times.find((t) => t - ROT_BEFORE_S > clock.t + 0.5) ?? times[0];
+    clock.seek(Math.max(0, next - ROT_BEFORE_S));
   };
   const pickMark = (m: EpisodeMark) => {
     const ev = events.find((x) => x.key === m.key);
@@ -123,7 +131,7 @@ function RotationsView({ map, games, replay, spec }: Props) {
             </p>
           ) : (
             <>
-              <PointTimeline lanes={lanes} duration={clock.duration} t={clock.t} activeKey={active?.key ?? null} onSeek={clock.seek} onPick={pickMark} ownerTitle={ownerTitle} />
+              <PointTimeline lanes={lanes} duration={clock.duration} t={clock.t} activeKey={shown?.key ?? null} onSeek={clock.seek} onPick={pickMark} onPickPoint={pickPoint} canPickPoint={(p) => arrivalsAt(p).length > 0} ownerTitle={ownerTitle} />
               <GameClock clock={clock} />
             </>
           )}
@@ -150,18 +158,18 @@ function RotationsView({ map, games, replay, spec }: Props) {
             <li><i className="epmap__swatch epmap__swatch--new" /> Nouveau point</li>
           </ul>
           <EpisodeMap map={map} corridors={corridors} pawns={pawns} paletteOfSlot={(s) => paletteOf(replay, spec, s)} nameOf={nameOf} rings={rings} crosses={[]} />
-          {active ? (
-            <ChosenRotation event={active} game={replay} spec={spec} verdictOf={verdictOf} onVerdict={setVerdict} nameOf={nameOf} />
+          {shown ? (
+            <ChosenRotation event={shown} game={replay} spec={spec} verdictOf={verdictOf} onVerdict={setVerdict} nameOf={nameOf} />
           ) : (
-            events.length > 0 && <p className="eps__hint">Cliquer un changement de point sur la frise ou dans la liste : le curseur se place 20 s avant le changement.</p>
+            events.length > 0 && <p className="eps__hint">Cliquer un changement de point sur la frise, le nom d'un point ou la liste : le curseur se place 20 s avant le changement. Pendant la lecture, le changement en cours est mis en avant.</p>
           )}
           {events.length > 0 && (
             <ol className="eplist">
               {events.map((ev) => {
-                const open = ev.key === active?.key;
+                const open = ev.key === shown?.key;
                 return (
                   <li key={ev.key} className={`eplist__item${open ? ' is-active' : ''}`}>
-                    <button type="button" className="eplist__head" aria-pressed={open} onClick={() => (open ? setActiveKey(null) : pick(ev))}>
+                    <button type="button" className="eplist__head" aria-pressed={open} onClick={() => pick(ev)}>
                       {open ? <ChevronDown className="ic" /> : <ChevronRight className="ic" />}
                       <span className="eplist__when">{formatTime(ev.switchT)}</span>
                       <span className="eplist__route">

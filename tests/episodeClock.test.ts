@@ -235,3 +235,10 @@ test('rectsFromPolygons et rectsFromBoxes : une lettre par polygone, centre et t
   assert.ok(Math.abs(b.C[0] - 0.45) < 1e-9 && Math.abs(b.C[3] - 0.9) < 1e-9);
   assert.deepEqual(rectsFromPolygons([]), {});
 });
+
+test('pointsOf : les points connus de la carte sont listés même sans jamais être lus dans la game (Outlaw, point E)', () => {
+  const owners = [{ game_id: 1, point: 'B', t0: 0, t1: 10, owner: 'A' as const, source: 'box' as const }];
+  const active = [{ game_id: 1, point: 'C', t0: 0, t1: 90, source: 'hud' as const }];
+  assert.deepEqual(pointsOf(owners, active, []), ['B', 'C']);
+  assert.deepEqual(pointsOf(owners, active, [], ['A', 'B', 'C', 'D', 'E']), ['A', 'B', 'C', 'D', 'E']);
+});

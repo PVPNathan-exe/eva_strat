@@ -31,6 +31,28 @@
   font-size: 0.75rem;
 }
 
+/* Étiquette cliquable (vue Rotations) : même aspect que le texte, soulignée au survol ; grisée pour un point jamais actif */
+.ptl__label--button {
+  justify-content: flex-start;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--c-text-soft);
+  text-align: left;
+}
+
+.ptl__label--button:hover:not(:disabled) {
+  color: var(--c-text);
+  text-decoration: underline;
+}
+
+.ptl__label--button.is-never {
+  color: var(--c-text-muted);
+  opacity: 0.6;
+  cursor: default;
+}
+
 .ptl__tracks {
   position: relative;
   min-width: 0;

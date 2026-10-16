@@ -87,8 +87,9 @@ export function activeBands(active: PointActive[], point: string, duration: numb
 }
 
 /** Points d'une game : lettres vues dans les propriétaires, le point actif et les épisodes, dans l'ordre alphabétique. */
-export function pointsOf(owners: PointOwner[], active: PointActive[], eps: Episode[]): string[] {
-  const set = new Set<string>([...owners.map((o) => o.point), ...active.map((a) => a.point)]);
+export function pointsOf(owners: PointOwner[], active: PointActive[], eps: Episode[], known: string[] = []): string[] {
+  // `known` : les points de la carte même s'ils ne sont jamais lus dans cette game (Outlaw a 5 points A à E, le E peut ne jamais s'allumer)
+  const set = new Set<string>([...known, ...owners.map((o) => o.point), ...active.map((a) => a.point)]);
   for (const e of eps) for (const p of [e.point, e.point_to]) if (p) set.add(p);
   return [...set].sort((a, b) => a.localeCompare(b));
 }
