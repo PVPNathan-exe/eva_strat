@@ -1,4 +1,4 @@
-"""Épisodes de retake par vagues (retakes.py, REVISION 3) : parties synthétiques de Polaris (un seul point, cadre de map_capture.json), voir test_waves.py pour le montage."""
+"""Épisodes de retake par vagues (retakes.py, REVISION 4) : parties synthétiques de Polaris (un seul point, cadre de map_capture.json), voir test_waves.py pour le montage."""
 
 import json
 
@@ -52,6 +52,7 @@ def test_retake_reussi_teamfight_gagne_puis_prise_du_point():
     assert w["t_start"] <= 26.0 and w["t_contact"] == 31.0 and w["t_end"] == 45.0 and w["duration_s"] > 15
     assert e["t0"] == w["t_start"] and e["t1"] == w["t_end"] and e["data"]["change_t"] == 45.0 and e["data"]["push_t"] == w["t_start"]
     assert w["fight"]["losses"] == {"A": 1, "B": 3} and w["fight"]["winner"] == "A" and w["axis_frac"] is not None
+    assert w["fight"]["heavy"] is False  # B perd 3 mais A seulement 1 : pas un teamfight lourd
     assert [d["slot"] for d in e["data"]["deaths"]] == [5, 6, 3, 7]
     assert {m["slot"] for m in w["members"]} == {1, 2, 3} and w["members"][2]["t_death"] == 34.0
 
@@ -64,6 +65,18 @@ def test_retake_rate_teamfight_perdu_sans_prise():
     assert e["outcome"] == "fail" and e["data"]["wave"]["tf_result"] == "lost" and e["data"]["wave"]["captured_t"] is None
     assert e["data"]["wave"]["fight"]["losses"]["A"] == 3 and e["data"]["from_team"] == "B"
     assert e["t1"] == 35.0  # fin = dernier kill du teamfight
+
+
+def test_teamfight_lourd_est_enregistre_sans_changer_l_issue():
+    kills = [(31.0, 5, 1), (33.0, 6, 2), (35.0, 5, 3), (36.0, 4, 5), (37.0, 4, 6), (38.0, 4, 7)]
+    extra = {s: dying(s, t, leave(A_SPAWN, 20.0 + 2 * (s - 1), 28.0 + 2 * (s - 1))) for s, t in ((1, 31.0), (2, 33.0), (3, 35.0))}
+    extra.update({s: dying(s, t, stay(MID)) for s, t in ((5, 36.0), (6, 37.0), (7, 38.0))})
+    _conn, eps = run(players_for(extra), kills, B_HOLDS)
+    [e] = [x for x in eps if x["team"] == "A"]
+    f = e["data"]["wave"]["fight"]
+    assert f["losses"] == {"A": 3, "B": 3} and f["heavy"] is True and f["kind"] == "teamfight"
+    assert e["data"]["wave"]["tf_result"] in ("lost", "draw")  # l'issue vient du gagnant, pas de heavy
+    assert retakes.REVISION == 4
 
 
 def test_prise_initiale_sur_point_neutre_nest_pas_un_retake():
@@ -151,7 +164,7 @@ def test_compute_est_idempotent_garde_les_verdicts_et_ne_touche_pas_aux_rotation
     assert retakes.compute(conn, 1) == n
     assert conn.execute("SELECT COUNT(*), COUNT(verdict) FROM episodes WHERE game_id = 1 AND kind = 'retake'").fetchone() == (n, 1)
     assert conn.execute("SELECT COUNT(*) FROM episodes WHERE game_id = 1 AND kind = 'rotation'").fetchone()[0] == 1
-    assert conn.execute("SELECT revision FROM stats_meta WHERE game_id = 1 AND module = 'retakes'").fetchone()[0] == retakes.REVISION == 3
+    assert conn.execute("SELECT revision FROM stats_meta WHERE game_id = 1 AND module = 'retakes'").fetchone()[0] == retakes.REVISION == 4
 
 
 def test_verdict_repris_si_le_depart_bouge_de_moins_de_cinq_secondes():

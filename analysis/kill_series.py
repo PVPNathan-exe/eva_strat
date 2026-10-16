@@ -14,7 +14,9 @@ ailleurs en même temps), ET au moins `FIGHT_MIN_KILLS` (2) kills ; sinon `duel`
 « vite » est à 5 à 6 s de marche, soit 8 à 10 m. Les tyroliennes (aide instantanée de loin) ne sont pas modélisées : un coéquipier près d'une station éloignée n'est pas compté.
 **Gagnant** (pertes comptées sur toute la série) : l'équipe qui perd le moins de joueurs ; à égalité, celle qui garde le plus de vivants `ALIVE_AFTER_S` après le dernier kill ;
 sinon `None` (égalité). Un duel a aussi un gagnant calculé mais il n'est jamais compté comme teamfight gagné ou perdu.
-Schéma du dict (`fight_from`) : i0, i1 (indices dans game["kills"]), t_first, t_last, n_kills, losses {A, B}, alive_end {A, B}, winner, kind (`teamfight` ou `duel`), foyers (nombre), engaged {A, B} (plus grand
+**Teamfight lourd** (`heavy`, retour de l'utilisateur du 16 octobre 2026) : teamfight où LES DEUX équipes perdent au moins `HEAVY_MIN_LOSSES` (3) joueurs dans la série (valeur à confirmer par l'utilisateur). Les pertes de
+chaque équipe (`losses`) sont enregistrées pour toute série ; `heavy` ne change ni le gagnant ni la nature teamfight ou duel.
+Schéma du dict (`fight_from`) : i0, i1 (indices dans game["kills"]), t_first, t_last, n_kills, losses {A, B}, alive_end {A, B}, winner, kind (`teamfight` ou `duel`), heavy (vrai : teamfight lourd), foyers (nombre), engaged {A, B} (plus grand
 foyer), center (moyenne des positions de mort du foyer du kill de départ), kills [{t, killer, victim, weapon, kind}]."""
 
 import episode_common as ec
@@ -22,6 +24,7 @@ import episode_common as ec
 WIPE_S = 10.0  # deux kills d'une même série sont espacés de 10 s au plus
 FIGHT_MIN_KILLS = 2  # un teamfight a au moins 2 kills
 ENGAGED_MIN = 2  # chaque équipe a au moins 2 joueurs engagés dans un foyer
+HEAVY_MIN_LOSSES = 3  # teamfight lourd : les deux équipes perdent au moins 3 joueurs (convention, à confirmer par l'utilisateur)
 HELP_R = 10.0  # une aide est à 10 m au plus du centre du combat (5 à 6 s de marche)
 ALIVE_AFTER_S = 2.5  # survivants comptés 2,5 s après le dernier kill (la fin d'une vie tombe à 2 s du kill, voir lives.KILL_MATCH_S)
 NEAR_M = 7.0  # « près du point » : à moins de 7 m du cadre
@@ -117,6 +120,11 @@ def kind_of(game, i0, help_r=HELP_R, wipe_s=WIPE_S):
     return ("teamfight" if ok and b - a + 1 >= FIGHT_MIN_KILLS else "duel"), len(fs), best, center
 
 
+def is_heavy(kind, losses):
+    """Teamfight lourd : une série classée teamfight où chaque équipe perd au moins HEAVY_MIN_LOSSES joueurs."""
+    return kind == "teamfight" and min(losses.values()) >= HEAVY_MIN_LOSSES
+
+
 def fight_from(game, i, help_r=HELP_R, wipe_s=WIPE_S):
     """Série de kills qui contient le kill d'indice i de game["kills"] (fenêtre maximale de kills séparés d'au plus wipe_s : dict, voir l'en-tête), None si l'indice est hors liste."""
     kills = game["kills"]
@@ -129,7 +137,7 @@ def fight_from(game, i, help_r=HELP_R, wipe_s=WIPE_S):
     alive_end = {t: sum(1 for s in ec.team_slots(t) if ec.alive_at(game, s, t_last + ALIVE_AFTER_S)) for t in ec.TEAMS}
     kind, n_foci, eng, center = kind_of(game, i, help_r, wipe_s)
     return {"i0": i0, "i1": i1, "t_first": round(chain[0][0], 1), "t_last": round(t_last, 1), "n_kills": len(chain), "losses": losses, "alive_end": alive_end,
-            "winner": winner_of(losses, alive_end), "kind": kind, "foyers": n_foci, "engaged": eng, "center": None if center is None else [round(center[0], 4), round(center[1], 4)],
+            "winner": winner_of(losses, alive_end), "kind": kind, "heavy": is_heavy(kind, losses), "foyers": n_foci, "engaged": eng, "center": None if center is None else [round(center[0], 4), round(center[1], 4)],
             "kills": [{"t": round(k[0], 1), "killer": k[1], "victim": k[2], "weapon": k[3], "kind": k[4]} for k in chain]}
 
 

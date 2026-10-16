@@ -204,3 +204,14 @@ def test_changement_apres_un_trou_trop_long_nest_pas_une_rotation():
     boxes = [(0.0, 60.0, 0.5, 0.82, 0.12, 0.10, "C"), (100.0, 178.0, 0.25, 0.37, 0.12, 0.09, "B")]
     conn = make_conn({1: rotates(92, 100), 2: rotates(93, 104)}, boxes=boxes)
     assert rotations.compute(conn, 1) == 0
+
+
+def test_carte_sans_changement_de_point_n_ecrit_aucune_rotation():
+    # Engine et Helios Station : "none" dans map_rotation_schedule.json. Même avec un point_active parasite (A puis B), aucun épisode ; la même partie sur Outlaw en donne.
+    tracks = {1: rotates(92, 100), 2: rotates(93, 104), 5: stays_on_c, 6: stays_on_c}
+    active = [("A", 0.0, 88.0, "schedule"), ("B", 90.0, 178.0, "schedule")]
+    for name in ("Engine", "Helios Station"):
+        conn = make_conn(tracks, map_name=name, boxes=[], active=active)
+        game = ec.load_game(conn, 1)
+        assert rotations.find_episodes(game) == [] and rotations.compute(conn, 1) == 0
+    assert rotations.REVISION == 4

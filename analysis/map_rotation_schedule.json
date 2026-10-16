@@ -1,5 +1,5 @@
 {
-  "_remarque": "Instants de changement du point actif en CHRONO RESTANT (le chrono affiche cette valeur), par carte. Sur ces cartes les instants sont toujours les mêmes d'une game à l'autre, seul le point qui apparaît est aléatoire (indication de l'utilisateur, 14 octobre 2026) : le HUD ne sert qu'à lire quel point est allumé dans chaque période (analysis/rotation_schedule.py). Une carte sans entrée ou sans changement reste lue par le HUD seul. dernier_ouvert : après le dernier instant listé le calendrier n'est pas connu, la suite vient du HUD seul.",
+  "_remarque": "Instants de changement du point actif en CHRONO RESTANT (le chrono affiche cette valeur), par carte. Sur ces cartes les instants sont toujours les mêmes d'une game à l'autre, seul le point qui apparaît est aléatoire (indication de l'utilisateur, 14 octobre 2026) : le HUD ne sert qu'à lire quel point est allumé dans chaque période (analysis/rotation_schedule.py). Une carte sans entrée reste lue par le HUD seul. Une entrée avec la clé none à true est une carte SANS aucun changement de point (Engine, Helios Station) : pas de calendrier, pas de rotation (rotation_schedule.has_no_change). dernier_ouvert : après le dernier instant listé le calendrier n'est pas connu, la suite vient du HUD seul.",
   "Outlaw": {
     "chrono_depart": "12:00",
     "dernier_ouvert": false,
@@ -26,10 +26,18 @@
       { "restant": "4:25", "source": "mesuré sur 1 game (31, relue en 43)" }
     ]
   },
-  "Helios Station": {
+  "Engine": {
+    "none": true,
     "chrono_depart": null,
-    "dernier_ouvert": true,
+    "dernier_ouvert": false,
     "changements": [],
-    "source": "aucune game analysée (seulement un plan dans l'onglet Stratégie) : les instants sont à ajouter ici, ils ne sont ni mesurés ni indiqués"
+    "source": "aucun changement de point sur cette carte (information de l'utilisateur, 16 octobre 2026) : les trois points sont toujours allumés, pas de rotation"
+  },
+  "Helios Station": {
+    "none": true,
+    "chrono_depart": null,
+    "dernier_ouvert": false,
+    "changements": [],
+    "source": "aucun changement de point sur cette carte (information de l'utilisateur, 16 octobre 2026) : pas de rotation (aucune game analysée pour le vérifier)"
   }
 }

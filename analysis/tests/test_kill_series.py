@@ -40,6 +40,28 @@ def test_quatre_kills_avec_des_coequipiers_a_cote_sont_un_teamfight():
     assert f["losses"] == {"A": 1, "B": 3} and f["winner"] == "A"
 
 
+def test_teamfight_lourd_quand_les_deux_equipes_perdent_au_moins_trois_joueurs():
+    players = {s: at(MID) for s in range(1, 9)}
+    kills = [(40.0, 5, 1), (41.0, 6, 2), (42.0, 7, 3), (44.0, 4, 5), (45.0, 4, 6), (46.0, 4, 7)]
+    f = kill_series.fight_from(game_of(make_conn(players, kills=kills)), 0)
+    assert f["kind"] == "teamfight" and f["losses"] == {"A": 3, "B": 3} and f["heavy"] is True
+    assert kill_series.HEAVY_MIN_LOSSES == 3
+
+
+def test_teamfight_a_sens_unique_ou_duel_nest_pas_lourd():
+    players = {s: at(MID) for s in (1, 2, 3, 5, 6, 7)}
+    kills = [(40.0, 1, 5), (42.0, 2, 6), (44.0, 7, 3), (46.0, 2, 7)]  # A perd 1, B perd 3 : teamfight non lourd, le gagnant ne change pas
+    f = kill_series.fight_from(game_of(make_conn(players, kills=kills)), 0)
+    assert f["kind"] == "teamfight" and f["heavy"] is False and f["winner"] == "A"
+    one = kill_series.fight_from(game_of(make_conn({1: at(FAR_A), 5: at(FAR_A)}, kills=[(40.0, 1, 5)])), 0)
+    assert one["kind"] == "duel" and one["heavy"] is False
+
+
+def test_is_heavy_seuil_et_nature():
+    assert kill_series.is_heavy("teamfight", {"A": 3, "B": 4}) and not kill_series.is_heavy("teamfight", {"A": 2, "B": 4})
+    assert not kill_series.is_heavy("duel", {"A": 3, "B": 3})
+
+
 def test_aide_a_moins_de_dix_metres_fait_un_teamfight_meme_avec_un_seul_kill_par_equipe():
     # le 2 et le 6 ne tuent ni ne meurent mais sont à côté du combat : engagés
     players = {1: at(MID), 5: at(MID), 2: at((MID[0] - 0.05, MID[1])), 6: at((MID[0] + 0.05, MID[1]))}

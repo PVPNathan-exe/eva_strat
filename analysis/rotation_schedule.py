@@ -14,7 +14,8 @@ d'avant quand un autre est allumé (jamais le même point deux fois de suite sur
 dont aucun point n'est assez lu n'a pas de ligne (elle est signalée dans les statistiques) : le calendrier fixe les bornes, il n'invente pas l'identité.
 
 Entrée `dernier_ouvert` (Atlantis : seuls les changements jusqu'à 4:25 sont mesurés, les games lues finissent à 4:00 et 5:30) : au-delà du dernier instant connu, les plages viennent du HUD seul
-(le point le plus lumineux de chaque seconde, plages d'au moins MIN_TAIL_RUN_S). Une carte sans entrée ou sans changement (Helios Station : aucune game analysée) reste lue par le HUD seul.
+(le point le plus lumineux de chaque seconde, plages d'au moins MIN_TAIL_RUN_S). Une carte sans entrée reste lue par le HUD seul. Une entrée `"none": true` (Engine, Helios Station) dit que la carte n'a AUCUN changement de point (information de l'utilisateur, 16 octobre 2026) :
+`has_no_change` la signale, `load_calendar` rend None et rotations.py n'écrit aucune rotation.
 Sortie : segments {point, t0, t1, source « schedule »} de la table `point_active` (secondes depuis le début de la game)."""
 
 import json
@@ -41,6 +42,12 @@ def parse_chrono(text):
     """« 11:25 » en secondes restantes (685)."""
     minutes, seconds = text.strip().split(":")
     return int(minutes) * 60 + int(seconds)
+
+
+def has_no_change(map_name, path=SCHEDULE_FILE):
+    """Vrai si l'entrée de la carte porte `"none": true` : la carte n'a aucun changement de point (Engine, Helios Station), donc ni calendrier ni rotation. Carte sans entrée : faux."""
+    entry = json.loads(Path(path).read_text(encoding="utf-8")).get(map_name)
+    return isinstance(entry, dict) and entry.get("none") is True
 
 
 def load_calendar(map_name, path=SCHEDULE_FILE):

@@ -1,4 +1,4 @@
-"""Épisodes de retake, REVISION 3 (table `episodes`, kind = retake) : `python analysis/retakes.py --game N [--db chemin] [--dry-run] [--sheet]`.
+"""Épisodes de retake, REVISION 4 (table `episodes`, kind = retake) : `python analysis/retakes.py --game N [--db chemin] [--dry-run] [--sheet]`.
 
 Refonte autour de la VAGUE (docs/PLAN_STATS_AGENTS.md, section 11 ; waves.py détecte les vagues, kill_series.py décrit les séries de kills). Une **vague** est un départ du spawn (au moins 2 joueurs d'une équipe
 sortent de leur zone de départ en `WAVE_JOIN_S`). Chaque vague de l'équipe qui n'a PAS le point (ou d'un point neutre) est un épisode ; la vague de l'équipe qui TIENT le point (renfort, défense) est classée
@@ -25,7 +25,7 @@ Schéma de `data` : clés lues par le site (révision 2, remplies avec les valeu
 to_team (équipe de la vague), attackers [{slot, pos, dist_m}] (membres, au premier kill), defenders [{slot, pos, dist_m, fate, death_t}] (ennemis vivants au premier kill ; fate mort, recule, reste), first_death, deaths
 [{slot, t, dt_push, killer, weapon, killer_dist_m, defenders_near, cause, pos, team}] (victimes du teamfight), stagger_s (écart de sortie des deux premiers joueurs), survivors (membres vivants 3 s après le teamfight).
 Nouveau : `wave` {team, t_start, t_full, t_contact (premier kill d'un membre), t_end, duration_s, to_contact_s, to_fight_s, kind (teamfight, duel ou None), n_fights, axis_frac (0 au spawn de la vague, 1 à celui de l'adversaire ; None sur Outlaw), size, speed (rapide, progressif ou None sans contact), n_stops, stop_s, mean_speed_ms, path_m, point, holder_before, holder_after,
-tf_result, captured_t, capture_from, opening (première prise de la game), survivors_retreated, members [{slot, life_idx, t_exit, t_death}], fight {t_first, t_last, n_kills, losses, alive_end, winner, kind, foyers, engaged {A, B}, center, near_point}}.
+tf_result, captured_t, capture_from, opening (première prise de la game), survivors_retreated, members [{slot, life_idx, t_exit, t_death}], fight {t_first, t_last, n_kills, losses {A, B}, alive_end, winner, kind, heavy (REVISION 4 : les deux équipes perdent au moins HEAVY_MIN_LOSSES joueurs ; absent des anciennes lignes), foyers, engaged {A, B}, center, near_point}}.
 Idempotent, verdicts conservés au recalcul si l'épisode correspond (même équipe, même point, début à 5 s près). Contrat commun des modules Stats : `compute(conn, game_id) -> int`, `stats_meta` (module `retakes`, révision REVISION)."""
 
 import argparse
@@ -37,7 +37,7 @@ import kill_series
 import waves as waves_mod
 
 MODULE = "retakes"
-REVISION = 3  # 3 : refonte autour des vagues (initial, success, fail, won_no_capture, no_contact), plus de séries de kills ; 2 : séries de kills ; 1 : poussée au point
+REVISION = 4  # 4 : `wave.fight.heavy` (teamfight lourd : les deux équipes perdent au moins 3 joueurs, losses déjà enregistré) ; 3 : refonte autour des vagues (initial, success, fail, won_no_capture, no_contact), plus de séries de kills ; 2 : séries de kills ; 1 : poussée au point
 SUCCESS_S = 15.0  # une prise dans les 15 s qui suivent la fin du teamfight (ou le départ, sans kill) fait partie de la vague
 FAIL_MIN_DEAD = 2  # un teamfight perdu : au moins 2 morts de la vague
 R_RETREAT = 7.0  # « reculé » : à plus de 7 m du point, 3 s après le teamfight
@@ -186,7 +186,7 @@ def build_data(game, wave, ctxs, ci, cap, holder, result, outcome, t_end, openin
          "captured_t": None if cap is None else round(cap[0], 1), "capture_from": None if cap is None else cap[1], "opening": opening, "survivors_retreated": retreated,
          "members": [{k: m[k] for k in ("slot", "life_idx", "t_exit", "t_death")} for m in members],
          "kind": None if f is None else f["kind"], "to_fight_s": wave["to_fight_s"], "n_fights": wave["n_fights"], "axis_frac": wave["axis_frac"],
-         "fight": None if f is None else {k: f[k] for k in ("t_first", "t_last", "n_kills", "losses", "alive_end", "winner", "kind", "foyers", "engaged", "center")} | {"near_point": kill_series.victims_near_share(game, f, rect)}}
+         "fight": None if f is None else {k: f[k] for k in ("t_first", "t_last", "n_kills", "losses", "alive_end", "winner", "kind", "heavy", "foyers", "engaged", "center")} | {"near_point": kill_series.victims_near_share(game, f, rect)}}
     return {"change_t": None if cap is None else round(cap[0], 1), "push_t": wave["t_start"], "window": [round(max(0.0, wave["t_start"] - PAD_S), 2), round(min(game["duration"], t_end + PAD_S), 2)],
             "from_team": holder, "to_team": team,
             "attackers": [_player(game, s, rect, t_ref) for s in slots], "defenders": _defenders(game, team, rect, t_ref, f, t_after),

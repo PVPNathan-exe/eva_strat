@@ -39,8 +39,17 @@ def test_atlantis_est_mesure_et_garde_une_suite_ouverte():
 
 
 def test_helios_station_et_les_cartes_sans_calendrier_n_ont_rien():
-    assert rs.load_calendar("Helios Station") is None  # entrée vide : aucune game analysée
+    assert rs.load_calendar("Helios Station") is None  # aucun changement de point
+    assert rs.load_calendar("Engine") is None
     assert rs.load_calendar("Polaris") is None
+
+
+def test_engine_et_helios_station_sont_explicitement_sans_changement_de_point():
+    assert rs.has_no_change("Engine") and rs.has_no_change("Helios Station")
+    assert not any(rs.has_no_change(m) for m in ("Outlaw", "Atlantis", "Polaris", "Carte inconnue"))
+    data = json.loads(rs.SCHEDULE_FILE.read_text(encoding="utf-8"))
+    for name in ("Engine", "Helios Station"):
+        assert data[name]["none"] is True and data[name]["changements"] == []
 
 
 def test_le_fichier_est_du_json_valide_avec_des_sources():

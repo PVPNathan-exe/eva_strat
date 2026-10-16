@@ -2,7 +2,8 @@
 
 Définition (docs/PLAN_STATS_AGENTS.md, section 2, précisée par l'utilisateur le 14 octobre 2026). Une **rotation** est le MOMENT OÙ LE POINT ACTIF CHANGE (plus facile à déterminer qu'un retake) :
 une équipe (au moins 2 joueurs) quitte l'ancien point pour jouer le nouveau. Calendrier du point actif (episode_common.load_schedule) : table `point_active` si elle a des lignes pour
-la game, sinon, sur Outlaw, les boîtes vues (`capture_boxes`) ; une carte à plusieurs points sans `point_active` (Atlantis, Engine) ou à un seul point : aucune rotation.
+la game, sinon, sur Outlaw, les boîtes vues (`capture_boxes`) ; une carte à plusieurs points sans `point_active` ou à un seul point : aucune rotation.
+Engine et Helios Station (`"none": true` dans map_rotation_schedule.json, REVISION 4) n'ont AUCUN changement de point : `find_episodes` ne rend rien pour elles, même si `point_active` a des lignes.
 Sur Outlaw et Atlantis (REVISION 3) `point_active` vient du calendrier fixe de la carte (`rotation_schedule.py`, source `schedule`) : les instants de changement sont ceux du chrono (Outlaw 11:25,
 9:55, 8:25, 6:55, 5:25, 3:55, 2:25, 0:55 ; Atlantis 9:55, 8:25 puis toutes les 60 s) convertis en secondes de game, le HUD ne dit que QUEL point est allumé. Le changement T n'a donc plus le retard
 de 2 s de la lecture seule du HUD (mesuré : le HUD s'allume 0,5 s après le chrono, une image de plus à une image par seconde) et tombe sur le début de la boîte de la minimap à 0 s près
@@ -34,9 +35,10 @@ import sys
 
 import episode_common as ec
 import retakes
+import rotation_schedule
 
 MODULE = "rotations"
-REVISION = 3  # 2 : calendrier point_active, 20 s avant et après, adversaire, gagnant, plusieurs cartes ; 3 : point_active du calendrier fixe (instants exacts, source schedule)
+REVISION = 4  # 4 : aucune rotation sur une carte sans changement de point (Engine, Helios Station : `none` de map_rotation_schedule.json) ; 3 : point_active du calendrier fixe (instants exacts, source schedule) ; 2 : calendrier point_active, 20 s avant et après, adversaire, gagnant, plusieurs cartes
 OUTLAW = "Outlaw"
 # Valeurs étalonnées sur Outlaw, game 32 (5 changements de point, 10 équipes) : la game 19 a des boîtes mais pas de positions, donc non mesurée.
 R_POINT = 4.0  # « sur un point » : à moins de 4 m du cadre (même seuil que R_PUSH des retakes)
@@ -211,6 +213,8 @@ def _episode(game, old, new, team, flows):
 def find_episodes(game):
     """Épisodes de rotation d'une game chargée (episode_common.load_game) : un par équipe et par changement de point actif, triés par temps. Aucun sans calendrier."""
     out = []
+    if rotation_schedule.has_no_change(game["map"]):  # Engine, Helios Station : aucun changement de point, donc aucune rotation (même si un point_active parasite existe)
+        return out
     sched = game.get("schedule") or []
     for old, new in zip(sched, sched[1:]):
         if old["point"] == new["point"] or new["t0"] - old["t1"] > MAX_SWITCH_GAP_S:
