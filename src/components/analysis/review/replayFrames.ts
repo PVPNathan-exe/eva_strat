@@ -103,6 +103,8 @@ export function computeTrails(frames: Frame[], time: number, hidden: Set<number>
   const i = frameIndexAt(frames, time);
   const first = Math.max(0, frameIndexAt(frames, time - TRAIL_S));
   const out: Trail[] = [];
+  // Position affichée du point (interpolée entre deux échantillons) : la traînée finit exactement dessus, sinon le point devance le bout du trait et le trait saute d'un segment à chaque nouvel échantillon
+  const current = new Map(shownAt(frames, time).map((p) => [p.slot, p]));
   const slots = new Set<number>();
   for (let j = i; j >= 0 && frames[j].t >= time - TRAIL_S; j--) for (const s of frames[j].bySlot.keys()) slots.add(s);
   for (const slot of slots) {
@@ -126,6 +128,11 @@ export function computeTrails(frames: Frame[], time: number, hidden: Set<number>
       const p = place(s.x, s.y);
       run.push(`${p.x},${p.y}`);
       prev = s;
+    }
+    const now = current.get(slot);
+    if (prev && now && now.alive && prev === frames[i].bySlot.get(slot) && (now.x !== prev.x || now.y !== prev.y)) {
+      const p = place(now.x, now.y);
+      run.push(`${p.x},${p.y}`);
     }
     flush();
   }

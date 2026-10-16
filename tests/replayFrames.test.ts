@@ -63,3 +63,20 @@ test('instant avec le dixième de seconde', () => {
   assert.equal(formatFine(72.34), '1:12.3');
   assert.equal(formatFine(-3), '0:00.0');
 });
+
+test('la traînée finit exactement sur la position affichée du point (interpolée entre deux images), à chaque instant', () => {
+  const frames = groupFrames([s(1, 10, 1, 0.1, 0.1), s(2, 11, 1, 0.3, 0.1), s(3, 12, 1, 0.5, 0.1)]);
+  for (const t of [10.4, 11, 11.25, 11.9]) {
+    const pawn = shownAt(frames, t).find((p) => p.slot === 1)!;
+    const trail = computeTrails(frames, t, new Set(), place).find((tr) => tr.key.startsWith('1-'));
+    assert.ok(trail, `traînée à ${t}`);
+    const last = trail.points.split(' ').pop()!;
+    assert.equal(last, `${place(pawn.x, pawn.y).x},${place(pawn.x, pawn.y).y}`, `bout de la traînée à ${t} s`);
+  }
+});
+
+test('la traînée ne rejoint pas le point du joueur mort', () => {
+  const frames = groupFrames([s(1, 10, 1, 0.1, 0.1), s(2, 11, 1, 0.3, 0.1, { alive: 0 })]);
+  const trail = computeTrails(frames, 10.5, new Set(), place).find((tr) => tr.key.startsWith('1-'));
+  assert.equal(trail, undefined, 'un seul point vivant : pas de trait');
+});
