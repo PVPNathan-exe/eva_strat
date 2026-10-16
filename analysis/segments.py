@@ -14,6 +14,7 @@ MIN_GAME_S = 20.0
 MIN_READINGS = 5
 JUMP_UP_S = 5  # le chrono remonte de plus que ça : nouvelle game
 UNREADABLE_DOUBT_S = 5.0
+GAP_DETERMINED_TOL_S = 1  # un trou de lectures dont le chrono, avant et après, colle au temps écoulé à cette tolérance près (une lecture arrondie à la seconde) est déterminé : pas de doute
 FROZEN_DOUBT_READINGS = 5
 EARLY_END_S = 5  # chrono restant au-delà duquel la fin est à vérifier
 
@@ -48,7 +49,8 @@ def _split(readings, gap_s):
             if jump_up or (long_gap and not consistent):
                 groups.append((current, doubts))
                 current, doubts = [], []
-            elif gap >= UNREADABLE_DOUBT_S + 1:
+            elif gap >= UNREADABLE_DOUBT_S + 1 and abs((pv - v) - gap) > GAP_DETERMINED_TOL_S:
+                # Le chrono illisible est déterminable quand il reprend exactement là où le temps écoulé le place : seul un chrono qui ne colle pas (pause, saut) est un doute
                 doubts.append({"start_s": pt, "end_s": t, "label": "Chrono illisible sur cette zone"})
         current.append((t, v))
     if current:

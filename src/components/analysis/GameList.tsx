@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { AlertTriangle, ArrowLeftToLine, ArrowRight, ArrowRightToLine, Play, Square } from 'lucide-react';
 import { analysisApi } from '../../lib/analysisApi';
 import { builtinMaps } from '../../lib/builtinMaps';
+import { doubtTarget, nextToCheck } from '../../lib/gameDoubts';
 import { formatTime } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game } from '../../types/analysis';
@@ -60,7 +61,21 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
           <span className={`game__dot${g.samples > 0 ? ' is-read' : ''}`} title={g.samples > 0 ? `Positions lues (${g.samples} points)` : 'Positions pas encore lues'} />
           <strong>Game {index + 1}</strong>
           <span className="game__map">{g.map ?? 'carte ?'}</span>
-          {toCheck && <AlertTriangle className="ic game__warn" aria-label="À vérifier" />}
+          {toCheck && (
+            <button
+              type="button"
+              className="game__warn"
+              title="Aller directement au point à vérifier (la fin de game en priorité)"
+              aria-label="Aller au point à vérifier"
+              onClick={(e) => {
+                e.stopPropagation();
+                selectGame(g.id);
+                requestSeek(doubtTarget(g.doubts) ?? g.start_s);
+              }}
+            >
+              <AlertTriangle className="ic" />
+            </button>
+          )}
           <span className="game__time">
             {formatTime(g.start_s)} <ArrowRight className="ic" /> {formatTime(g.end_s)}
           </span>
@@ -79,7 +94,18 @@ export function GameList({ videoId, duration }: { videoId: number; duration: num
                   </button>
                 ))}
                 {g.status === 'detected' && (
-                  <button onClick={() => void act(() => analysisApi.patchGame(g.id, { status: 'confirmed' }))}>Confirmer</button>
+                  <button
+                    onClick={async () => {
+                      // Valider enchaîne sur la game suivante à vérifier, directement sur son point à vérifier
+                      const next = nextToCheck(games, g.id);
+                      if (await act(() => analysisApi.patchGame(g.id, { status: 'confirmed' })) && next) {
+                        selectGame(next.id);
+                        requestSeek(doubtTarget(next.doubts) ?? games.find((x) => x.id === next.id)?.start_s ?? 0);
+                      }
+                    }}
+                  >
+                    Confirmer et passer à la suivante
+                  </button>
                 )}
               </div>
             )}

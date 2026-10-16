@@ -29,8 +29,17 @@ def test_clock_jumping_back_starts_a_new_game():
     assert games[0]["end_s"] <= 100 <= games[1]["start_s"] + 5
 
 
-def test_unreadable_gap_is_flagged_but_game_kept():
+def test_unreadable_gap_with_a_consistent_clock_is_determined_not_flagged():
+    # Le chrono est illisible 10 s mais reprend exactement là où le temps écoulé le place : il est déterminable, aucun doute
     samples = [(t, None if 30 <= t < 40 else v) for t, v in clock(600, 5, 100)]
+    games = segments.detect_games(samples, duration=300)
+    assert len(games) == 1
+    assert not any("illisible" in d["label"] for d in games[0]["doubts"])
+
+
+def test_unreadable_gap_where_the_clock_does_not_match_is_flagged_but_game_kept():
+    # Le chrono illisible 10 s reprend 4 s trop haut (pause de 4 s) : il ne colle plus au temps écoulé, c'est un vrai doute
+    samples = [(t, None if 30 <= t < 40 else (v if t < 30 else v + 4)) for t, v in clock(600, 5, 100)]
     games = segments.detect_games(samples, duration=300)
     assert len(games) == 1
     assert any("illisible" in d["label"] for d in games[0]["doubts"])
