@@ -205,3 +205,17 @@ def test_la_game_au_repli_est_utilisee_seulement_sur_demande(tmp_path):
     on, _ = L.compute_detail(conn, 1, tmp_path, use_game=True, frames=frames)
     assert off[0]["gadget"] is None and on[0]["gadget"] == "G1" and on[0]["source"] == "game"
     assert on[0]["weapon2"] is None  # B1 est déjà l'arme 1 : jamais deux fois la même
+
+
+def test_un_gadget_terne_deja_utilise_ne_vote_pas_pour_l_identite_de_l_icone(tmp_path):
+    shape = np.zeros((24, 34), np.uint8)
+    shape[8:17, 6:26] = 1
+    weapons.identify(shape, folder=tmp_path, prefix="G", create=True, tone=shape * 140)  # le modèle « G1 »
+    bright = make_row(gun(), "arme2")
+    bright["gadget"] = (shape, shape * 140)  # gadget disponible : noir, relief 140
+    dim = make_row(gun(), "arme2")
+    dim["gadget"] = (shape, shape * 25)  # le même gadget utilisé : terne, relief 25
+    assert L.classify(bright, tmp_path)["gadget"] == "G1"
+    assert L.classify(dim, tmp_path)["gadget"] is None
+    reads = {"start": [L.classify(dim, tmp_path)] * 3, "end": []}
+    assert L.vote_life(reads)["gadget"] is None  # aucune image disponible : pas d'identité devinée sur des images ternes

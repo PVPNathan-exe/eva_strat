@@ -30,7 +30,7 @@ import loadout
 import weapons
 
 MODULE = "loadout_life"
-REVISION = 1
+REVISION = 2  # 2 : un gadget terne (déjà utilisé) ne vote plus pour l'identité de l'icône (GADGET_MIN_TONE)
 
 START_OFFSETS = (0.8, 1.8, 3.0, 4.5, 6.5, 9.0)  # images lues après l'apparition (secondes) : le joueur a le temps de tenir et de changer d'arme
 END_OFFSETS = (-1.2, -0.7, -0.3)  # images lues avant la mort : l'arme tenue au moment de mourir
@@ -38,6 +38,7 @@ END_OFFSETS_GAME_END = (-3.0, -2.4, -1.8)  # fin de game : l'écran de fin noirc
 MIN_ALIVE_S = 0.3  # une image doit tomber au moins 0,3 s avant la fin de la vie
 MAX_WORKERS = 3  # lectures d'images ffmpeg en parallèle (règle du projet : 3 processus de lecture au plus)
 ORIGIN_RANK = {"lu": 0, "lu1": 1, "pale": 2, "game": 3}  # du plus fiable au moins fiable
+GADGET_MIN_TONE = 55  # relief (95e centile) à partir duquel l'icône du gadget est celle d'un gadget DISPONIBLE (noire) : 55 à 125 mesuré, un gadget utilisé n'a que 14 à 44 (analysis/gadget_state.py)
 PALE_MAX_TONE = 50  # relief (95e centile) au-dessus duquel une case n'est plus « rangée » : mesuré 11 à 47 sur 320 bandeaux
 
 
@@ -87,7 +88,9 @@ def classify(row, folder, create=False):
         if float(ptone.max()) > 0 and float(np.percentile(ptone, 95)) < PALE_MAX_TONE and pshape.sum() >= weapons.MIN_PIXELS:
             out["pale"] = (other, loadout.identify_pale(pshape, ptone, folder))
     gshape, gtone = row["gadget"]
-    out["gadget"] = _id(gshape, "gadget", gtone, folder, create)
+    # Un gadget utilisé est terne (presque du ton du fond) : son icône est floue et se confondait avec un autre gadget (le shield utilisé lu comme DX3). Seule une icône disponible vote.
+    if float(np.percentile(gtone, 95)) >= GADGET_MIN_TONE:
+        out["gadget"] = _id(gshape, "gadget", gtone, folder, create)
     return out
 
 
