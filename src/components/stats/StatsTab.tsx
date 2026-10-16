@@ -3,21 +3,23 @@
 // Présence et les cumuls additionnent les games retenues. Retakes et Rotations rejouent aussi une game (chronologie des points et des épisodes) ; Rotations garde un mode Cumul sur les games retenues.
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { ClipboardList, Flame, Repeat, Route, ShieldCheck, Skull, Swords } from 'lucide-react';
+import { ClipboardList, Flame, ListChecks, Repeat, Route, ShieldCheck, Skull, Swords, Users } from 'lucide-react';
 import { eligibleGames, pickGames, teamNames } from '../../lib/teamFollow';
 import { StatsFilters, type StatsFilterState } from './StatsFilters';
 import { StatsDeaths } from './StatsDeaths';
 import { StatsPaths } from './StatsPaths';
 import { StatsPlans } from './StatsPlans';
 import { StatsPresence } from './StatsPresence';
+import { StatsRecap } from './StatsRecap';
 import { StatsRetakes } from './StatsRetakes';
 import { StatsRotations } from './StatsRotations';
 import { StatsSafe } from './StatsSafe';
+import { StatsTeam } from './StatsTeam';
 import { gameLabel, INITIAL_FILTERS, mapsOf, noticeOf, specOf, useStatsGames } from './useStats';
 
-type View = 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe' | 'plans';
+type View = 'recap' | 'equipe' | 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe' | 'plans';
 
-const REPLAY_VIEWS: View[] = ['parcours', 'morts', 'retakes', 'rotations', 'safe'];
+const REPLAY_VIEWS: View[] = ['recap', 'parcours', 'morts', 'retakes', 'rotations', 'safe'];
 
 export function StatsTab() {
   const [view, setView] = useState<View>('parcours');
@@ -48,6 +50,8 @@ export function StatsTab() {
   return (
     <div className="stats">
       <div className="subtabs" role="tablist" aria-label="Vue des statistiques">
+        {tab('recap', <ListChecks className="ic" />, 'Récap')}
+        {tab('equipe', <Users className="ic" />, 'Équipe')}
         {tab('parcours', <Route className="ic" />, 'Parcours')}
         {tab('morts', <Skull className="ic" />, 'Morts')}
         {tab('presence', <Flame className="ic" />, 'Présence')}
@@ -75,10 +79,14 @@ export function StatsTab() {
           )}
           {view === 'plans' ? (
             <StatsPlans map={map} />
+          ) : view === 'equipe' ? (
+            <StatsTeam map={map} games={mapGames} spec={spec} />
           ) : selected.length === 0 || !replay ? (
             <p className="stats__empty">
               {mapGames.length === 0 ? 'Aucune game de cette carte pour ce choix d\'équipe et de côté.' : 'Aucune game retenue : cocher au moins une game dans le menu Games.'}
             </p>
+          ) : view === 'recap' ? (
+            <StatsRecap map={map} replay={replay} spec={spec} />
           ) : view === 'parcours' ? (
             <StatsPaths map={map} games={selected} replay={replay} spec={spec} />
           ) : view === 'morts' ? (

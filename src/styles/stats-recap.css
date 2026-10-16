@@ -1,0 +1,190 @@
+/* Vue Récap de l'onglet Stats (StatsRecap, recap/RecapPlayers, recap/RecapKills) : bandeau, tableau par joueur, liste des kills notés.
+   Couleurs uniquement par les jetons de tokens.css et la palette .pal de stats.css (--pal) : l'équipe suivie par son nom est toujours « a ». */
+
+.recap__banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  color: var(--c-text-soft);
+  font-size: 0.9rem;
+}
+
+.recap__banner b {
+  color: var(--c-text);
+}
+
+.recap__team {
+  color: var(--pal);
+  font-weight: 600;
+}
+
+.recap__h {
+  margin: 0.4rem 0 0;
+  color: var(--c-text);
+  font-size: 0.95rem;
+}
+
+/* Pastille de couleur d'équipe (légende, nom du joueur, kills) */
+.recap__dot {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.35rem;
+  vertical-align: baseline;
+  background: var(--pal, var(--c-text-muted));
+  border-radius: 50%;
+}
+
+.recap__nobody {
+  background: var(--c-text-muted);
+}
+
+/* Tableau par joueur : défile en largeur dans son cadre (jamais plus large que l'écran) */
+.recap__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+
+.recap__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.recap__table th,
+.recap__table td {
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-soft);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.recap__table thead th {
+  color: var(--c-text-muted);
+  font-weight: 600;
+  white-space: normal;
+  vertical-align: bottom;
+}
+
+.recap__table tbody th {
+  color: var(--c-text);
+  font-weight: 500;
+  text-align: left;
+}
+
+.recap__table thead th:first-child {
+  text-align: left;
+}
+
+.recap__table td[title],
+.recap__table thead th[title] {
+  cursor: help;
+}
+
+/* Trait de la couleur de l'équipe à gauche de chaque ligne de joueur */
+.recap__table tbody tr th:first-child {
+  border-left: 3px solid var(--pal);
+}
+
+.recap__total th,
+.recap__total td {
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.recap__table tbody:last-of-type tr:last-child th,
+.recap__table tbody:last-of-type tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Liste des kills notés */
+.recap__kills {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recap__kill {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.7rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  color: var(--c-text-soft);
+  font-size: 0.85rem;
+  min-width: 0;
+}
+
+.recap__when {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.recap__when:hover {
+  border-color: var(--c-text-muted);
+}
+
+.recap__sentence {
+  flex: 1 1 14rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--c-text);
+}
+
+.recap__note {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.recap__note--good {
+  color: var(--c-ok-text);
+}
+
+.recap__note--bad {
+  color: var(--c-danger-soft);
+}
+
+.recap__note--neutral {
+  color: var(--c-text-muted);
+}
+
+.recap__why {
+  flex: 1 1 100%;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+.recap__why > summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.recap__why p {
+  max-width: 75ch;
+  margin: 0.25rem 0 0;
+  line-height: 1.4;
+}

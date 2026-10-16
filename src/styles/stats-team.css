@@ -1,0 +1,159 @@
+/* Vue Équipe de l'onglet Stats (StatsTeam) : légende, tableaux, avertissement du seuil de games. Couleurs : jetons de tokens.css et palette .pal de stats.css. */
+
+.team {
+  max-width: 100%;
+}
+
+/* Les couches de chaleur se superposent dans la boîte de la minimap */
+.team__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.team__gate {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--c-warn);
+  border-radius: 6px;
+  background: var(--c-surface);
+  color: var(--c-text-soft);
+  font-size: 0.88rem;
+}
+
+.team__off {
+  color: var(--c-text-muted);
+}
+
+.team__note {
+  margin: 0.3rem 0 0;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+/* Légende toujours visible sous la barre */
+.team__legend {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: var(--c-surface);
+}
+
+.team__legend-text {
+  margin: 0;
+  color: var(--c-text-soft);
+  font-size: 0.82rem;
+}
+
+.team__legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+  min-width: 0;
+}
+
+.team__legend-games {
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+.team__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+  color: var(--c-text);
+}
+
+.team__chip::before {
+  content: '';
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  background: var(--pal-base);
+}
+
+.team__scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--c-text-muted);
+  font-size: 0.78rem;
+}
+
+.team__scale-bar {
+  width: 6rem;
+  height: 0.55rem;
+  background: linear-gradient(90deg, var(--c-heat-low), var(--pal-base));
+  border: 1px solid var(--c-border);
+  border-radius: 3px;
+}
+
+.team__scale-bar--div {
+  background: linear-gradient(90deg, var(--c-stats-death), var(--c-heat-low), var(--c-stats-life));
+}
+
+/* Tableaux : défilement horizontal dans leur propre cadre, jamais sur la page */
+.team__block {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.team__title {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--c-text);
+}
+
+.team__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.team__table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: var(--c-text-soft);
+}
+
+.team__table th,
+.team__table td {
+  padding: 0.25rem 0.7rem 0.25rem 0;
+  border-bottom: 1px solid var(--c-border);
+  text-align: left;
+  font-weight: normal;
+  vertical-align: top;
+}
+
+.team__table thead th {
+  color: var(--c-text-muted);
+  font-size: 0.78rem;
+}
+
+.team__table tr.is-selected th,
+.team__table tr.is-selected td {
+  color: var(--c-text);
+  background: var(--c-surface-2);
+}
+
+.team__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.team__link[aria-pressed='true'] {
+  color: var(--c-text);
+  text-decoration: underline;
+}
