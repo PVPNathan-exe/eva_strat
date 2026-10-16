@@ -363,5 +363,11 @@ CREATE TABLE IF NOT EXISTS player_game_stats (
   v_mean REAL,
   v_p98 REAL,
   v_max REAL,
+  gadget_uses INTEGER,
+  gadget_unused_at_death INTEGER,
+  gadget_possible REAL,
+  duels_won INTEGER NOT NULL DEFAULT 0,
+  duels_lost INTEGER NOT NULL DEFAULT 0,
+  duels_other INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (game_id, slot)
 );

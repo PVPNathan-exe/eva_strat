@@ -155,4 +155,12 @@ export interface PlayerGameStats {
   v_mean: number | null;
   v_p98: number | null;
   v_max: number | null;
+  /** Utilisations du gadget, morts avec le gadget encore disponible, utilisations possibles (null tant que le délai de recharge du gadget n'est pas mesuré). */
+  gadget_uses: number | null;
+  gadget_unused_at_death: number | null;
+  gadget_possible: number | null;
+  duels_won: number;
+  duels_lost: number;
+  /** Duels sans vainqueur (trade, indécis). */
+  duels_other: number;
 }

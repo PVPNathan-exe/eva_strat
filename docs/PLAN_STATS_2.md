@@ -75,11 +75,11 @@ Un seul calcul vidéo lourd à la fois sur la machine (P8). Le chef de chantier 
 
 ### P11 : bilan par joueur (Python, base seulement)
 - **Possède** : `analysis/player_game_stats.py`, test.
-- **Tâche** : `player_game_stats` (section 2 pour la vitesse). **Mesure** : vitesse médiane d'un joueur en marche franche proche de 1,3 à 1,9 m/s (déjà mesuré), maximum brut contre 98e centile.
+- **Tâche** : `player_game_stats` (colonnes dans le schéma) : kills, morts, temps vivant, distance, vitesses (section 2) ; gadget : `gadget_uses`, `gadget_unused_at_death` (lus dans `gadget_state` et `lives`, sans modifier `gadget_state.py`), `gadget_possible` calculé PAR GADGET avec le délai médian de ce gadget (cycles prêt, utilisé, prêt mesurés dans `gadget_state` sur toutes les games de la base ; au moins 3 cycles, sinon NULL : jamais de valeur inventée) ; duels gagnés, perdus, autres (`duels`). **Mesure** : vitesse médiane d'un joueur en marche franche proche de 1,3 à 1,9 m/s (déjà mesuré), maximum brut contre 98e centile ; délais de recharge trouvés par gadget (P8 a vu 7 à 45 s en mélangeant les gadgets).
 
 ### S4 : routes (TypeScript serveur)
 - **Possède** : `server/statsGame.ts`, `server/statsTeam.ts`, `tests/server/stats-game.test.ts`, `tests/server/stats-team.test.ts` (le chef branche dans `statsApi.ts`).
-- **Tâche** : routes de la section 3, agrégées en SQL, filtrées par équipe et par carte comme `statsPresence.ts`.
+- **Tâche** : `GET /api/stats/gadgets?game=`, `duels?game=`, `kill-scores?game=`, `player-stats?game=` (lignes des tables) ; `game-summary?game=` : par joueur les colonnes de `player_game_stats` plus la somme et la liste des notes de `kill_scores`, par équipe les totaux, le nombre de changements de point (périodes de `point_active` après la première, 0 pour Engine et Helios), le nom de la carte ; `team-summary?map=&team=&games=&side=` : nombre de games, kills et morts, duels, gadgets, grille de morts et de kills par case (positions de mort de `lives`, `n=32`), grille de présence par joueur et par côté (comme `statsPresence.ts`), cases où l'équipe perd ses duels ; `global?map=` : mêmes grilles sur toutes les équipes et taux de réussite des vagues et des retakes par issue, avec le nombre de games. Toujours renvoyer le nombre de games et `min` (5) pour que l'interface masque sous le seuil.
 
 ### F6, F7, F10 : vues Récap, Équipe, Global (React, vagues 3 et 4)
 Fiches détaillées écrites après le rendu de S4 (les champs réels des routes décident). Principes : une couleur par équipe via `.pal`, légende toujours visible, rien de plus large que l'écran, masquage sous 5 games, mention « convention » sur toute note et tout seuil.
