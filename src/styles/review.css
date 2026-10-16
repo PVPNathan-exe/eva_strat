@@ -1,4 +1,4 @@
-/* Écran de review : joueur choisi, corrections sur le plan, commentaire, légende de la zone de tir (components/analysis/review/) */
+/* Écran de review : joueur choisi, notes de review (fantômes, gadgets), légende de la zone de tir (components/analysis/review/) */
 
 .review {
   min-width: 0;
@@ -14,7 +14,7 @@
   box-shadow: 0 0 0 3px var(--c-cyan), 0 0 0 6px var(--c-danger);
 }
 
-/* Mode correction : le plan reçoit le geste, les pastilles laissent passer le pointeur */
+/* Pose d'une note : le plan reçoit le geste, les pastilles laissent passer le pointeur */
 .replay__stage.is-marking {
   cursor: crosshair;
   touch-action: none;
@@ -22,37 +22,6 @@
 
 .replay__dot.is-passive {
   pointer-events: none;
-}
-
-/* Correction posée à la main (et geste en cours) */
-.replay__mark {
-  position: absolute;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  margin: -11px 0 0 -11px;
-  border: 2px solid var(--c-cyan);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--c-bg) 55%, transparent);
-  color: var(--c-cyan);
-  font-size: 11px;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.replay__mark.is-drag {
-  border-style: dashed;
-}
-
-.replay__mark .replay__dir::after {
-  border-left-color: var(--c-cyan);
-}
-
-.replay__dragline {
-  stroke: var(--c-cyan);
-  stroke-width: 2;
-  stroke-dasharray: 4 3;
 }
 
 /* Légende de la zone de tir */
@@ -93,18 +62,26 @@
   color: var(--c-text-soft);
 }
 
-/* Commentaire */
-.review__comment {
+/* Volet des notes de review */
+.review__noteform {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   margin-top: 0.4rem;
 }
 
-.review__comment textarea {
+.review__noteform textarea,
+.review__noteform input[type='text'] {
   box-sizing: border-box;
   width: 100%;
+  min-width: 0;
   resize: vertical;
+}
+
+.review__guide {
+  margin: 0;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
 }
 
 .review__row {
@@ -119,12 +96,6 @@
   font-size: 0.8rem;
 }
 
-.review__link {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
 .review__send {
   margin-left: auto;
 }
@@ -132,4 +103,126 @@
 .review__done {
   margin: 0;
   color: var(--c-ok);
+}
+
+.review__done--todo {
+  color: var(--c-warn);
+  font-size: 0.8rem;
+}
+
+.review__notelist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review__notelist li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+
+.review__notelist p {
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  color: var(--c-text-soft);
+}
+
+.review__noteopen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  max-width: 100%;
+  text-align: left;
+}
+
+/* Notes sur le plan : fantôme en pointillé, position lue, trait, gadget (positions du plan en pourcentages) */
+.note__link {
+  stroke: var(--c-cyan);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  opacity: 0.8;
+}
+
+.note__link.is-draft {
+  stroke-width: 2;
+  opacity: 1;
+}
+
+.note__ghost {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 2px dashed var(--c);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c-bg) 55%, transparent);
+  color: var(--c);
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.note__ghost.is-draft {
+  box-shadow: 0 0 0 2px var(--c-cyan);
+}
+
+.note__ghost .replay__dir::after {
+  border-left-color: var(--c);
+}
+
+.note__read {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border: 2px solid var(--c);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.note__gadget {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  transform: translate(-6px, -50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.note__gadget i {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--c);
+  border-radius: 3px;
+  background: var(--c-bg);
+}
+
+.note__gadget em {
+  padding: 0 5px;
+  border: 1px solid var(--c);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
+  color: var(--c-text);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.note__gadget.is-draft i {
+  box-shadow: 0 0 0 2px var(--c-cyan);
 }

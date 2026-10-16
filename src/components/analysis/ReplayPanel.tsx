@@ -1,33 +1,36 @@
 // Reconstruction d'une game sur le plan de sa carte, sous la vidéo : positions, regards, traînées, calques (zones peu fiables, zone de tir d'un joueur).
 // Le temps suit la vidéo, ou une horloge propre (lecture, vitesse) pour rejouer sans la vidéo.
 // Les positions sont normalisées sur la minimap du jeu : un cadre réglable (par carte) les ramène sur l'image du plan.
-// Les morceaux sont dans review/ : horloge, données, plan, joueur choisi (corrections, commentaire), zone de tir.
+// Les morceaux sont dans review/ : horloge, données, plan, joueur choisi, notes de review (sans effet sur les données), zone de tir.
 
 import { useMemo, useState } from 'react';
 import { Layers, Pause, Play } from 'lucide-react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { defaultInset, insetStorageKey, project, type Inset } from '../../lib/planInsets';
 import { observedAt, unconfirmedSet } from '../../lib/replayFlags';
+import { gadgetChoices, noteMarks, type NoteShape } from '../../lib/reviewNotes';
 import type { ZoneColors } from '../../lib/safeZones';
 import { formatTime } from '../../lib/timeline';
+import { getVideoElement } from '../../lib/videoRef';
 import { DOOR_OPEN_M } from '../../lib/visibility';
 import { USEFUL_FRACTION } from '../../lib/weaponRange';
 import { useAnalysisStore } from '../../store/analysisStore';
 import type { Game } from '../../types/analysis';
+import type { ReviewNote } from '../../types/stats';
 import { SafeZoneLayer } from '../stats/SafeZoneLayer';
 import { tokenRgb } from '../stats/useStats';
-import { FixForm } from './review/FixForm';
 import { KillList } from './review/KillList';
-import { boxStyleOf, marksNear } from './review/markPlacement';
+import { NotePanel } from './review/NotePanel';
+import { boxStyleOf } from './review/notePlacement';
 import { PlayerPanel } from './review/PlayerPanel';
 import { computeTrails, formatFine, groupFrames, numberOfSlot, shownAt } from './review/replayFrames';
 import { ReplayStage } from './review/ReplayStage';
 import { ScoreChart } from './review/ScoreChart';
 import { WEAPON_CHOICES, type WeaponChoice } from './review/shotZone';
-import { useMarkDrag } from './review/useMarkDrag';
+import { useNoteDraft } from './review/useNoteDraft';
 import { useReplayClock, RATES } from './review/useReplayClock';
 import { useReplayData } from './review/useReplayData';
-import { useReviewMarks } from './review/useReviewMarks';
+import { useReviewNotes } from './review/useReviewNotes';
 import { useShotZone } from './review/useShotZone';
 import { useGameFlags } from './useGameFlags';
 
@@ -49,22 +52,20 @@ const metres = (m: number) => `${m.toFixed(m % 1 ? 1 : 0).replace('.', ',')} m`;
 
 export function ReplayPanel({ game, large = false }: { game: Game; large?: boolean }) {
   const requestSeek = useAnalysisStore((s) => s.requestSeek);
-  const { samples, error, capture, corrections, refresh } = useReplayData(game);
+  const { samples, error, capture } = useReplayData(game);
   const clock = useReplayClock(game);
   const { time } = clock;
-  const review = useReviewMarks(game);
+  const reviewNotes = useReviewNotes(game.id);
 
   const [trails, setTrails] = useState(false);
-  const [fixing, setFixing] = useState(false); // volet « échanger deux joueurs » : un clic sur une pastille la propose à l'échange
-  const [pickA, setPickA] = useState<number | null>(null);
-  const [pickB, setPickB] = useState<number | null>(null);
   const [labels, setLabels] = useState(large); // pseudos affichés d'emblée dans la vue agrandie
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [inset, setInset] = useState<Inset>(() => loadInset(game.map ?? ''));
   const [zonesPos, setZonesPos] = useState(false); // calque : positions peu fiables
   const [zonesGaze, setZonesGaze] = useState(false); // calque : regards peu fiables
   const [marks, setMarks] = useState(true); // anneau rouge sur les positions non confirmées par la vraie minimap
-  const [selected, setSelected] = useState<number | null>(null); // joueur choisi : zone de tir, corrections, commentaire
+  const [selected, setSelected] = useState<number | null>(null); // joueur choisi : zone de tir, notes de review
+  const [showNotes, setShowNotes] = useState(true); // notes de review dessinées sur le plan (dans leur fenêtre d'affichage)
   const [showZone, setShowZone] = useState(false); // calque : zone de tir de l'arme équipée du joueur choisi
   const [choice, setChoice] = useState<WeaponChoice>('longest');
 
@@ -95,22 +96,36 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
       <SafeZoneLayer result={zone.zone.result} colors={zoneColors} boxStyle={boxStyleOf(inset)} outlines={selected} pins={false} show="shot" outlineKind="tir" />
     ) : null;
 
-  // Corrections à la main : le plan reçoit le geste quand un joueur est choisi et que le mode correction est ouvert.
-  const marking = review.correcting && selected !== null && !fixing;
-  const { drag, handlers } = useMarkDrag(selected, marking, inset, (slot, x, y, angle) => void review.place(slot, time, x, y, angle));
+  // Notes de review : le brouillon (volet NotePanel) et le geste de pose sur le plan. Rien de cela ne modifie les données lues.
+  const readAt = (slot: number, t: number) => {
+    const p = shownAt(frames, t + game.start_s).find((q) => q.slot === slot && q.alive);
+    return p ? { x: p.x, y: p.y } : null;
+  };
+  const gameT = time - game.start_s;
+  const note = useNoteDraft({
+    game,
+    selected,
+    time,
+    inset,
+    place,
+    defaultGadget: gadgetChoices(reviewNotes.loadouts, selected, gameT).current,
+    freeze: () => {
+      getVideoElement()?.pause();
+      if (!clock.follow && clock.playing) clock.seek(time);
+    },
+  });
+  const gadgets = gadgetChoices(reviewNotes.loadouts, selected, note.draft.t);
+  const draftShape: NoteShape | null = note.draft.kind === 'note' ? null : { kind: note.draft.kind, slot: note.draft.slot, t: note.draft.t, x: note.draft.x, y: note.draft.y, angle: note.draft.angle, gadget: note.draft.gadget };
+  // Peu de notes visibles à la fois : recalculé à chaque image sans mémoïsation.
+  const marksOnStage = noteMarks(showNotes ? reviewNotes.notes : [], draftShape, gameT, readAt);
 
-  // Clic sur une pastille : pendant l'échange la première choisie est A et la suivante de la même équipe est B ; sinon elle devient le joueur choisi.
-  const onDot = (slot: number) => {
-    if (!fixing) return setSelected(slot === selected ? null : slot);
-    if (pickA === null || (pickB !== null && slot !== pickA && slot !== pickB) || (slot <= 4) !== (pickA <= 4)) {
-      setPickA(slot);
-      setPickB(null);
-    } else if (slot === pickA) {
-      setPickA(null);
-      setPickB(null);
-    } else {
-      setPickB(slot);
-    }
+  // Clic sur une pastille : elle devient le joueur choisi (ou le redevient aucun).
+  const onDot = (slot: number) => setSelected(slot === selected ? null : slot);
+
+  // Clic sur une note de la liste : le replay se place à son instant et son joueur est choisi.
+  const openNote = (n: ReviewNote) => {
+    clock.seek(game.start_s + n.t);
+    if (n.slot !== null) setSelected(n.slot);
   };
 
   const changeInset = (patch: Partial<Inset>) => {
@@ -146,13 +161,9 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           unconfirmed={unconfirmed}
           showUnconfirmed={marks}
           selected={selected}
-          swapping={fixing}
-          pickA={pickA}
-          pickB={pickB}
-          marking={marking}
-          userMarks={marksNear(review.marks, time)}
-          drag={drag}
-          dragHandlers={handlers}
+          placing={note.active}
+          noteMarks={marksOnStage}
+          dragHandlers={note.handlers}
           onDot={onDot}
         />
 
@@ -209,6 +220,10 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
                   </label>
                 </>
               )}
+              <label title="Fantômes et gadgets des notes de review, de 3 s avant à 8 s après leur instant (aucun effet sur les données)">
+                <input type="checkbox" checked={showNotes} onChange={(e) => setShowNotes(e.target.checked)} />
+                Afficher les notes
+              </label>
               <label title="Cases que les balles du joueur choisi peuvent atteindre, avec l'arme équipée à cet instant">
                 <input type="checkbox" checked={showZone} onChange={(e) => setShowZone(e.target.checked)} />
                 Zone de tir du joueur choisi
@@ -278,31 +293,8 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           ))}
         </div>
 
-        <PlayerPanel game={game} time={time} slots={slotsPresent} nameOf={nameOf} selected={selected} onSelect={setSelected} review={review} onRecomputed={refresh} />
-
-        <details className="replay__fix" open={fixing} onToggle={(e) => setFixing((e.currentTarget as HTMLDetailsElement).open)}>
-          <summary>Échanger deux joueurs (numéros mélangés)</summary>
-          <p>
-            Si deux joueurs de la même équipe se sont échangé leurs numéros, clique sur leurs deux pastilles (ou choisis-les ci-dessous), puis la
-            durée à partir de l'instant affiché.
-          </p>
-          <FixForm
-            game={game}
-            time={time}
-            nameOf={nameOf}
-            slots={slotsPresent}
-            pickA={pickA}
-            pickB={pickB}
-            setPickA={setPickA}
-            setPickB={setPickB}
-            corrections={corrections}
-            onChanged={() => {
-              setPickA(null);
-              setPickB(null);
-              refresh();
-            }}
-          />
-        </details>
+        <PlayerPanel slots={slotsPresent} nameOf={nameOf} selected={selected} onSelect={setSelected} />
+        <NotePanel game={game} nameOf={nameOf} gadgets={gadgets} api={reviewNotes} note={note} onOpenNote={openNote} />
 
         <KillList game={game} time={time} nameOf={nameOf} onSeek={(t) => { clock.backToVideo(); requestSeek(t); }} />
 

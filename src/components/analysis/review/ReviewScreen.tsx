@@ -1,5 +1,5 @@
 // Écran de review : la reconstruction de la game choisie, sous la vidéo et sur toute la largeur utile.
-// Sans quitter cet écran : choisir un joueur, corriger sa position et son regard, laisser un commentaire, afficher sa zone de tir (voir ReplayPanel).
+// Sans quitter cet écran : choisir un joueur, écrire des notes de review (sans effet sur les données), afficher sa zone de tir (voir ReplayPanel).
 
 import type { Game } from '../../../types/analysis';
 import { ReplayPanel } from '../ReplayPanel';

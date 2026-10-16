@@ -164,3 +164,20 @@ export interface PlayerGameStats {
   /** Duels sans vainqueur (trade, indécis). */
   duels_other: number;
 }
+
+export type ReviewNoteKind = 'position' | 'action' | 'note';
+
+/** Note de review (docs/PLAN_STATS_2.md, vague 5) : annotation sans effet sur les données lues. (x, y) en fractions de la minimap, angle en degrés (0 = est), t en secondes depuis le début de la game. */
+export interface ReviewNote {
+  id: number;
+  game_id: number;
+  t: number;
+  slot: number | null;
+  kind: ReviewNoteKind;
+  x: number | null;
+  y: number | null;
+  angle: number | null;
+  gadget: string | null;
+  text: string;
+  created_at: string;
+}

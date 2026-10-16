@@ -1,13 +1,13 @@
-// Plan de la game avec les joueurs : traînées, calques (zones peu fiables, zone de tir), pastilles numérotées, corrections posées à la main et geste en cours.
+// Plan de la game avec les joueurs : traînées, calques (zones peu fiables, zone de tir), pastilles numérotées et notes de review (fantômes, gadgets).
 // Les positions sont normalisées sur la minimap : `place` les ramène sur l'image du plan (cadre réglable par carte, lib/planInsets.ts).
 
 import type { ReactNode, PointerEvent } from 'react';
 import { X } from 'lucide-react';
 import { flagKey } from '../../../lib/replayFlags';
-import type { Reliability, UserMark } from '../../../types/analysis';
+import type { NoteMark } from '../../../lib/reviewNotes';
+import type { Reliability } from '../../../types/analysis';
 import { ReliabilityLayer } from '../ReliabilityLayer';
-import type { Drag } from './markPlacement';
-import { gazeAngle } from './markPlacement';
+import { NoteLayer } from './NoteLayer';
 import { numberOfSlot, teamVar, type Shown, type Trail } from './replayFrames';
 
 interface Props {
@@ -26,14 +26,10 @@ interface Props {
   unconfirmed: Set<string>;
   showUnconfirmed: boolean;
   selected: number | null;
-  /** Mode « échanger deux joueurs » : un clic sur une pastille la propose à l'échange. */
-  swapping: boolean;
-  pickA: number | null;
-  pickB: number | null;
-  /** Mode correction avec un joueur choisi : le plan reçoit le geste (clic = position, glisser = position et regard) et les pastilles ne réagissent plus. */
-  marking: boolean;
-  userMarks: UserMark[];
-  drag: Drag | null;
+  /** Pose d'une note avec un joueur choisi : le plan reçoit le geste (clic = fantôme ou gadget) et les pastilles ne réagissent plus. */
+  placing: boolean;
+  /** Notes de review à dessiner (dans leur fenêtre d'affichage) et brouillon en cours. */
+  noteMarks: NoteMark[];
   dragHandlers: { onPointerDown: (e: PointerEvent<HTMLDivElement>) => void; onPointerMove: (e: PointerEvent<HTMLDivElement>) => void; onPointerUp: (e: PointerEvent<HTMLDivElement>) => void };
   onDot: (slot: number) => void;
 }
@@ -43,11 +39,10 @@ function dotTitle(p: Shown, name: string | undefined, observed: boolean, unconfi
 }
 
 export function ReplayStage(props: Props) {
-  const { plan, place, trails, shown, nameOf, observed, unconfirmed, selected, swapping, marking, drag } = props;
-  const dragAngle = drag ? gazeAngle(drag.x1 - drag.x0, drag.y1 - drag.y0, 0.02) : null; // en fractions : seuil de 2 % du plan avant de viser une direction
+  const { plan, place, trails, shown, nameOf, observed, unconfirmed, selected, placing } = props;
 
   return (
-    <div className={`replay__stage${marking ? ' is-marking' : ''}`} {...(marking ? props.dragHandlers : {})}>
+    <div className={`replay__stage${placing ? ' is-marking' : ''}`} {...(placing ? props.dragHandlers : {})}>
       {plan ? <img src={plan.src} alt={`Plan ${plan.name}`} draggable={false} /> : <div className="replay__noplan" />}
       {trails && (
         <svg className="replay__trails" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -68,16 +63,15 @@ export function ReplayStage(props: Props) {
           bad ? 'is-unconfirmed' : '',
           p.slot === observed ? 'is-observed' : '',
           p.slot === selected ? 'is-selected' : '',
-          marking ? 'is-passive' : 'is-pickable',
-          p.slot === props.pickA || p.slot === props.pickB ? 'is-picked' : '',
+          placing ? 'is-passive' : 'is-pickable',
         ];
         return (
           <div
             key={p.slot}
             className={cls.filter(Boolean).join(' ')}
-            onClick={marking ? undefined : () => props.onDot(p.slot)}
+            onClick={placing ? undefined : () => props.onDot(p.slot)}
             style={{ left: `${x}%`, top: `${y}%`, ['--c' as string]: teamVar(p.team) }}
-            title={dotTitle(p, nameOf.get(p.slot), p.slot === observed, bad) + (swapping ? ' · clic : choisir pour l\'échange' : ' · clic : choisir ce joueur')}
+            title={dotTitle(p, nameOf.get(p.slot), p.slot === observed, bad) + ' · clic : choisir ce joueur'}
           >
             {p.alive && p.angle !== null && <i className={`replay__dir${p.coherence !== null && p.coherence < 0.4 ? ' is-doubtful' : ''}`} style={{ transform: `rotate(${p.angle}deg)`, opacity: p.coherence === null ? 1 : 0.35 + 0.65 * p.coherence }} />}
             <b>{p.alive ? numberOfSlot(p.slot) : <X className="ic" strokeWidth={3} />}</b>
@@ -85,25 +79,7 @@ export function ReplayStage(props: Props) {
           </div>
         );
       })}
-      {props.userMarks.map((m) => {
-        const { x, y } = place(m.x, m.y);
-        return (
-          <div key={m.id} className="replay__mark" style={{ left: `${x}%`, top: `${y}%` }} title={`Correction à la main : joueur ${numberOfSlot(m.slot)}${m.dead ? ' (mort)' : ''}`}>
-            {!m.dead && m.angle !== null && <i className="replay__dir" style={{ transform: `rotate(${m.angle}deg)` }} />}
-            <b>{m.dead ? <X className="ic" strokeWidth={3} /> : numberOfSlot(m.slot)}</b>
-          </div>
-        );
-      })}
-      {drag && (
-        <>
-          <svg className="replay__trails" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden>
-            {dragAngle !== null && <line x1={drag.x0} y1={drag.y0} x2={drag.x1} y2={drag.y1} className="replay__dragline" vectorEffect="non-scaling-stroke" />}
-          </svg>
-          <div className="replay__mark is-drag" style={{ left: `${drag.x0 * 100}%`, top: `${drag.y0 * 100}%` }}>
-            <b>{numberOfSlot(drag.slot)}</b>
-          </div>
-        </>
-      )}
+      <NoteLayer marks={props.noteMarks} place={place} />
       {!plan && <p className="replay__hint">Choisis la carte de la game pour afficher son plan.</p>}
     </div>
   );

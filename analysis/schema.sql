@@ -371,3 +371,22 @@ CREATE TABLE IF NOT EXISTS player_game_stats (
   duels_other INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (game_id, slot)
 );
+
+-- Notes de review : annotations posées sur la reconstruction sous la vidéo, SANS aucun effet sur les données lues (le suivi, les stats et les corrections `user_marks` ne les lisent jamais).
+-- kind 'position' : le joueur `slot` était trop avancé (ou mal placé) à l'instant `t` ; (x, y) est l'endroit où il aurait dû être (position « fausse » voulue), `angle` le regard voulu (degrés, 0 = est) ;
+-- kind 'action' : action à faire à l'instant `t`, par exemple poser le gadget `gadget` du joueur `slot` en (x, y) ; kind 'note' : remarque libre. `text` : le commentaire qui explique l'erreur.
+-- Base d'un futur « jeu d'échecs » de stratégie (docs/IDEES_STRATEGIE.md) : ces notes gardent les variantes essayées. Temps en secondes depuis le début de la game.
+CREATE TABLE IF NOT EXISTS review_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  t REAL NOT NULL,
+  slot INTEGER CHECK (slot BETWEEN 1 AND 8),
+  kind TEXT NOT NULL CHECK (kind IN ('position', 'action', 'note')),
+  x REAL,
+  y REAL,
+  angle REAL,
+  gadget TEXT,
+  text TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_review_notes_game ON review_notes(game_id, t);

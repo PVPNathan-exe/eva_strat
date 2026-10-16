@@ -1,6 +1,7 @@
 // Logique REST de l'onglet Analyse (fonctions pures, testables sans serveur HTTP).
 
 import type { DatabaseSync } from 'node:sqlite';
+import { handleReviewNotes } from './reviewNotes.ts';
 import { handleStats } from './statsApi.ts';
 import { resolveStuff } from './weapons.ts';
 
@@ -506,6 +507,8 @@ export function handleApi(
 
   const stats = handleStats(ctx, method, pathname, query, body); // onglet Stats : /api/stats/*
   if (stats) return stats;
+  const notes = handleReviewNotes(ctx, method, pathname, query, body); // notes de review : /api/review-notes (sans effet sur les données lues)
+  if (notes) return notes;
 
   if (method === 'GET' && pathname === '/api/videos') {
     return reply(200, ctx.db.prepare('SELECT id, path, source_url, duration_s, fps, width, height FROM videos ORDER BY id DESC').all());

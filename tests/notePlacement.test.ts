@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boxStyleOf, gazeAngle, marksNear, planToMinimap, stageFraction } from '../src/components/analysis/review/markPlacement.ts';
-import type { UserMark } from '../src/types/analysis.ts';
+import { boxStyleOf, gazeAngle, pixelDistance, planToMinimap, stageFraction } from '../src/components/analysis/review/notePlacement.ts';
 
 const inset = { l: 0.02, t: 0.03, r: 0.01, b: 0.1 };
 // Même formule que planInsets.project (non importé : ce fichier lit un JSON que node ne charge pas sans attribut)
@@ -41,10 +40,8 @@ test('cadre de la minimap dans le plan, en pourcentages', () => {
   assert.ok(Math.abs(parseFloat(String(s.height)) - 87) < 1e-9);
 });
 
-test('corrections visibles à une seconde de l instant', () => {
-  const mark = (id: number, t: number): UserMark => ({ id, game_id: 1, slot: 2, t, x: 0.5, y: 0.5, angle: null });
-  const marks = [mark(1, 10), mark(2, 10.9), mark(3, 12.5)];
-  assert.deepEqual(marksNear(marks, 10.2).map((m) => m.id), [1, 2]);
-  assert.deepEqual(marksNear(marks, 12.4, 0.2).map((m) => m.id), [3]);
-  assert.deepEqual(marksNear(marks, 50), []);
+test('distance en pixels entre deux fractions du plan', () => {
+  const rect = { width: 400, height: 200 };
+  assert.equal(pixelDistance(rect, { x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 }), 0);
+  assert.equal(pixelDistance(rect, { x: 0, y: 0 }, { x: 0.03, y: 0.04 }), Math.hypot(12, 8));
 });

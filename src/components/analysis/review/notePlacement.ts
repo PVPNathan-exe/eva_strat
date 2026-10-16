@@ -1,21 +1,8 @@
-// Pose d'une correction à la main sur le plan du replay : du pointeur à la minimap, regard d'un geste, corrections visibles à l'instant.
-// Fonctions pures (tests/markPlacement.test.ts) : le cadre de la minimap dans le plan vient de lib/planInsets.ts.
+// Pose d'une note sur le plan du replay : du pointeur à la minimap, regard d'un geste, cadre de la minimap dans le plan.
+// Fonctions pures (tests/notePlacement.test.ts) : le cadre de la minimap dans le plan vient de lib/planInsets.ts.
 
 import type { CSSProperties } from 'react';
 import type { Inset } from '../../../lib/planInsets.ts';
-import type { UserMark } from '../../../types/analysis.ts';
-
-/** Une correction se voit à ce temps près de son instant (secondes de vidéo). */
-export const MARK_SHOWN_S = 1;
-
-/** Geste en cours : départ (la position) et pointeur actuel (la direction de la pointe donne le regard), en fractions du plan. */
-export interface Drag {
-  slot: number;
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-}
 
 /** Position du pointeur dans un rectangle, en fractions (0 à 1, bornées). */
 export function stageFraction(rect: { left: number; top: number; width: number; height: number }, clientX: number, clientY: number): { x: number; y: number } {
@@ -39,7 +26,7 @@ export function boxStyleOf(inset: Inset): CSSProperties {
   return { left: `${inset.l * 100}%`, top: `${inset.t * 100}%`, width: `${(1 - inset.l - inset.r) * 100}%`, height: `${(1 - inset.t - inset.b) * 100}%` };
 }
 
-/** Corrections posées à `seconds` près de l'instant t (vidéo), pour les montrer sur le plan. */
-export function marksNear(marks: UserMark[], t: number, seconds = MARK_SHOWN_S): UserMark[] {
-  return marks.filter((m) => Math.abs(m.t - t) <= seconds);
+/** Distance en pixels entre deux points donnés en fractions d'un rectangle (pour savoir si un clic tombe sur le fantôme). */
+export function pixelDistance(rect: { width: number; height: number }, a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.hypot((a.x - b.x) * rect.width, (a.y - b.y) * rect.height);
 }
