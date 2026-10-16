@@ -1,0 +1,5317 @@
+{
+ "meta": {
+  "date": "2026-10-16",
+  "base": "copie de la base (lecture seule)",
+  "methode": "Méthode (mesure, pas une règle du jeu) :\n1. Passe grossière du HUD (hud_points, une image par seconde, la même que l'analyse) : les secondes où un hexagone est à moitié rempli ou change de propriétaire donnent des FENÊTRES (15 s avant, 3 s après).\n2. Relecture de chaque fenêtre à 5 images par seconde (`timer.iter_crops`, ffmpeg limité à la fenêtre) : NIVEAU de remplissage de l'hexagone = part de sa hauteur remplie depuis le bas de la couleur de l'équipe qui capture\n   (lignes de pixels dans deux bandes latérales, hors lettre ; 0 vide, 1 plein ; le bas de l'hexagone donne l'équipe qui capture, le haut est l'ancien propriétaire).\n3. À chaque image : joueurs vivants de chaque équipe (lecture de confiance 0,5 ou plus) dans le cadre du point (`samples`, temps de vidéo moins `games.start_s`). Cadres : boîtes de `map_capture_points.json` (Outlaw),\n   sinon rectangle englobant des polygones de `map_capture.json` (lettre = ordre des polygones, comme `point_owner.point_rects` ; la correspondance lettre du HUD et polygone est contrôlée à part).\n4. Un épisode est une montée du remplissage d'une couleur ; il est coupé en PLAGES où le nombre de joueurs de l'équipe qui capture est constant. Une plage compte si elle dure 0,8 s ou plus, après retrait des premières\n   `SETTLE_S` secondes (le remplissage réagit un peu après l'arrivée d'un joueur), avec le niveau entre 0,05 et 0,95 (hors butée) et sans image douteuse. Pente = droite des moindres carrés (fraction par seconde),\n   durée de capture"
+ },
+ "parametres": {
+  "FINE_STEP_S": 0.2,
+  "PRE_S": 15.0,
+  "POST_S": 3.0,
+  "MERGE_GAP_S": 2.0,
+  "V_LO": -0.95,
+  "V_HI": 1.05,
+  "BAND_U": [
+   0.3,
+   0.5
+  ],
+  "ROW_MIN": 0.5,
+  "PROBE_V": 0.55,
+  "MIN_CONF": 0.5,
+  "MARGIN": 0.04,
+  "SAMPLE_TOL_S": 0.12,
+  "SETTLE_S": 0.3,
+  "MIN_RUN_S": 0.8,
+  "LEVEL_RANGE": [
+   0.05,
+   0.95
+  ],
+  "MAX_PRESENT": 4,
+  "HUD_TO_POLYGON": {
+   "Engine": {
+    "A": "A",
+    "B": "C",
+    "C": "B"
+   },
+   "Atlantis": {
+    "A": "B",
+    "B": "A",
+    "C": "C"
+   }
+  },
+  "FEW_EPISODES": 5,
+  "FEW_SECONDS": 10.0,
+  "FLAT_SLOPE": 0.02
+ },
+ "resume": {
+  "toutes_cartes": {
+   "par_joueurs": {
+    "0": {
+     "episodes": 23,
+     "plages": 26,
+     "secondes": 49.6,
+     "plages_montantes": 0,
+     "plages_figees": 3,
+     "plages_en_baisse": 23,
+     "pente_mediane": -0.1199,
+     "pente_min": -0.3911,
+     "pente_max": 0.0,
+     "pente_ponderee": -0.1775,
+     "peu_d_episodes": false,
+     "peu_de_secondes": false,
+     "paires": {
+      "episodes": 41,
+      "secondes": 68.4,
+      "pente": -0.1498,
+      "duree_s": null,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false
+     }
+    },
+    "1": {
+     "episodes": 47,
+     "plages": 53,
+     "secondes": 158.2,
+     "plages_montantes": 52,
+     "plages_figees": 0,
+     "plages_en_baisse": 1,
+     "pente_mediane": 0.11,
+     "pente_min": -0.116,
+     "pente_max": 0.3816,
+     "pente_ponderee": 0.1251,
+     "duree_mediane_s": 9.08,
+     "duree_min_s": 2.62,
+     "duree_max_s": 36.02,
+     "duree_ponderee_s": 7.67,
+     "peu_d_episodes": false,
+     "peu_de_secondes": false,
+     "paires": {
+      "episodes": 76,
+      "secondes": 189.4,
+      "pente": 0.1226,
+      "duree_s": 8.16,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false
+     }
+    },
+    "2": {
+     "episodes": 31,
+     "plages": 32,
+     "secondes": 65.4,
+     "plages_montantes": 30,
+     "plages_figees": 2,
+     "plages_en_baisse": 0,
+     "pente_mediane": 0.2222,
+     "pente_min": 0.0,
+     "pente_max": 0.345,
+     "pente_ponderee": 0.2173,
+     "duree_mediane_s": 4.39,
+     "duree_min_s": 2.9,
+     "duree_max_s": 7.47,
+     "duree_ponderee_s": 4.48,
+     "peu_d_episodes": false,
+     "peu_de_secondes": false,
+     "paires": {
+      "episodes": 47,
+      "secondes": 80.8,
+      "pente": 0.2069,
+      "duree_s": 4.83,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false
+     }
+    },
+    "3": {
+     "episodes": 1,
+     "plages": 1,
+     "secondes": 0.8,
+     "plages_montantes": 1,
+     "plages_figees": 0,
+     "plages_en_baisse": 0,
+     "pente_mediane": 0.458,
+     "pente_min": 0.458,
+     "pente_max": 0.458,
+     "pente_ponderee": 0.458,
+     "duree_mediane_s": 2.18,
+     "duree_min_s": 2.18,
+     "duree_max_s": 2.18,
+     "duree_ponderee_s": 2.18,
+     "peu_d_episodes": true,
+     "peu_de_secondes": true,
+     "paires": {
+      "episodes": 4,
+      "secondes": 2.2,
+      "pente": 0.265,
+      "duree_s": 3.77,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true
+     }
+    }
+   },
+   "contestees": {
+    "0_contre_1": {
+     "episodes": 3,
+     "plages": 3,
+     "secondes": 8.0,
+     "plages_montantes": 0,
+     "plages_figees": 0,
+     "plages_en_baisse": 3,
+     "pente_mediane": -0.0968,
+     "pente_min": -0.1136,
+     "pente_max": -0.0757,
+     "pente_ponderee": -0.0948,
+     "peu_d_episodes": true,
+     "peu_de_secondes": true
+    }
+   }
+  },
+  "sans_outlaw": {
+   "par_joueurs": {
+    "0": {
+     "episodes": 13,
+     "plages": 16,
+     "secondes": 34.2,
+     "plages_montantes": 0,
+     "plages_figees": 3,
+     "plages_en_baisse": 13,
+     "pente_mediane": -0.1011,
+     "pente_min": -0.1338,
+     "pente_max": 0.0,
+     "pente_ponderee": -0.0945,
+     "peu_d_episodes": false,
+     "peu_de_secondes": false,
+     "paires": {
+      "episodes": 31,
+      "secondes": 51.0,
+      "pente": -0.0784,
+      "duree_s": null,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false
+     }
+    },
+    "1": {
+     "episodes": 36,
+     "plages": 42,
+     "secondes": 141.6,
+     "plages_montantes": 41,
+     "plages_figees": 0,
+     "plages_en_baisse": 1,
+     "pente_mediane": 0.1009,
+     "pente_min": -0.116,
+     "pente_max": 0.3272,
+     "pente_ponderee": 0.0991,
+     "duree_mediane_s": 9.9,
+     "duree_min_s": 3.06,
+     "duree_max_s": 36.02,
+     "duree_ponderee_s": 9.58,
+     "peu_d_episodes": false,
+     "peu_de_secondes": false,
+     "paires": {
+      "episodes": 64,
+      "secondes": 170.4,
+      "pente": 0.0975,
+      "duree_s": 10.26,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false
+     }
+    },
+    "2": {
+     "episodes": 31,
+     "plages": 32,
+     "secondes": 65.4,
+     "plages_montantes": 30,
+     "plages_figees": 2,
+     "plages_en_baisse": 0,
+     "pente_mediane": 0.2222,
+     "pente_min": 0.0,
+     "pente_max": 0.345,
+     "pente_ponderee": 0.2173,
+     "duree_mediane_s": 4.39,
+     "duree_min_s": 2.9,
+     "duree_max_s": 7.47,
+     "duree_ponderee_s": 4.48,
+     "peu_d_episodes": false,
+     "peu_de_secondes": false,
+     "paires": {
+      "episodes": 46,
+      "secondes": 80.4,
+      "pente": 0.2046,
+      "duree_s": 4.89,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false
+     }
+    },
+    "3": {
+     "episodes": 1,
+     "plages": 1,
+     "secondes": 0.8,
+     "plages_montantes": 1,
+     "plages_figees": 0,
+     "plages_en_baisse": 0,
+     "pente_mediane": 0.458,
+     "pente_min": 0.458,
+     "pente_max": 0.458,
+     "pente_ponderee": 0.458,
+     "duree_mediane_s": 2.18,
+     "duree_min_s": 2.18,
+     "duree_max_s": 2.18,
+     "duree_ponderee_s": 2.18,
+     "peu_d_episodes": true,
+     "peu_de_secondes": true,
+     "paires": {
+      "episodes": 4,
+      "secondes": 2.2,
+      "pente": 0.265,
+      "duree_s": 3.77,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true
+     }
+    }
+   },
+   "contestees": {
+    "0_contre_1": {
+     "episodes": 3,
+     "plages": 3,
+     "secondes": 8.0,
+     "plages_montantes": 0,
+     "plages_figees": 0,
+     "plages_en_baisse": 3,
+     "pente_mediane": -0.0968,
+     "pente_min": -0.1136,
+     "pente_max": -0.0757,
+     "pente_ponderee": -0.0948,
+     "peu_d_episodes": true,
+     "peu_de_secondes": true
+    }
+   }
+  },
+  "cartes": {
+   "Artefact": {
+    "par_joueurs": {
+     "0": {
+      "episodes": 2,
+      "plages": 2,
+      "secondes": 5.8,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 2,
+      "pente_mediane": -0.1175,
+      "pente_min": -0.1338,
+      "pente_max": -0.1012,
+      "pente_ponderee": -0.1091,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 3,
+       "secondes": 7.0,
+       "pente": -0.1071,
+       "duree_s": null,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     },
+     "1": {
+      "episodes": 6,
+      "plages": 7,
+      "secondes": 30.2,
+      "plages_montantes": 7,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.0977,
+      "pente_min": 0.0864,
+      "pente_max": 0.1162,
+      "pente_ponderee": 0.1026,
+      "duree_mediane_s": 10.24,
+      "duree_min_s": 8.61,
+      "duree_max_s": 11.58,
+      "duree_ponderee_s": 9.74,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 7,
+       "secondes": 32.2,
+       "pente": 0.1009,
+       "duree_s": 9.91,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "2": {
+      "episodes": 1,
+      "plages": 1,
+      "secondes": 3.0,
+      "plages_montantes": 1,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.218,
+      "pente_min": 0.218,
+      "pente_max": 0.218,
+      "pente_ponderee": 0.218,
+      "duree_mediane_s": 4.59,
+      "duree_min_s": 4.59,
+      "duree_max_s": 4.59,
+      "duree_ponderee_s": 4.59,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 1,
+       "secondes": 3.2,
+       "pente": 0.2342,
+       "duree_s": 4.27,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     }
+    },
+    "contestees": {}
+   },
+   "Atlantis": {
+    "par_joueurs": {
+     "1": {
+      "episodes": 4,
+      "plages": 4,
+      "secondes": 16.6,
+      "plages_montantes": 4,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.1051,
+      "pente_min": 0.0555,
+      "pente_max": 0.119,
+      "pente_ponderee": 0.1014,
+      "duree_mediane_s": 9.52,
+      "duree_min_s": 8.41,
+      "duree_max_s": 18.01,
+      "duree_ponderee_s": 9.87,
+      "peu_d_episodes": true,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 7,
+       "secondes": 18.8,
+       "pente": 0.1063,
+       "duree_s": 9.41,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "2": {
+      "episodes": 4,
+      "plages": 4,
+      "secondes": 6.8,
+      "plages_montantes": 4,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.2484,
+      "pente_min": 0.1547,
+      "pente_max": 0.345,
+      "pente_ponderee": 0.2481,
+      "duree_mediane_s": 4.04,
+      "duree_min_s": 2.9,
+      "duree_max_s": 6.47,
+      "duree_ponderee_s": 4.03,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 5,
+       "secondes": 8.4,
+       "pente": 0.233,
+       "duree_s": 4.29,
+       "peu_d_episodes": false,
+       "peu_de_secondes": true
+      }
+     }
+    },
+    "contestees": {}
+   },
+   "Ceres": {
+    "par_joueurs": {
+     "0": {
+      "episodes": 2,
+      "plages": 2,
+      "secondes": 7.8,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 2,
+      "pente_mediane": -0.0967,
+      "pente_min": -0.1065,
+      "pente_max": -0.0869,
+      "pente_ponderee": -0.1,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 3,
+       "secondes": 8.6,
+       "pente": -0.1017,
+       "duree_s": null,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     },
+     "1": {
+      "episodes": 3,
+      "plages": 3,
+      "secondes": 7.8,
+      "plages_montantes": 3,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.1092,
+      "pente_min": 0.0744,
+      "pente_max": 0.3272,
+      "pente_ponderee": 0.1247,
+      "duree_mediane_s": 9.15,
+      "duree_min_s": 3.06,
+      "duree_max_s": 13.45,
+      "duree_ponderee_s": 8.02,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 5,
+       "secondes": 9.0,
+       "pente": 0.1295,
+       "duree_s": 7.72,
+       "peu_d_episodes": false,
+       "peu_de_secondes": true
+      }
+     },
+     "2": {
+      "episodes": 1,
+      "plages": 1,
+      "secondes": 3.0,
+      "plages_montantes": 1,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.2223,
+      "pente_min": 0.2223,
+      "pente_max": 0.2223,
+      "pente_ponderee": 0.2223,
+      "duree_mediane_s": 4.5,
+      "duree_min_s": 4.5,
+      "duree_max_s": 4.5,
+      "duree_ponderee_s": 4.5,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 1,
+       "secondes": 3.2,
+       "pente": 0.1822,
+       "duree_s": 5.49,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     }
+    },
+    "contestees": {}
+   },
+   "Engine": {
+    "par_joueurs": {
+     "0": {
+      "episodes": 3,
+      "plages": 3,
+      "secondes": 8.4,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 3,
+      "pente_mediane": -0.1061,
+      "pente_min": -0.1208,
+      "pente_max": -0.0906,
+      "pente_ponderee": -0.1044,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 8,
+       "secondes": 13.0,
+       "pente": -0.0833,
+       "duree_s": null,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "1": {
+      "episodes": 7,
+      "plages": 8,
+      "secondes": 26.4,
+      "plages_montantes": 8,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.1121,
+      "pente_min": 0.0763,
+      "pente_max": 0.1533,
+      "pente_ponderee": 0.1125,
+      "duree_mediane_s": 8.93,
+      "duree_min_s": 6.52,
+      "duree_max_s": 13.1,
+      "duree_ponderee_s": 8.89,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 10,
+       "secondes": 29.6,
+       "pente": 0.1069,
+       "duree_s": 9.35,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "2": {
+      "episodes": 4,
+      "plages": 4,
+      "secondes": 8.8,
+      "plages_montantes": 4,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.2226,
+      "pente_min": 0.1338,
+      "pente_max": 0.2568,
+      "pente_ponderee": 0.2157,
+      "duree_mediane_s": 4.5,
+      "duree_min_s": 3.89,
+      "duree_max_s": 7.47,
+      "duree_ponderee_s": 4.64,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 6,
+       "secondes": 10.2,
+       "pente": 0.2041,
+       "duree_s": 4.9,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "3": {
+      "paires": {
+       "episodes": 1,
+       "secondes": 0.2,
+       "pente": 0.0,
+       "duree_s": null,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     }
+    },
+    "contestees": {}
+   },
+   "Outlaw": {
+    "par_joueurs": {
+     "0": {
+      "episodes": 10,
+      "plages": 10,
+      "secondes": 15.4,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 10,
+      "pente_mediane": -0.3639,
+      "pente_min": -0.3911,
+      "pente_max": -0.3316,
+      "pente_ponderee": -0.3619,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 10,
+       "secondes": 17.4,
+       "pente": -0.3592,
+       "duree_s": null,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "1": {
+      "episodes": 11,
+      "plages": 11,
+      "secondes": 16.6,
+      "plages_montantes": 11,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.345,
+      "pente_min": 0.3227,
+      "pente_max": 0.3816,
+      "pente_ponderee": 0.3463,
+      "duree_mediane_s": 2.9,
+      "duree_min_s": 2.62,
+      "duree_max_s": 3.1,
+      "duree_ponderee_s": 2.89,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 12,
+       "secondes": 19.0,
+       "pente": 0.3472,
+       "duree_s": 2.88,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "2": {
+      "paires": {
+       "episodes": 1,
+       "secondes": 0.4,
+       "pente": 0.6677,
+       "duree_s": 1.5,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     }
+    },
+    "contestees": {}
+   },
+   "Polaris": {
+    "par_joueurs": {
+     "0": {
+      "episodes": 2,
+      "plages": 3,
+      "secondes": 3.0,
+      "plages_montantes": 0,
+      "plages_figees": 3,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.0,
+      "pente_min": -0.0,
+      "pente_max": 0.0,
+      "pente_ponderee": 0.0,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 7,
+       "secondes": 8.2,
+       "pente": -0.0,
+       "duree_s": null,
+       "peu_d_episodes": false,
+       "peu_de_secondes": true
+      }
+     },
+     "1": {
+      "episodes": 2,
+      "plages": 2,
+      "secondes": 9.6,
+      "plages_montantes": 2,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.0877,
+      "pente_min": 0.0744,
+      "pente_max": 0.1011,
+      "pente_ponderee": 0.0972,
+      "duree_mediane_s": 11.67,
+      "duree_min_s": 9.9,
+      "duree_max_s": 13.45,
+      "duree_ponderee_s": 10.29,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 11,
+       "secondes": 17.6,
+       "pente": 0.0615,
+       "duree_s": 16.26,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "2": {
+      "episodes": 8,
+      "plages": 9,
+      "secondes": 15.2,
+      "plages_montantes": 8,
+      "plages_figees": 1,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.2356,
+      "pente_min": 0.0,
+      "pente_max": 0.3073,
+      "pente_ponderee": 0.2142,
+      "duree_mediane_s": 4.24,
+      "duree_min_s": 3.25,
+      "duree_max_s": 7.2,
+      "duree_ponderee_s": 4.36,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 13,
+       "secondes": 19.8,
+       "pente": 0.2019,
+       "duree_s": 4.95,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "3": {
+      "episodes": 1,
+      "plages": 1,
+      "secondes": 0.8,
+      "plages_montantes": 1,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.458,
+      "pente_min": 0.458,
+      "pente_max": 0.458,
+      "pente_ponderee": 0.458,
+      "duree_mediane_s": 2.18,
+      "duree_min_s": 2.18,
+      "duree_max_s": 2.18,
+      "duree_ponderee_s": 2.18,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 2,
+       "secondes": 1.4,
+       "pente": 0.2974,
+       "duree_s": 3.36,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     }
+    },
+    "contestees": {
+     "0_contre_1": {
+      "episodes": 1,
+      "plages": 1,
+      "secondes": 1.8,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 1,
+      "pente_mediane": -0.1136,
+      "pente_min": -0.1136,
+      "pente_max": -0.1136,
+      "pente_ponderee": -0.1136,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true
+     }
+    }
+   },
+   "Reef Point": {
+    "par_joueurs": {
+     "0": {
+      "episodes": 3,
+      "plages": 5,
+      "secondes": 7.4,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 5,
+      "pente_mediane": -0.119,
+      "pente_min": -0.1211,
+      "pente_max": -0.0694,
+      "pente_ponderee": -0.1029,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 5,
+       "secondes": 9.8,
+       "pente": -0.1062,
+       "duree_s": null,
+       "peu_d_episodes": false,
+       "peu_de_secondes": true
+      }
+     },
+     "1": {
+      "episodes": 6,
+      "plages": 8,
+      "secondes": 17.0,
+      "plages_montantes": 8,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.1139,
+      "pente_min": 0.0278,
+      "pente_max": 0.1903,
+      "pente_ponderee": 0.1059,
+      "duree_mediane_s": 8.98,
+      "duree_min_s": 5.25,
+      "duree_max_s": 36.02,
+      "duree_ponderee_s": 9.44,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 13,
+       "secondes": 23.8,
+       "pente": 0.112,
+       "duree_s": 8.93,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "2": {
+      "episodes": 8,
+      "plages": 8,
+      "secondes": 16.8,
+      "plages_montantes": 8,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.23,
+      "pente_min": 0.1408,
+      "pente_max": 0.3192,
+      "pente_ponderee": 0.2172,
+      "duree_mediane_s": 4.35,
+      "duree_min_s": 3.13,
+      "duree_max_s": 7.1,
+      "duree_ponderee_s": 4.6,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 12,
+       "secondes": 20.8,
+       "pente": 0.2082,
+       "duree_s": 4.8,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     }
+    },
+    "contestees": {
+     "0_contre_1": {
+      "episodes": 1,
+      "plages": 1,
+      "secondes": 4.0,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 1,
+      "pente_mediane": -0.0968,
+      "pente_min": -0.0968,
+      "pente_max": -0.0968,
+      "pente_ponderee": -0.0968,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true
+     }
+    }
+   },
+   "Silva": {
+    "par_joueurs": {
+     "0": {
+      "episodes": 1,
+      "plages": 1,
+      "secondes": 1.8,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 1,
+      "pente_mediane": -0.1009,
+      "pente_min": -0.1009,
+      "pente_max": -0.1009,
+      "pente_ponderee": -0.1009,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true,
+      "paires": {
+       "episodes": 4,
+       "secondes": 4.0,
+       "pente": -0.0625,
+       "duree_s": null,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     },
+     "1": {
+      "episodes": 6,
+      "plages": 8,
+      "secondes": 23.6,
+      "plages_montantes": 7,
+      "plages_figees": 0,
+      "plages_en_baisse": 1,
+      "pente_mediane": 0.0915,
+      "pente_min": -0.116,
+      "pente_max": 0.1547,
+      "pente_ponderee": 0.0669,
+      "duree_mediane_s": 10.65,
+      "duree_min_s": 6.47,
+      "duree_max_s": 13.69,
+      "duree_ponderee_s": 10.23,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 9,
+       "secondes": 28.6,
+       "pente": 0.0801,
+       "duree_s": 12.49,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     },
+     "2": {
+      "episodes": 5,
+      "plages": 5,
+      "secondes": 11.8,
+      "plages_montantes": 4,
+      "plages_figees": 1,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.212,
+      "pente_min": 0.0,
+      "pente_max": 0.2356,
+      "pente_ponderee": 0.2035,
+      "duree_mediane_s": 4.67,
+      "duree_min_s": 4.24,
+      "duree_max_s": 4.76,
+      "duree_ponderee_s": 4.58,
+      "peu_d_episodes": false,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 8,
+       "secondes": 14.8,
+       "pente": 0.1857,
+       "duree_s": 5.39,
+       "peu_d_episodes": false,
+       "peu_de_secondes": false
+      }
+     }
+    },
+    "contestees": {
+     "0_contre_1": {
+      "episodes": 1,
+      "plages": 1,
+      "secondes": 2.2,
+      "plages_montantes": 0,
+      "plages_figees": 0,
+      "plages_en_baisse": 1,
+      "pente_mediane": -0.0757,
+      "pente_min": -0.0757,
+      "pente_max": -0.0757,
+      "pente_ponderee": -0.0757,
+      "peu_d_episodes": true,
+      "peu_de_secondes": true
+     }
+    }
+   },
+   "The Cliff": {
+    "par_joueurs": {
+     "0": {
+      "paires": {
+       "episodes": 1,
+       "secondes": 0.4,
+       "pente": 0.0,
+       "duree_s": null,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     },
+     "1": {
+      "episodes": 2,
+      "plages": 2,
+      "secondes": 10.4,
+      "plages_montantes": 2,
+      "plages_figees": 0,
+      "plages_en_baisse": 0,
+      "pente_mediane": 0.0889,
+      "pente_min": 0.0657,
+      "pente_max": 0.112,
+      "pente_ponderee": 0.096,
+      "duree_mediane_s": 12.07,
+      "duree_min_s": 8.93,
+      "duree_max_s": 15.21,
+      "duree_ponderee_s": 10.42,
+      "peu_d_episodes": true,
+      "peu_de_secondes": false,
+      "paires": {
+       "episodes": 2,
+       "secondes": 10.8,
+       "pente": 0.0925,
+       "duree_s": 10.81,
+       "peu_d_episodes": true,
+       "peu_de_secondes": false
+      }
+     },
+     "3": {
+      "paires": {
+       "episodes": 1,
+       "secondes": 0.6,
+       "pente": 0.2776,
+       "duree_s": 3.6,
+       "peu_d_episodes": true,
+       "peu_de_secondes": true
+      }
+     }
+    },
+    "contestees": {}
+   }
+  }
+ },
+ "games": [
+  {
+   "game": 25,
+   "map": "The Cliff",
+   "lignes_vivantes_confiance_basse": 0.07015954852644046,
+   "frames": 320,
+   "unsure_share": 0.021875,
+   "mapping": {
+    "A": {
+     "A": 13.8
+    }
+   },
+   "first_rise_s": 18.0,
+   "windows": [
+    [
+     4.0,
+     26.0
+    ],
+    [
+     66.0,
+     90.0
+    ],
+    [
+     156.0,
+     174.0
+    ]
+   ]
+  },
+  {
+   "game": 26,
+   "map": "Polaris",
+   "lignes_vivantes_confiance_basse": 0.1027879316929456,
+   "frames": 440,
+   "unsure_share": 0.175,
+   "mapping": {
+    "A": {
+     "A": 10.200000000000001
+    }
+   },
+   "first_rise_s": 8.200000000000045,
+   "windows": [
+    [
+     0.0,
+     23.0
+    ],
+    [
+     89.0,
+     110.0
+    ],
+    [
+     211.0,
+     234.0
+    ],
+    [
+     260.0,
+     281.0
+    ]
+   ]
+  },
+  {
+   "game": 27,
+   "map": "Reef Point",
+   "lignes_vivantes_confiance_basse": 0.03999209056305304,
+   "frames": 805,
+   "unsure_share": 0.03602484472049689,
+   "mapping": {
+    "A": {
+     "A": 26.200000000000003
+    }
+   },
+   "first_rise_s": 16.399999999999977,
+   "windows": [
+    [
+     6.0,
+     53.0
+    ],
+    [
+     137.0,
+     158.0
+    ],
+    [
+     210.0,
+     261.0
+    ],
+    [
+     281.0,
+     303.0
+    ],
+    [
+     317.0,
+     337.0
+    ]
+   ]
+  },
+  {
+   "game": 28,
+   "map": "Silva",
+   "lignes_vivantes_confiance_basse": 0.04266628357994541,
+   "frames": 1260,
+   "unsure_share": 0.10634920634920635,
+   "mapping": {
+    "A": {
+     "A": 56.0
+    }
+   },
+   "first_rise_s": 16.0,
+   "windows": [
+    [
+     1.0,
+     22.0
+    ],
+    [
+     55.0,
+     78.0
+    ],
+    [
+     174.0,
+     247.0
+    ],
+    [
+     271.0,
+     309.0
+    ],
+    [
+     328.0,
+     367.0
+    ],
+    [
+     390.0,
+     411.0
+    ],
+    [
+     456.0,
+     493.0
+    ]
+   ]
+  },
+  {
+   "game": 29,
+   "map": "Ceres",
+   "lignes_vivantes_confiance_basse": 0.006685966363385718,
+   "frames": 480,
+   "unsure_share": 0.0,
+   "mapping": {
+    "A": {
+     "A": 15.0
+    }
+   },
+   "first_rise_s": 18.59999999999991,
+   "windows": [
+    [
+     4.0,
+     27.0
+    ],
+    [
+     31.0,
+     52.0
+    ],
+    [
+     72.0,
+     93.0
+    ],
+    [
+     161.0,
+     192.0
+    ]
+   ]
+  },
+  {
+   "game": 30,
+   "map": "Engine",
+   "lignes_vivantes_confiance_basse": 0.024162974466724524,
+   "frames": 3735,
+   "unsure_share": 0.0179384203480589,
+   "mapping": {
+    "B": {
+     "A": 0.0,
+     "B": 0.0,
+     "C": 5.2
+    },
+    "A": {
+     "A": 33.6,
+     "B": 0.0,
+     "C": 0.0
+    },
+    "C": {
+     "A": 0.2,
+     "B": 11.0,
+     "C": 0.0
+    }
+   },
+   "first_rise_s": 8.199999999999818,
+   "windows": [
+    [
+     0.0,
+     69.0
+    ],
+    [
+     74.0,
+     103.0
+    ],
+    [
+     110.0,
+     131.0
+    ],
+    [
+     193.0,
+     214.0
+    ],
+    [
+     222.0,
+     278.0
+    ],
+    [
+     287.0,
+     319.0
+    ],
+    [
+     379.0,
+     400.0
+    ]
+   ]
+  },
+  {
+   "game": 31,
+   "map": "Atlantis",
+   "lignes_vivantes_confiance_basse": 0.19032208352596702,
+   "frames": 3270,
+   "unsure_share": 0.06574923547400612,
+   "mapping": {
+    "B": {
+     "A": 8.4,
+     "B": 0.8,
+     "C": 0.0
+    },
+    "A": {
+     "A": 0.0,
+     "B": 16.6,
+     "C": 0.0
+    },
+    "C": {
+     "A": 0.0,
+     "B": 0.0,
+     "C": 8.8
+    }
+   },
+   "first_rise_s": 12.800000000000182,
+   "windows": [
+    [
+     0.0,
+     27.0
+    ],
+    [
+     82.0,
+     110.0
+    ],
+    [
+     142.0,
+     182.0
+    ],
+    [
+     192.0,
+     250.0
+    ],
+    [
+     262.0,
+     297.0
+    ],
+    [
+     322.0,
+     352.0
+    ]
+   ]
+  },
+  {
+   "game": 32,
+   "map": "Outlaw",
+   "lignes_vivantes_confiance_basse": 0.012233333333333334,
+   "frames": 9075,
+   "unsure_share": 0.0024242424242424242,
+   "mapping": {
+    "A": {
+     "A": 2.8000000000000003,
+     "B": 0.0,
+     "C": 0.0,
+     "D": 0.0,
+     "E": 0.0
+    },
+    "B": {
+     "A": 0.0,
+     "B": 15.4,
+     "C": 0.0,
+     "D": 0.0,
+     "E": 0.2
+    },
+    "C": {
+     "A": 0.0,
+     "B": 0.0,
+     "C": 3.0,
+     "D": 0.0,
+     "E": 0.0
+    },
+    "D": {
+     "A": 0.0,
+     "B": 0.0,
+     "C": 0.2,
+     "D": 4.800000000000001,
+     "E": 0.0
+    }
+   },
+   "first_rise_s": 38.80000000000018,
+   "windows": [
+    [
+     24.0,
+     62.0
+    ],
+    [
+     83.0,
+     101.0
+    ],
+    [
+     112.0,
+     175.0
+    ],
+    [
+     182.0,
+     228.0
+    ],
+    [
+     252.0,
+     270.0
+    ],
+    [
+     276.0,
+     332.0
+    ],
+    [
+     344.0,
+     363.0
+    ],
+    [
+     373.0,
+     413.0
+    ],
+    [
+     472.0,
+     537.0
+    ]
+   ]
+  },
+  {
+   "game": 34,
+   "map": "Reef Point",
+   "lignes_vivantes_confiance_basse": 0.03653155464340688,
+   "frames": 855,
+   "unsure_share": 0.04912280701754386,
+   "mapping": {
+    "A": {
+     "A": 34.0
+    }
+   },
+   "first_rise_s": 14.0,
+   "windows": [
+    [
+     0.0,
+     27.0
+    ],
+    [
+     83.0,
+     118.0
+    ],
+    [
+     134.0,
+     156.0
+    ],
+    [
+     223.0,
+     244.0
+    ],
+    [
+     259.0,
+     282.0
+    ],
+    [
+     293.0,
+     314.0
+    ],
+    [
+     347.0,
+     369.0
+    ]
+   ]
+  },
+  {
+   "game": 36,
+   "map": "Artefact",
+   "lignes_vivantes_confiance_basse": 0.04799132618123716,
+   "frames": 750,
+   "unsure_share": 0.010666666666666666,
+   "mapping": {
+    "A": {
+     "A": 40.2
+    }
+   },
+   "first_rise_s": 20.0,
+   "windows": [
+    [
+     6.0,
+     51.0
+    ],
+    [
+     70.0,
+     97.0
+    ],
+    [
+     158.0,
+     179.0
+    ],
+    [
+     190.0,
+     247.0
+    ]
+   ]
+  },
+  {
+   "game": 16,
+   "map": "Polaris",
+   "lignes_vivantes_confiance_basse": 0.07556012069076203,
+   "frames": 530,
+   "unsure_share": 0.05660377358490566,
+   "mapping": {
+    "A": {
+     "A": 23.6
+    }
+   },
+   "first_rise_s": 11.600000000000023,
+   "windows": [
+    [
+     0.0,
+     18.0
+    ],
+    [
+     64.0,
+     89.0
+    ],
+    [
+     106.0,
+     127.0
+    ],
+    [
+     221.0,
+     242.0
+    ],
+    [
+     260.0,
+     281.0
+    ]
+   ]
+  },
+  {
+   "game": 22,
+   "map": "Polaris",
+   "lignes_vivantes_confiance_basse": 0.05758691206543967,
+   "frames": 815,
+   "unsure_share": 0.07730061349693251,
+   "mapping": {
+    "A": {
+     "A": 22.8
+    }
+   },
+   "first_rise_s": 47.40000000000009,
+   "windows": [
+    [
+     33.0,
+     54.0
+    ],
+    [
+     66.0,
+     89.0
+    ],
+    [
+     109.0,
+     130.0
+    ],
+    [
+     163.0,
+     185.0
+    ],
+    [
+     235.0,
+     258.0
+    ],
+    [
+     275.0,
+     328.0
+    ]
+   ]
+  }
+ ],
+ "plages": [
+  {
+   "episode": 0,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 18.400000000000006,
+   "t1": 22.0,
+   "slope": 0.06574564325537356,
+   "t_zero": 15.366413333333334,
+   "r2": 0.9106239460370982,
+   "seconds": 3.5999999999999943,
+   "dlevel": 0.24983344437041943,
+   "game": 25,
+   "point": "A",
+   "map": "The Cliff"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 80.60000000000002,
+   "t1": 87.39999999999998,
+   "slope": 0.11202848894387862,
+   "t_zero": 79.1467539823009,
+   "r2": 0.973438985452654,
+   "seconds": 6.7999999999999545,
+   "dlevel": 0.7495003331112591,
+   "game": 25,
+   "point": "A",
+   "map": "The Cliff"
+  },
+  {
+   "episode": 1,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 17.600000000000023,
+   "t1": 20.399999999999977,
+   "slope": 0.20819453697534998,
+   "t_zero": 16.253253333333337,
+   "r2": 0.9493670886075948,
+   "seconds": 2.7999999999999545,
+   "dlevel": 0.5829447035309794,
+   "game": 26,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 3,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 104.79999999999995,
+   "t1": 106.39999999999998,
+   "slope": 0.23595380857204637,
+   "t_zero": 103.32541960784286,
+   "r2": 0.9527472527472483,
+   "seconds": 1.6000000000000227,
+   "dlevel": 0.4163890739506996,
+   "game": 26,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 6,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 229.39999999999998,
+   "t1": 230.60000000000002,
+   "slope": 0.23793661368613234,
+   "t_zero": 227.24993000000032,
+   "r2": 0.6153846153846088,
+   "seconds": 1.2000000000000455,
+   "dlevel": 0.3331112591605596,
+   "game": 26,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 3,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 23.399999999999977,
+   "t1": 25.200000000000045,
+   "slope": 0.31923162336219996,
+   "t_zero": 22.278208695652147,
+   "r2": 0.9214568487727677,
+   "seconds": 1.8000000000000682,
+   "dlevel": 0.4996668887408396,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 6,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 152.5999999999999,
+   "t1": 153.5999999999999,
+   "slope": 0.19034929094887845,
+   "t_zero": 150.91241249999982,
+   "r2": 0.9142857142857436,
+   "seconds": 1.0,
+   "dlevel": 0.16655562958027997,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 6,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 154.20000000000005,
+   "t1": 155.4000000000001,
+   "slope": 0.23793661368608918,
+   "t_zero": 151.44992999999957,
+   "r2": 0.9411764705882002,
+   "seconds": 1.2000000000000455,
+   "dlevel": 0.24983344437041988,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 235.5999999999999,
+   "t1": 238.79999999999995,
+   "slope": 0.09695333829734326,
+   "t_zero": 233.48614400000005,
+   "r2": 0.9039463141025533,
+   "seconds": 3.2000000000000455,
+   "dlevel": 0.4163890739506994,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 239.4000000000001,
+   "t1": 241.20000000000005,
+   "slope": -0.09463388044334163,
+   "t_zero": null,
+   "r2": 0.9417378201908273,
+   "seconds": 1.7999999999999545,
+   "dlevel": -0.16655562958027997,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 245.5999999999999,
+   "t1": 247.5999999999999,
+   "slope": -0.12113136696747934,
+   "t_zero": null,
+   "r2": 0.9142857142857058,
+   "seconds": 2.0,
+   "dlevel": -0.2498334443704197,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 248.20000000000005,
+   "t1": 250.0,
+   "slope": 0.17917348030605193,
+   "t_zero": 245.98582253521107,
+   "r2": 0.9488048183700176,
+   "seconds": 1.7999999999999545,
+   "dlevel": 0.3331112591605598,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 250.79999999999995,
+   "t1": 252.4000000000001,
+   "slope": 0.027759271596710686,
+   "t_zero": 227.2660666666643,
+   "r2": 0.300000000000032,
+   "seconds": 1.6000000000001364,
+   "dlevel": 0.08327781479014007,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 253.0,
+   "t1": 254.5999999999999,
+   "slope": -0.06939817899178481,
+   "t_zero": null,
+   "r2": 0.7500000000000129,
+   "seconds": 1.599999999999909,
+   "dlevel": -0.08327781479014007,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 0,
+   "enemy": 1,
+   "t0": 255.20000000000005,
+   "t1": 259.20000000000005,
+   "slope": -0.09679694056775925,
+   "t_zero": null,
+   "r2": 0.9335955710955678,
+   "seconds": 4.0,
+   "dlevel": -0.4163890739506994,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 14,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 296.0,
+   "t1": 298.20000000000005,
+   "slope": 0.046588987295182564,
+   "t_zero": 290.54547583333317,
+   "r2": 0.6713286713286681,
+   "seconds": 2.2000000000000455,
+   "dlevel": 0.08327781479013985,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 14,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 298.79999999999995,
+   "t1": 300.4000000000001,
+   "slope": 0.22207417277367666,
+   "t_zero": 296.2665916666661,
+   "r2": 0.9035294117646926,
+   "seconds": 1.6000000000001364,
+   "dlevel": 0.3331112591605596,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 16,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 333.5999999999999,
+   "t1": 334.5999999999999,
+   "slope": -0.11896830684304992,
+   "t_zero": null,
+   "r2": 0.7142857142856411,
+   "seconds": 1.0,
+   "dlevel": -0.16655562958027964,
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 1,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 17.200000000000045,
+   "t1": 19.799999999999955,
+   "slope": 0.235648761631444,
+   "t_zero": 15.66012349514567,
+   "r2": 0.9196269135417326,
+   "seconds": 2.599999999999909,
+   "dlevel": 0.4996668887408396,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 3,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 70.20000000000005,
+   "t1": 73.59999999999991,
+   "slope": 0.07305071472819347,
+   "t_zero": 66.95977200000006,
+   "r2": 0.8284600389863488,
+   "seconds": 3.3999999999998636,
+   "dlevel": 0.3331112591605596,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 189.0,
+   "t1": 192.4000000000001,
+   "slope": 0.11000578217892348,
+   "t_zero": 187.3352652604165,
+   "r2": 0.9278864305670973,
+   "seconds": 3.400000000000091,
+   "dlevel": 0.4163890739506994,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 193.0,
+   "t1": 194.79999999999995,
+   "slope": -0.10094280580623646,
+   "t_zero": null,
+   "r2": 0.8658008658008923,
+   "seconds": 1.7999999999999545,
+   "dlevel": -0.16655562958027997,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 195.4000000000001,
+   "t1": 200.0,
+   "slope": 0.09386858036671225,
+   "t_zero": 191.65594599807136,
+   "r2": 0.9217382732980467,
+   "seconds": 4.599999999999909,
+   "dlevel": 0.4996668887408394,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 8,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 215.20000000000005,
+   "t1": 217.20000000000005,
+   "slope": 0.21197989219308846,
+   "t_zero": 213.66420714285715,
+   "r2": 0.9278106508876008,
+   "seconds": 2.0,
+   "dlevel": 0.4163890739506996,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 8,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 217.79999999999995,
+   "t1": 219.0,
+   "slope": 0.0892262301322867,
+   "t_zero": 208.5331466666659,
+   "r2": 0.7500000000000001,
+   "seconds": 1.2000000000000455,
+   "dlevel": 0.08327781479013996,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 233.79999999999995,
+   "t1": 237.20000000000005,
+   "slope": -0.11602172339183707,
+   "t_zero": null,
+   "r2": 0.9617752603433692,
+   "seconds": 3.400000000000091,
+   "dlevel": -0.4163890739506994,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 13,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 240.79999999999995,
+   "t1": 244.0,
+   "slope": 0.21023565988687767,
+   "t_zero": 239.62710524271853,
+   "r2": 0.9812245652978163,
+   "seconds": 3.2000000000000455,
+   "dlevel": 0.6662225183211192,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 17,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 300.0,
+   "t1": 301.0,
+   "slope": 0.15465879889598336,
+   "t_zero": 298.79476410256416,
+   "r2": 0.8521008403361878,
+   "seconds": 1.0,
+   "dlevel": 0.16655562958027964,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 17,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 301.5999999999999,
+   "t1": 302.4000000000001,
+   "slope": 1.2883902290402606e-17,
+   "t_zero": null,
+   "r2": 0.0,
+   "seconds": 0.8000000000001819,
+   "dlevel": 0.0,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 17,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 303.0,
+   "t1": 307.4000000000001,
+   "slope": 0.11026904329919737,
+   "t_zero": 298.56701313432836,
+   "r2": 0.9602139037433066,
+   "seconds": 4.400000000000091,
+   "dlevel": 0.4163890739506994,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 21,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 358.4000000000001,
+   "t1": 360.5999999999999,
+   "slope": 0.07861891606061926,
+   "t_zero": 355.615837530864,
+   "r2": 0.7646853146852812,
+   "seconds": 2.199999999999818,
+   "dlevel": 0.24983344437041943,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 21,
+   "team": "A",
+   "n": 0,
+   "enemy": 1,
+   "t0": 362.20000000000005,
+   "t1": 364.4000000000001,
+   "slope": -0.07570710435466614,
+   "t_zero": null,
+   "r2": 0.834224598930533,
+   "seconds": 2.2000000000000455,
+   "dlevel": -0.16655562958027964,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 24,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 405.0,
+   "t1": 408.20000000000005,
+   "slope": 0.21635902862145134,
+   "t_zero": 404.0753947169813,
+   "r2": 0.9261457303000278,
+   "seconds": 3.2000000000000455,
+   "dlevel": 0.6662225183211192,
+   "game": 28,
+   "point": "A",
+   "map": "Silva"
+  },
+  {
+   "episode": 0,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 19.0,
+   "t1": 21.800000000000182,
+   "slope": 0.07435519177690707,
+   "t_zero": 15.88244266666645,
+   "r2": 0.917318982387439,
+   "seconds": 2.800000000000182,
+   "dlevel": 0.20819453697534973,
+   "game": 29,
+   "point": "A",
+   "map": "Ceres"
+  },
+  {
+   "episode": 0,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 22.40000000000009,
+   "t1": 25.0,
+   "slope": -0.08693837807761944,
+   "t_zero": null,
+   "r2": 0.9709521247982916,
+   "seconds": 2.599999999999909,
+   "dlevel": -0.20819453697534973,
+   "game": 29,
+   "point": "A",
+   "map": "Ceres"
+  },
+  {
+   "episode": 2,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 48.40000000000009,
+   "t1": 49.40000000000009,
+   "slope": 0.3271628438184695,
+   "t_zero": 46.545403636364114,
+   "r2": 0.8391123439668947,
+   "seconds": 1.0,
+   "dlevel": 0.3331112591605596,
+   "game": 29,
+   "point": "A",
+   "map": "Ceres"
+  },
+  {
+   "episode": 4,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 87.40000000000009,
+   "t1": 90.40000000000009,
+   "slope": 0.2222782850648672,
+   "t_zero": 86.0197597796145,
+   "r2": 0.9743705401708204,
+   "seconds": 3.0,
+   "dlevel": 0.5829447035309794,
+   "game": 29,
+   "point": "A",
+   "map": "Ceres"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 179.19999999999982,
+   "t1": 183.19999999999982,
+   "slope": 0.10923453628316947,
+   "t_zero": 175.13714125412528,
+   "r2": 0.8694034090909011,
+   "seconds": 4.0,
+   "dlevel": 0.4163890739506994,
+   "game": 29,
+   "point": "A",
+   "map": "Ceres"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 183.80000000000018,
+   "t1": 189.0,
+   "slope": -0.10651222343427365,
+   "t_zero": null,
+   "r2": 0.9743645243645186,
+   "seconds": 5.199999999999818,
+   "dlevel": -0.5829447035309794,
+   "game": 29,
+   "point": "A",
+   "map": "Ceres"
+  },
+  {
+   "episode": 4,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 95.40000000000009,
+   "t1": 97.80000000000018,
+   "slope": 0.10066549040566307,
+   "t_zero": 91.76347090909094,
+   "r2": 0.909774436090209,
+   "seconds": 2.400000000000091,
+   "dlevel": 0.24983344437041977,
+   "game": 30,
+   "point": "B",
+   "map": "Engine"
+  },
+  {
+   "episode": 4,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 98.40000000000009,
+   "t1": 101.59999999999991,
+   "slope": -0.10613839139919995,
+   "t_zero": null,
+   "r2": 0.9548022598870153,
+   "seconds": 3.199999999999818,
+   "dlevel": -0.3331112591605596,
+   "game": 30,
+   "point": "B",
+   "map": "Engine"
+  },
+  {
+   "episode": 1,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 27.199999999999818,
+   "t1": 33.40000000000009,
+   "slope": 0.11592650354309174,
+   "t_zero": 25.226386938775466,
+   "r2": 0.8796742778801986,
+   "seconds": 6.200000000000273,
+   "dlevel": 0.5829447035309794,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 55.19999999999982,
+   "t1": 56.0,
+   "slope": 0.12491672218520987,
+   "t_zero": 51.1332,
+   "r2": 0.5000000000002276,
+   "seconds": 0.8000000000001819,
+   "dlevel": 0.12491672218520988,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 57.40000000000009,
+   "t1": 59.80000000000018,
+   "slope": 0.1532860876631668,
+   "t_zero": 53.752130149253674,
+   "r2": 0.9161224489795523,
+   "seconds": 2.400000000000091,
+   "dlevel": 0.3331112591605596,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 62.40000000000009,
+   "t1": 64.59999999999991,
+   "slope": -0.12084018579688555,
+   "t_zero": null,
+   "r2": 0.9324159711256524,
+   "seconds": 2.199999999999818,
+   "dlevel": -0.2498334443704197,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 8,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 125.19999999999982,
+   "t1": 127.80000000000018,
+   "slope": 0.23336090957675376,
+   "t_zero": 123.82345803921554,
+   "r2": 0.9464376682919498,
+   "seconds": 2.600000000000364,
+   "dlevel": 0.5829447035309794,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 12,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 239.19999999999982,
+   "t1": 240.4000000000001,
+   "slope": 0.13383934519842808,
+   "t_zero": 233.39987555555507,
+   "r2": 0.8437500000000001,
+   "seconds": 1.2000000000002728,
+   "dlevel": 0.1665556295802798,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 14,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 269.5999999999999,
+   "t1": 275.1999999999998,
+   "slope": 0.10819962389605703,
+   "t_zero": 266.81311620853086,
+   "r2": 0.9368581865930425,
+   "seconds": 5.599999999999909,
+   "dlevel": 0.5829447035309794,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 16,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 303.4000000000001,
+   "t1": 305.5999999999999,
+   "slope": 0.08298663361955218,
+   "t_zero": 299.7331326315794,
+   "r2": 0.6884933248569697,
+   "seconds": 2.199999999999818,
+   "dlevel": 0.24983344437041977,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 16,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 306.1999999999998,
+   "t1": 309.1999999999998,
+   "slope": -0.09062585727162377,
+   "t_zero": null,
+   "r2": 0.9073736536868076,
+   "seconds": 3.0,
+   "dlevel": -0.24983344437041943,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 17,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 312.4000000000001,
+   "t1": 314.0,
+   "slope": 0.07633799689096109,
+   "t_zero": 308.95735757575756,
+   "r2": 0.6980769230769415,
+   "seconds": 1.599999999999909,
+   "dlevel": 0.16655562958027964,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 17,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 314.5999999999999,
+   "t1": 316.1999999999998,
+   "slope": 0.25677326226961245,
+   "t_zero": 312.5530882882883,
+   "r2": 0.8928260869565621,
+   "seconds": 1.599999999999909,
+   "dlevel": 0.3331112591605596,
+   "game": 30,
+   "point": "A",
+   "map": "Engine"
+  },
+  {
+   "episode": 1,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 39.0,
+   "t1": 44.19999999999982,
+   "slope": 0.12151036468158354,
+   "t_zero": 36.54853796373776,
+   "r2": 0.9600356309507423,
+   "seconds": 5.199999999999818,
+   "dlevel": 0.5829447035309794,
+   "game": 30,
+   "point": "C",
+   "map": "Engine"
+  },
+  {
+   "episode": 5,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 207.5999999999999,
+   "t1": 211.0,
+   "slope": 0.21184707271175765,
+   "t_zero": 206.52635816091953,
+   "r2": 0.9879304387884361,
+   "seconds": 3.400000000000091,
+   "dlevel": 0.6662225183211192,
+   "game": 30,
+   "point": "C",
+   "map": "Engine"
+  },
+  {
+   "episode": 2,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 288.5999999999999,
+   "t1": 295.5999999999999,
+   "slope": 0.10825044136170207,
+   "t_zero": 286.8856547194721,
+   "r2": 0.9881522154154417,
+   "seconds": 7.0,
+   "dlevel": 0.7078614257161893,
+   "game": 31,
+   "point": "B",
+   "map": "Atlantis"
+  },
+  {
+   "episode": 0,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 13.199999999999818,
+   "t1": 15.400000000000091,
+   "slope": 0.2606071476824255,
+   "t_zero": 11.77014093109863,
+   "r2": 0.9195469373307936,
+   "seconds": 2.200000000000273,
+   "dlevel": 0.4996668887408396,
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 160.5999999999999,
+   "t1": 163.19999999999982,
+   "slope": 0.236106332042381,
+   "t_zero": 159.3805496124032,
+   "r2": 0.9176178660049548,
+   "seconds": 2.599999999999909,
+   "dlevel": 0.5829447035309794,
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis"
+  },
+  {
+   "episode": 3,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 176.19999999999982,
+   "t1": 177.4000000000001,
+   "slope": 0.11896830684304897,
+   "t_zero": 174.5998599999999,
+   "r2": 0.7999999999999958,
+   "seconds": 1.2000000000002728,
+   "dlevel": 0.16655562958027964,
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis"
+  },
+  {
+   "episode": 6,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 207.0,
+   "t1": 208.0,
+   "slope": 0.15465879889596185,
+   "t_zero": 205.25630256410236,
+   "r2": 0.8521008403361516,
+   "seconds": 1.0,
+   "dlevel": 0.16655562958027964,
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 344.8000000000002,
+   "t1": 346.4000000000001,
+   "slope": 0.05551854319342574,
+   "t_zero": 340.01636666666667,
+   "r2": 0.6857142857142812,
+   "seconds": 1.599999999999909,
+   "dlevel": 0.08327781479013985,
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 347.5999999999999,
+   "t1": 348.5999999999999,
+   "slope": 0.34500808984484704,
+   "t_zero": 345.96776781609174,
+   "r2": 0.9361781076066212,
+   "seconds": 1.0,
+   "dlevel": 0.3331112591605596,
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis"
+  },
+  {
+   "episode": 0,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 231.80000000000018,
+   "t1": 238.5999999999999,
+   "slope": 0.10193950998120802,
+   "t_zero": 229.44628970251716,
+   "r2": 0.9717745269781154,
+   "seconds": 6.799999999999727,
+   "dlevel": 0.6662225183211192,
+   "game": 31,
+   "point": "C",
+   "map": "Atlantis"
+  },
+  {
+   "episode": 0,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 223.4000000000001,
+   "t1": 225.0,
+   "slope": 0.3338675213675227,
+   "t_zero": 222.2462222222223,
+   "r2": 0.9879976580796287,
+   "seconds": 1.599999999999909,
+   "dlevel": 0.5341880341880343,
+   "game": 32,
+   "point": "A",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 1,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 267.0,
+   "t1": 268.5999999999999,
+   "slope": -0.3828347578347658,
+   "t_zero": null,
+   "r2": 0.9923076923077094,
+   "seconds": 1.599999999999909,
+   "dlevel": -0.5876068376068375,
+   "game": 32,
+   "point": "A",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 304.5999999999999,
+   "t1": 306.1999999999998,
+   "slope": -0.33164173789175394,
+   "t_zero": null,
+   "r2": 0.9940746268656657,
+   "seconds": 1.599999999999909,
+   "dlevel": -0.5341880341880342,
+   "game": 32,
+   "point": "A",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 0,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 134.80000000000018,
+   "t1": 136.5999999999999,
+   "slope": 0.3496503496503699,
+   "t_zero": 133.85077777777792,
+   "r2": 0.9963482606188656,
+   "seconds": 1.7999999999997272,
+   "dlevel": 0.6143162393162394,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 0,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 148.0,
+   "t1": 149.5999999999999,
+   "slope": -0.3538995726495707,
+   "t_zero": null,
+   "r2": 0.9932294394971367,
+   "seconds": 1.599999999999909,
+   "dlevel": -0.5608974358974359,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 1,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 153.19999999999982,
+   "t1": 154.80000000000018,
+   "slope": 0.3739316239315902,
+   "t_zero": 152.25657142857128,
+   "r2": 0.9966101694915028,
+   "seconds": 1.6000000000003638,
+   "dlevel": 0.5876068376068375,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 1,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 171.19999999999982,
+   "t1": 172.80000000000018,
+   "slope": -0.36280270655268076,
+   "t_zero": null,
+   "r2": 0.9968359179589897,
+   "seconds": 1.6000000000003638,
+   "dlevel": -0.5876068376068375,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 197.4000000000001,
+   "t1": 199.0,
+   "slope": 0.34277065527066264,
+   "t_zero": 196.23747186147202,
+   "r2": 0.9942425936277335,
+   "seconds": 1.599999999999909,
+   "dlevel": 0.5608974358974359,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 3,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 321.4000000000001,
+   "t1": 323.0,
+   "slope": 0.34499643874647273,
+   "t_zero": 320.33615483870994,
+   "r2": 0.9960613598673398,
+   "seconds": 1.599999999999909,
+   "dlevel": 0.5608974358974358,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 3,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 328.4000000000001,
+   "t1": 330.1999999999998,
+   "slope": -0.3439847189847245,
+   "t_zero": null,
+   "r2": 0.9986288721920984,
+   "seconds": 1.7999999999997272,
+   "dlevel": -0.6143162393162394,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 4,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 359.0,
+   "t1": 360.4000000000001,
+   "slope": 0.3449964387463805,
+   "t_zero": 357.78131612903184,
+   "r2": 0.9943828529194241,
+   "seconds": 1.400000000000091,
+   "dlevel": 0.48076923076923084,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 5,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 388.1999999999998,
+   "t1": 389.8000000000002,
+   "slope": -0.3650284900284769,
+   "t_zero": null,
+   "r2": 0.9917404129793755,
+   "seconds": 1.6000000000003638,
+   "dlevel": -0.6143162393162394,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 6,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 491.0,
+   "t1": 492.5999999999999,
+   "slope": 0.34944800569801626,
+   "t_zero": 489.9429129511677,
+   "r2": 0.990184788430626,
+   "seconds": 1.599999999999909,
+   "dlevel": 0.5608974358974359,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 6,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 509.5999999999999,
+   "t1": 511.1999999999998,
+   "slope": -0.35389957264960537,
+   "t_zero": null,
+   "r2": 0.9932294394971204,
+   "seconds": 1.599999999999909,
+   "dlevel": -0.5608974358974359,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 532.5999999999999,
+   "t1": 534.1999999999998,
+   "slope": 0.3227386039885996,
+   "t_zero": 531.4535908045976,
+   "r2": 0.9873982467126053,
+   "seconds": 1.599999999999909,
+   "dlevel": 0.5074786324786325,
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 0,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 39.19999999999982,
+   "t1": 40.59999999999991,
+   "slope": 0.3370472120472069,
+   "t_zero": 37.917916981131995,
+   "r2": 0.9908289241622618,
+   "seconds": 1.400000000000091,
+   "dlevel": 0.4807692307692308,
+   "game": 32,
+   "point": "C",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 0,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 59.0,
+   "t1": 60.40000000000009,
+   "slope": -0.36884411884409635,
+   "t_zero": null,
+   "r2": 0.9965192920091605,
+   "seconds": 1.400000000000091,
+   "dlevel": -0.5074786324786326,
+   "game": 32,
+   "point": "C",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 0,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 409.1999999999998,
+   "t1": 410.5999999999999,
+   "slope": 0.3386370573870517,
+   "t_zero": 407.8206647887323,
+   "r2": 0.9896603625417436,
+   "seconds": 1.400000000000091,
+   "dlevel": 0.48076923076923067,
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 1,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 487.4000000000001,
+   "t1": 488.8000000000002,
+   "slope": -0.37679334554339866,
+   "t_zero": null,
+   "r2": 0.9866153765083612,
+   "seconds": 1.400000000000091,
+   "dlevel": -0.5074786324786326,
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 523.5999999999999,
+   "t1": 524.8000000000002,
+   "slope": -0.3911019536019364,
+   "t_zero": null,
+   "r2": 0.977325581395407,
+   "seconds": 1.2000000000002728,
+   "dlevel": -0.4807692307692306,
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 3,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 533.5999999999999,
+   "t1": 534.5999999999999,
+   "slope": 0.38156288156292945,
+   "t_zero": 532.2458400000003,
+   "r2": 0.952380952380989,
+   "seconds": 1.0,
+   "dlevel": 0.3472222222222223,
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw"
+  },
+  {
+   "episode": 2,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 20.800000000000182,
+   "t1": 24.0,
+   "slope": 0.14083748089508405,
+   "t_zero": 19.234664347825966,
+   "r2": 0.6317675159235435,
+   "seconds": 3.199999999999818,
+   "dlevel": 0.6662225183211192,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 5,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 111.19999999999982,
+   "t1": 114.39999999999964,
+   "slope": 0.09491221538582092,
+   "t_zero": 107.999824516129,
+   "r2": 0.750781249999975,
+   "seconds": 3.199999999999818,
+   "dlevel": 0.24983344437041977,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 8,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 149.19999999999982,
+   "t1": 150.39999999999964,
+   "slope": 0.1338393451984518,
+   "t_zero": 147.75543111111128,
+   "r2": 0.8437499999999698,
+   "seconds": 1.199999999999818,
+   "dlevel": 0.16655562958027964,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 8,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 151.0,
+   "t1": 153.0,
+   "slope": 0.24983344437039176,
+   "t_zero": 149.18175151515123,
+   "r2": 0.9723214285713734,
+   "seconds": 2.0,
+   "dlevel": 0.4996668887408396,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 10,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 239.0,
+   "t1": 241.60000000000036,
+   "slope": 0.2434274586173307,
+   "t_zero": 237.61196165413537,
+   "r2": 0.9754066721808717,
+   "seconds": 2.600000000000364,
+   "dlevel": 0.5829447035309794,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 13,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 274.8000000000002,
+   "t1": 276.0,
+   "slope": 0.156145902731481,
+   "t_zero": 272.7713219047613,
+   "r2": 0.9343220338982745,
+   "seconds": 1.199999999999818,
+   "dlevel": 0.16655562958027997,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 13,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 276.60000000000036,
+   "t1": 279.39999999999964,
+   "slope": 0.1308651375273826,
+   "t_zero": 272.01805454545547,
+   "r2": 0.9343629343629616,
+   "seconds": 2.7999999999992724,
+   "dlevel": 0.3331112591605596,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 15,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 309.0,
+   "t1": 312.1999999999998,
+   "slope": 0.20717397551958233,
+   "t_zero": 307.5023826600983,
+   "r2": 0.9571023782980173,
+   "seconds": 3.199999999999818,
+   "dlevel": 0.5829447035309794,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 17,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 364.8000000000002,
+   "t1": 365.8000000000002,
+   "slope": -0.1189683068430351,
+   "t_zero": null,
+   "r2": 0.7142857142855314,
+   "seconds": 1.0,
+   "dlevel": -0.16655562958027964,
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point"
+  },
+  {
+   "episode": 1,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 21.59999999999991,
+   "t1": 27.40000000000009,
+   "slope": 0.11616282507990598,
+   "t_zero": 19.45761844763424,
+   "r2": 0.953406724525957,
+   "seconds": 5.800000000000182,
+   "dlevel": 0.5829447035309794,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 3,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 44.59999999999991,
+   "t1": 49.19999999999982,
+   "slope": 0.0976703936506106,
+   "t_zero": 40.3096224899599,
+   "r2": 0.6424432437403755,
+   "seconds": 4.599999999999909,
+   "dlevel": 0.4996668887408396,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 5,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 85.0,
+   "t1": 88.39999999999964,
+   "slope": 0.08637172741392028,
+   "t_zero": 82.3610011940297,
+   "r2": 0.8508877235104024,
+   "seconds": 3.399999999999636,
+   "dlevel": 0.3331112591605596,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 5,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 90.19999999999982,
+   "t1": 95.0,
+   "slope": 0.09865218059754964,
+   "t_zero": 85.37385714285706,
+   "r2": 0.9103331797942793,
+   "seconds": 4.800000000000182,
+   "dlevel": 0.4163890739506994,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 7,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 173.39999999999964,
+   "t1": 176.39999999999964,
+   "slope": 0.21799192695067,
+   "t_zero": 172.32127191011242,
+   "r2": 0.9607034566404112,
+   "seconds": 3.0,
+   "dlevel": 0.6662225183211192,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 10,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 207.0,
+   "t1": 212.39999999999964,
+   "slope": 0.11594851744522058,
+   "t_zero": 204.4285541425061,
+   "r2": 0.963549064924223,
+   "seconds": 5.399999999999636,
+   "dlevel": 0.5829447035309794,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 222.80000000000018,
+   "t1": 224.39999999999964,
+   "slope": 0.09715745058852912,
+   "t_zero": 220.6474476190486,
+   "r2": 0.773684210526548,
+   "seconds": 1.5999999999994543,
+   "dlevel": 0.16655562958027964,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 11,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 225.0,
+   "t1": 226.39999999999964,
+   "slope": -0.13383934519844426,
+   "t_zero": null,
+   "r2": 0.8901098901098676,
+   "seconds": 1.3999999999996362,
+   "dlevel": -0.16655562958027964,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 13,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 236.0,
+   "t1": 240.60000000000036,
+   "slope": 0.09296338672768799,
+   "t_zero": 233.91406945796817,
+   "r2": 0.9555363627441302,
+   "seconds": 4.600000000000364,
+   "dlevel": 0.49966688874083914,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 13,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 241.19999999999982,
+   "t1": 245.60000000000036,
+   "slope": -0.10121710690896209,
+   "t_zero": null,
+   "r2": 0.9381743767828304,
+   "seconds": 4.400000000000546,
+   "dlevel": -0.49966688874083914,
+   "game": 36,
+   "point": "A",
+   "map": "Artefact"
+  },
+  {
+   "episode": 2,
+   "team": "B",
+   "n": 1,
+   "enemy": 0,
+   "t0": 79.20000000000005,
+   "t1": 87.39999999999998,
+   "slope": 0.10105220618121258,
+   "t_zero": 77.47222249081803,
+   "r2": 0.9801449627081558,
+   "seconds": 8.199999999999932,
+   "dlevel": 0.7495003331112591,
+   "game": 16,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 5,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 121.0,
+   "t1": 122.0,
+   "slope": 2.191650868251701e-17,
+   "t_zero": null,
+   "r2": 0.0,
+   "seconds": 1.0,
+   "dlevel": 0.0,
+   "game": 16,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 5,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 123.60000000000002,
+   "t1": 125.0,
+   "slope": 0.13879635798356682,
+   "t_zero": 118.14988000000002,
+   "r2": 0.8484848484848576,
+   "seconds": 1.3999999999999773,
+   "dlevel": 0.1665556295802798,
+   "game": 16,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 10,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 275.4000000000001,
+   "t1": 277.79999999999995,
+   "slope": 0.23564876163143023,
+   "t_zero": 274.69701669902895,
+   "r2": 0.954390068369908,
+   "seconds": 2.3999999999998636,
+   "dlevel": 0.5829447035309792,
+   "game": 16,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 10,
+   "team": "A",
+   "n": 1,
+   "enemy": 0,
+   "t0": 278.4000000000001,
+   "t1": 279.79999999999995,
+   "slope": 0.0743551917769122,
+   "t_zero": 267.1997760000002,
+   "r2": 0.7142857142857907,
+   "seconds": 1.3999999999998636,
+   "dlevel": 0.08327781479013996,
+   "game": 16,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 0,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 49.0,
+   "t1": 51.40000000000009,
+   "slope": 0.27683009861557073,
+   "t_zero": 47.79332826446277,
+   "r2": 0.9576792255363612,
+   "seconds": 2.400000000000091,
+   "dlevel": 0.6662225183211192,
+   "game": 22,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 1,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 67.0,
+   "t1": 68.19999999999982,
+   "slope": 2.4504995539547078e-17,
+   "t_zero": null,
+   "r2": 0.0,
+   "seconds": 1.199999999999818,
+   "dlevel": 0.0,
+   "game": 22,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 1,
+   "team": "B",
+   "n": 0,
+   "enemy": 0,
+   "t0": 70.0,
+   "t1": 70.80000000000018,
+   "slope": 3.4707923650919105e-16,
+   "t_zero": null,
+   "r2": 0.0,
+   "seconds": 0.8000000000001819,
+   "dlevel": 0.0,
+   "game": 22,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 2,
+   "team": "A",
+   "n": 0,
+   "enemy": 1,
+   "t0": 85.0,
+   "t1": 86.80000000000018,
+   "slope": -0.11356065653199927,
+   "t_zero": null,
+   "r2": 0.8893280632410471,
+   "seconds": 1.800000000000182,
+   "dlevel": -0.16655562958027964,
+   "game": 22,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 14,
+   "team": "B",
+   "n": 2,
+   "enemy": 0,
+   "t0": 297.0,
+   "t1": 298.0,
+   "slope": 0.1546587988959332,
+   "t_zero": 295.2563025641019,
+   "r2": 0.8521008403361516,
+   "seconds": 1.0,
+   "dlevel": 0.16655562958027964,
+   "game": 22,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 14,
+   "team": "B",
+   "n": 3,
+   "enemy": 0,
+   "t0": 298.5999999999999,
+   "t1": 299.4000000000001,
+   "slope": 0.4580279813455884,
+   "t_zero": 297.3635999999992,
+   "r2": 0.864285714285568,
+   "seconds": 0.8000000000001819,
+   "dlevel": 0.3331112591605596,
+   "game": 22,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 16,
+   "team": "A",
+   "n": 0,
+   "enemy": 0,
+   "t0": 310.0,
+   "t1": 311.0,
+   "slope": -9.834373700933722e-19,
+   "t_zero": null,
+   "r2": 0.0,
+   "seconds": 1.0,
+   "dlevel": 0.0,
+   "game": 22,
+   "point": "A",
+   "map": "Polaris"
+  },
+  {
+   "episode": 18,
+   "team": "A",
+   "n": 2,
+   "enemy": 0,
+   "t0": 324.4000000000001,
+   "t1": 325.8000000000002,
+   "slope": 0.30733479267788916,
+   "t_zero": 322.6612361290323,
+   "r2": 0.953373015872932,
+   "seconds": 1.400000000000091,
+   "dlevel": 0.4163890739506994,
+   "game": 22,
+   "point": "A",
+   "map": "Polaris"
+  }
+ ],
+ "paires": [
+  {
+   "game": 25,
+   "point": "A",
+   "map": "The Cliff",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.24983344437041943,
+   "dt": 3.8000000000000114,
+   "pairs": 19
+  },
+  {
+   "game": 25,
+   "point": "A",
+   "map": "The Cliff",
+   "episode": 0,
+   "n": 3,
+   "enemy": 0,
+   "dl": 0.1665556295802798,
+   "dt": 0.5999999999999943,
+   "pairs": 3
+  },
+  {
+   "game": 25,
+   "point": "A",
+   "map": "The Cliff",
+   "episode": 2,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.749500333111259,
+   "dt": 7.0,
+   "pairs": 35
+  },
+  {
+   "game": 25,
+   "point": "A",
+   "map": "The Cliff",
+   "episode": 4,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.39999999999997726,
+   "pairs": 2
+  },
+  {
+   "game": 26,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 1,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.6662225183211192,
+   "dt": 3.0,
+   "pairs": 15
+  },
+  {
+   "game": 26,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 3,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.4163890739506996,
+   "dt": 1.7999999999999545,
+   "pairs": 9
+  },
+  {
+   "game": 26,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 6,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.7999999999999545,
+   "pairs": 4
+  },
+  {
+   "game": 26,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 6,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.3331112591605596,
+   "dt": 1.3999999999999773,
+   "pairs": 7
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.1999999999999318,
+   "pairs": 1
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 0,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.08327781479013979,
+   "dt": 0.39999999999997726,
+   "pairs": 2
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 3,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5413057961359093,
+   "dt": 2.0,
+   "pairs": 10
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 5,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013985,
+   "dt": 0.7999999999999545,
+   "pairs": 4
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 5,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.1999999999998181,
+   "pairs": 1
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 8,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.16655562958027997,
+   "dt": 1.199999999999818,
+   "pairs": 6
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 8,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.24983344437041988,
+   "dt": 1.400000000000091,
+   "pairs": 7
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 13,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.9160559626915391,
+   "dt": 8.0,
+   "pairs": 40
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 13,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.6662225183211195,
+   "dt": 5.999999999999773,
+   "pairs": 30
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 13,
+   "n": 0,
+   "enemy": 1,
+   "dl": -0.49966688874083914,
+   "dt": 4.2000000000000455,
+   "pairs": 21
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 16,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.16655562958027964,
+   "dt": 2.400000000000091,
+   "pairs": 12
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 16,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.4996668887408396,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 18,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.20000000000004547,
+   "pairs": 1
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 18,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013985,
+   "dt": 0.40000000000009095,
+   "pairs": 2
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 18,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.16655562958027964,
+   "dt": 1.199999999999818,
+   "pairs": 6
+  },
+  {
+   "game": 27,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 18,
+   "n": 0,
+   "enemy": 1,
+   "dl": 0.0,
+   "dt": 0.20000000000004547,
+   "pairs": 1
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 1,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 2.7999999999999545,
+   "pairs": 14
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 3,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.4163890739506994,
+   "dt": 3.599999999999909,
+   "pairs": 18
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 3,
+   "n": 2,
+   "enemy": 1,
+   "dl": 0.0,
+   "dt": 0.20000000000004547,
+   "pairs": 1
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 3,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.1665556295802798,
+   "dt": 0.6000000000001364,
+   "pairs": 3
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 5,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.20000000000004547,
+   "pairs": 1
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 7,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.9160559626915389,
+   "dt": 8.400000000000091,
+   "pairs": 42
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 7,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.24983344437041977,
+   "dt": 2.0,
+   "pairs": 10
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 8,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.2498334443704196,
+   "dt": 2.2000000000000455,
+   "pairs": 11
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 8,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.4163890739506996,
+   "dt": 2.2000000000000455,
+   "pairs": 11
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 10,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013985,
+   "dt": 0.7999999999999545,
+   "pairs": 4
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 11,
+   "n": 1,
+   "enemy": 0,
+   "dl": -0.4163890739506994,
+   "dt": 4.2000000000000455,
+   "pairs": 21
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 11,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 1.0,
+   "pairs": 5
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 13,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.6662225183211192,
+   "dt": 3.400000000000091,
+   "pairs": 17
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 17,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.7078614257161889,
+   "dt": 5.800000000000182,
+   "pairs": 29
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 17,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 1.0,
+   "pairs": 5
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 19,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 1.0,
+   "pairs": 5
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 19,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.08327781479013979,
+   "dt": 1.0,
+   "pairs": 5
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 21,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.24983344437041943,
+   "dt": 2.3999999999998636,
+   "pairs": 12
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 21,
+   "n": 0,
+   "enemy": 1,
+   "dl": -0.16655562958027964,
+   "dt": 2.400000000000091,
+   "pairs": 12
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 25,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.6662225183211192,
+   "dt": 3.400000000000091,
+   "pairs": 17
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 27,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.20000000000004547,
+   "pairs": 1
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 35,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.40000000000009095,
+   "pairs": 2
+  },
+  {
+   "game": 28,
+   "point": "A",
+   "map": "Silva",
+   "episode": 36,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.7999999999999545,
+   "pairs": 4
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.24983344437041943,
+   "dt": 3.0,
+   "pairs": 15
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 0,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.20819453697534973,
+   "dt": 2.800000000000182,
+   "pairs": 14
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 2,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.20000000000027285,
+   "pairs": 1
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 3,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.3331112591605596,
+   "dt": 1.2000000000002728,
+   "pairs": 6
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 6,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.40000000000009095,
+   "pairs": 2
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 6,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 3.200000000000273,
+   "pairs": 16
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 9,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.4996668887408396,
+   "dt": 4.199999999999818,
+   "pairs": 21
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 9,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.5829447035309794,
+   "dt": 5.400000000000091,
+   "pairs": 27
+  },
+  {
+   "game": 29,
+   "point": "A",
+   "map": "Ceres",
+   "episode": 10,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.08327781479013979,
+   "dt": 0.3999999999996362,
+   "pairs": 2
+  },
+  {
+   "game": 30,
+   "point": "B",
+   "map": "Engine",
+   "episode": 5,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.599999999999909,
+   "pairs": 3
+  },
+  {
+   "game": 30,
+   "point": "B",
+   "map": "Engine",
+   "episode": 5,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.3999999999996362,
+   "pairs": 2
+  },
+  {
+   "game": 30,
+   "point": "B",
+   "map": "Engine",
+   "episode": 6,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.3999999999996362,
+   "pairs": 2
+  },
+  {
+   "game": 30,
+   "point": "B",
+   "map": "Engine",
+   "episode": 7,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.24983344437041977,
+   "dt": 2.600000000000364,
+   "pairs": 13
+  },
+  {
+   "game": 30,
+   "point": "B",
+   "map": "Engine",
+   "episode": 7,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.3331112591605596,
+   "dt": 3.400000000000091,
+   "pairs": 17
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 1,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 6.400000000000091,
+   "pairs": 32
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 2,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.4996668887408396,
+   "dt": 3.600000000000364,
+   "pairs": 18
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 2,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.4163890739506995,
+   "dt": 3.800000000000182,
+   "pairs": 19
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 2,
+   "n": 0,
+   "enemy": 1,
+   "dl": -0.08327781479014007,
+   "dt": 0.40000000000009095,
+   "pairs": 2
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 3,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.08327781479013979,
+   "dt": 0.8000000000001819,
+   "pairs": 4
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 9,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 2.800000000000182,
+   "pairs": 14
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 12,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.20000000000027285,
+   "pairs": 1
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 13,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.24983344437041988,
+   "dt": 1.400000000000091,
+   "pairs": 7
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 15,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 5.799999999999727,
+   "pairs": 29
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 17,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.24983344437041977,
+   "dt": 2.400000000000091,
+   "pairs": 12
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 17,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.24983344437041943,
+   "dt": 3.199999999999818,
+   "pairs": 16
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 19,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.16655562958027964,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 19,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.4163890739506994,
+   "dt": 1.7999999999997272,
+   "pairs": 9
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 21,
+   "n": 3,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.20000000000027285,
+   "pairs": 1
+  },
+  {
+   "game": 30,
+   "point": "A",
+   "map": "Engine",
+   "episode": 21,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.08327781479013996,
+   "dt": 0.3999999999996362,
+   "pairs": 2
+  },
+  {
+   "game": 30,
+   "point": "C",
+   "map": "Engine",
+   "episode": 1,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 5.399999999999636,
+   "pairs": 27
+  },
+  {
+   "game": 30,
+   "point": "C",
+   "map": "Engine",
+   "episode": 3,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 1.0000000000004547,
+   "pairs": 5
+  },
+  {
+   "game": 30,
+   "point": "C",
+   "map": "Engine",
+   "episode": 5,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.749500333111259,
+   "dt": 3.599999999999909,
+   "pairs": 18
+  },
+  {
+   "game": 30,
+   "point": "C",
+   "map": "Engine",
+   "episode": 7,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.1665556295802798,
+   "dt": 0.599999999999909,
+   "pairs": 3
+  },
+  {
+   "game": 30,
+   "point": "C",
+   "map": "Engine",
+   "episode": 7,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.1999999999998181,
+   "pairs": 1
+  },
+  {
+   "game": 30,
+   "point": "C",
+   "map": "Engine",
+   "episode": 8,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.20000000000027285,
+   "pairs": 1
+  },
+  {
+   "game": 31,
+   "point": "B",
+   "map": "Atlantis",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.3999999999996362,
+   "pairs": 2
+  },
+  {
+   "game": 31,
+   "point": "B",
+   "map": "Atlantis",
+   "episode": 2,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.7078614257161894,
+   "dt": 7.199999999999818,
+   "pairs": 36
+  },
+  {
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis",
+   "episode": 0,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5413057961359093,
+   "dt": 2.400000000000091,
+   "pairs": 12
+  },
+  {
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis",
+   "episode": 3,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 2.799999999999727,
+   "pairs": 14
+  },
+  {
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis",
+   "episode": 4,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.16655562958027964,
+   "dt": 1.400000000000091,
+   "pairs": 7
+  },
+  {
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis",
+   "episode": 7,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.41638907395069896,
+   "dt": 1.599999999999909,
+   "pairs": 8
+  },
+  {
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis",
+   "episode": 7,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.24983344437041988,
+   "dt": 0.7999999999997272,
+   "pairs": 4
+  },
+  {
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis",
+   "episode": 9,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013985,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 31,
+   "point": "A",
+   "map": "Atlantis",
+   "episode": 9,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.3331112591605596,
+   "dt": 1.199999999999818,
+   "pairs": 6
+  },
+  {
+   "game": 31,
+   "point": "C",
+   "map": "Atlantis",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.6662225183211192,
+   "dt": 7.0,
+   "pairs": 35
+  },
+  {
+   "game": 31,
+   "point": "C",
+   "map": "Atlantis",
+   "episode": 3,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.04163890739506987,
+   "dt": 0.1999999999998181,
+   "pairs": 1
+  },
+  {
+   "game": 31,
+   "point": "C",
+   "map": "Atlantis",
+   "episode": 3,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.08327781479013996,
+   "dt": 0.40000000000009095,
+   "pairs": 2
+  },
+  {
+   "game": 32,
+   "point": "A",
+   "map": "Outlaw",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.6410256410256412,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "A",
+   "map": "Outlaw",
+   "episode": 1,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.6944444444444444,
+   "dt": 1.7999999999997272,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "A",
+   "map": "Outlaw",
+   "episode": 2,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.05341880341880345,
+   "dt": 0.1999999999998181,
+   "pairs": 1
+  },
+  {
+   "game": 32,
+   "point": "A",
+   "map": "Outlaw",
+   "episode": 2,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.5876068376068376,
+   "dt": 1.7999999999997272,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.6677350427350427,
+   "dt": 2.0,
+   "pairs": 10
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 0,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.6677350427350429,
+   "dt": 1.7999999999997272,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 1,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.6677350427350427,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 1,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.641025641025641,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 2,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.6410256410256411,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 3,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.641025641025641,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 3,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.6944444444444445,
+   "dt": 2.0,
+   "pairs": 10
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 4,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.560897435897436,
+   "dt": 1.599999999999909,
+   "pairs": 8
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 5,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.6410256410256409,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 6,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.6677350427350427,
+   "dt": 1.7999999999997272,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 6,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.6410256410256412,
+   "dt": 1.7999999999997272,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "B",
+   "map": "Outlaw",
+   "episode": 7,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.6143162393162394,
+   "dt": 1.7999999999997272,
+   "pairs": 9
+  },
+  {
+   "game": 32,
+   "point": "C",
+   "map": "Outlaw",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.5341880341880342,
+   "dt": 1.599999999999909,
+   "pairs": 8
+  },
+  {
+   "game": 32,
+   "point": "C",
+   "map": "Outlaw",
+   "episode": 0,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.5876068376068377,
+   "dt": 1.599999999999909,
+   "pairs": 8
+  },
+  {
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.5341880341880342,
+   "dt": 1.599999999999909,
+   "pairs": 8
+  },
+  {
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw",
+   "episode": 1,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.5608974358974358,
+   "dt": 1.6000000000003638,
+   "pairs": 8
+  },
+  {
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw",
+   "episode": 2,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.26709401709401714,
+   "dt": 0.40000000000009095,
+   "pairs": 2
+  },
+  {
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw",
+   "episode": 2,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.5341880341880342,
+   "dt": 1.400000000000091,
+   "pairs": 7
+  },
+  {
+   "game": 32,
+   "point": "D",
+   "map": "Outlaw",
+   "episode": 3,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.3739316239316242,
+   "dt": 1.199999999999818,
+   "pairs": 6
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 0,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.04163890739506976,
+   "dt": 0.6000000000003638,
+   "pairs": 3
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 2,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.7078614257161894,
+   "dt": 3.399999999999636,
+   "pairs": 17
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 4,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.24983344437041932,
+   "dt": 1.800000000000182,
+   "pairs": 9
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 4,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.16655562958027964,
+   "dt": 1.3999999999996362,
+   "pairs": 7
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 5,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.7999999999992724,
+   "pairs": 4
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 6,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.24983344437041977,
+   "dt": 3.399999999999636,
+   "pairs": 17
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 6,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.1665556295802798,
+   "dt": 0.5999999999994543,
+   "pairs": 3
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 9,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.16655562958027964,
+   "dt": 1.3999999999996362,
+   "pairs": 7
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 9,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.4996668887408396,
+   "dt": 2.199999999999818,
+   "pairs": 11
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 12,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.1999999999998181,
+   "pairs": 1
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 12,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 2.800000000000182,
+   "pairs": 14
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 15,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.24983344437041982,
+   "dt": 1.3999999999996362,
+   "pairs": 7
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 15,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.3331112591605596,
+   "dt": 3.0,
+   "pairs": 15
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 17,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.1999999999998181,
+   "pairs": 1
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 17,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 3.399999999999636,
+   "pairs": 17
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 19,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.08327781479013985,
+   "dt": 1.5999999999994543,
+   "pairs": 8
+  },
+  {
+   "game": 34,
+   "point": "A",
+   "map": "Reef Point",
+   "episode": 19,
+   "n": 0,
+   "enemy": 1,
+   "dl": -0.08327781479013979,
+   "dt": 0.6000000000003638,
+   "pairs": 3
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 1,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 6.0,
+   "pairs": 30
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 4,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.4996668887408396,
+   "dt": 4.799999999999727,
+   "pairs": 24
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 6,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.8327781479013988,
+   "dt": 8.599999999999454,
+   "pairs": 43
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 6,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.08327781479014018,
+   "dt": 0.8000000000001819,
+   "pairs": 4
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 8,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.749500333111259,
+   "dt": 3.199999999999818,
+   "pairs": 16
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 10,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.6000000000003638,
+   "pairs": 3
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 11,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.5829447035309794,
+   "dt": 5.599999999999454,
+   "pairs": 28
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 12,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.16655562958027964,
+   "dt": 1.7999999999992724,
+   "pairs": 9
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 12,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.16655562958027964,
+   "dt": 1.5999999999994543,
+   "pairs": 8
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 14,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.49966688874083914,
+   "dt": 4.800000000000182,
+   "pairs": 24
+  },
+  {
+   "game": 36,
+   "point": "A",
+   "map": "Artefact",
+   "episode": 14,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.49966688874083914,
+   "dt": 4.600000000000364,
+   "pairs": 23
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.8000000000000682,
+   "pairs": 4
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 0,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.39999999999997726,
+   "pairs": 2
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 0,
+   "n": 3,
+   "enemy": 0,
+   "dl": 0.08327781479013996,
+   "dt": 0.40000000000009095,
+   "pairs": 2
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 2,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.749500333111259,
+   "dt": 8.399999999999977,
+   "pairs": 42
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 4,
+   "n": 0,
+   "enemy": 1,
+   "dl": 0.0,
+   "dt": 0.7999999999999545,
+   "pairs": 4
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 5,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.33311125916055967,
+   "dt": 2.800000000000068,
+   "pairs": 14
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 5,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.6000000000000227,
+   "pairs": 3
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 8,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.08327781479013996,
+   "dt": 0.6000000000001364,
+   "pairs": 3
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 9,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.20000000000004547,
+   "pairs": 1
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 10,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.5829447035309792,
+   "dt": 2.599999999999909,
+   "pairs": 13
+  },
+  {
+   "game": 16,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 10,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013996,
+   "dt": 1.599999999999909,
+   "pairs": 8
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 0,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 0.8000000000001819,
+   "pairs": 4
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 0,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.6662225183211192,
+   "dt": 2.599999999999909,
+   "pairs": 13
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 1,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 2.399999999999636,
+   "pairs": 12
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 2,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479014018,
+   "dt": 0.3999999999996362,
+   "pairs": 2
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 2,
+   "n": 0,
+   "enemy": 0,
+   "dl": -0.08327781479014018,
+   "dt": 0.8000000000001819,
+   "pairs": 4
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 2,
+   "n": 0,
+   "enemy": 1,
+   "dl": -0.24983344437041943,
+   "dt": 2.0,
+   "pairs": 10
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 6,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.08327781479013996,
+   "dt": 0.6000000000003638,
+   "pairs": 3
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 10,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.599999999999909,
+   "pairs": 3
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 10,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.2498334443704196,
+   "dt": 1.0,
+   "pairs": 5
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 11,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.08327781479013996,
+   "dt": 1.2000000000002728,
+   "pairs": 6
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 11,
+   "n": 0,
+   "enemy": 1,
+   "dl": 0.0,
+   "dt": 0.1999999999998181,
+   "pairs": 1
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 12,
+   "n": 1,
+   "enemy": 0,
+   "dl": -0.08327781479013985,
+   "dt": 2.399999999999636,
+   "pairs": 12
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 12,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.40000000000009095,
+   "pairs": 2
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 12,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.20000000000027285,
+   "pairs": 1
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 14,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.1999999999998181,
+   "pairs": 1
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 14,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 0.599999999999909,
+   "pairs": 3
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 16,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.16655562958027964,
+   "dt": 1.199999999999818,
+   "pairs": 6
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 16,
+   "n": 3,
+   "enemy": 0,
+   "dl": 0.3331112591605596,
+   "dt": 1.0,
+   "pairs": 5
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 18,
+   "n": 0,
+   "enemy": 0,
+   "dl": 0.0,
+   "dt": 2.599999999999909,
+   "pairs": 13
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 18,
+   "n": 0,
+   "enemy": 1,
+   "dl": -0.08327781479013985,
+   "dt": 0.7999999999997272,
+   "pairs": 4
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 21,
+   "n": 1,
+   "enemy": 0,
+   "dl": 0.08327781479013979,
+   "dt": 1.0,
+   "pairs": 5
+  },
+  {
+   "game": 22,
+   "point": "A",
+   "map": "Polaris",
+   "episode": 21,
+   "n": 2,
+   "enemy": 0,
+   "dl": 0.4163890739506994,
+   "dt": 1.6000000000003638,
+   "pairs": 8
+  }
+ ]
+}
