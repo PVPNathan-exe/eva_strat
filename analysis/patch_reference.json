@@ -1,0 +1,73 @@
+{
+  "_lisez_moi": "Valeurs de jeu CONNUES et sourcées (patch notes du blog officiel). Une valeur n'a de sens qu'avec sa date : elle change avec les patchs, et les vidéos analysées datent d'époques différentes. Ne jamais lire UNE valeur sans choisir l'entrée dont la date précède la vidéo. Ce fichier est mis à jour à la main après relecture des extraits de data/patch_notes/index.json (la veille scripts/patches/watch.mjs ne modifie jamais ces valeurs).",
+  "verifie_le": "2026-10-16",
+  "verifie_sur": "32 patch notes de https://blog.eva.gg/en/tag/patch-notes, texte brut lu par le chef de chantier (balises, scripts et styles retirés)",
+  "page_des_patchs": "https://blog.eva.gg/en/tag/patch-notes",
+  "gadgets": {
+    "STICKY": [
+      {
+        "patch": "0.4.7",
+        "date": "2024-08-09",
+        "champs": { "cooldown_s": 30, "delai_explosion_s": 2, "portee_os_m": 2, "portee_degats_m": 3 },
+        "avant": { "cooldown_s": 45, "delai_explosion_s": 3.5 },
+        "source": { "url": null, "citation": "cooldown 30 s (45 s avant), délai d'explosion 2 s (3,5 s avant), portée OS 2 m, portée de dégâts 3 m", "citation_exacte": false, "note": "valeurs relevées dans le texte brut du patch 0.4.7 ; lien exact du patch à compléter" }
+      },
+      {
+        "patch": "0.5.2",
+        "date": "2025-01-22",
+        "champs": { "degats": 95, "portee_os_m": 3, "portee_degats_m": 5, "delai_explosion_s": 2.5, "cooldown_s": 20 },
+        "avant": { "degats": 100, "portee_os_m": 2, "portee_degats_m": 3, "delai_explosion_s": 2.7, "cooldown_s": 35 },
+        "source": {
+          "url": "https://blog.eva.gg/en/patchnote.0.5.2-1.5.2",
+          "citation": "STICKY Damages OS range (m) Damage range (m) Delay Before Explosion (sec) Cooldown Time (sec) 95 (100) 3 (2) 5 (3) 2,5 (2,7) 20 (35)",
+          "citation_exacte": true,
+          "note": "les valeurs entre parenthèses sont lues comme les valeurs précédentes (convention non confirmée par le texte) ; les portées concordent avec le patch 0.4.7 (2 m et 3 m), mais le cooldown précédent (35 s) et le délai (2,7 s) diffèrent de ce que donne 0.4.7 (30 s et 2 s) : ne pas s'en servir comme historique sans relecture"
+        }
+      }
+    ],
+    "SHIELD": [
+      {
+        "patch": "0.4.7",
+        "date": "2024-08-09",
+        "champs": { "deploiement_s": 0.5, "cooldown_s": null },
+        "avant": { "deploiement_s": 0 },
+        "cooldown_raison": "aucun délai de recharge du shield dans les 32 patch notes lus (16/10/2026) : valeur inconnue, ne pas la déduire",
+        "source": { "url": null, "citation": "déploiement en 0,5 s (instantané avant)", "citation_exacte": false, "note": "lien exact du patch à compléter" }
+      }
+    ],
+    "MED PACK": [
+      {
+        "patch": "1.8.0",
+        "date": "2026-07-23",
+        "champs": { "pv_rendus": 100, "duree_s": 1, "activation": "immediate", "cooldown_s": 45 },
+        "avant": null,
+        "source": { "url": null, "citation": "nouveau gadget de la saison 8 : 100 PV rendus, durée 1 s, activation immédiate, cooldown 45 s", "citation_exacte": false, "note": "lien exact du patch à compléter" }
+      },
+      {
+        "patch": "1.8.2.33",
+        "date": "2026-10-06",
+        "champs": { "cooldown_s": 20 },
+        "avant": { "cooldown_s": 45 },
+        "source": { "url": "https://blog.eva.gg/en/saison-8-patchnote-1.8.2.33", "citation": "cooldown du med pack réduit de 45 s à 20 s", "citation_exacte": false }
+      }
+    ],
+    "ECHO": [
+      {
+        "patch": "1.8.0",
+        "date": "2026-07-23",
+        "alias": "le clone",
+        "champs": { "pv": 60, "duree_s": 10, "activation": "immediate", "cooldown_s": 45, "vitesse_kmh": 5, "max_par_equipe": 1 },
+        "avant": null,
+        "source": { "url": null, "citation": "nouveau gadget de la saison 8 : 60 PV, durée 10 s, activation immédiate, cooldown 45 s, vitesse 5 km/h, un seul par équipe", "citation_exacte": false, "note": "lien exact du patch à compléter" }
+      }
+    ],
+    "SONAR": [],
+    "DX3": []
+  },
+  "mesure_sur_videos_non_sourcee": {
+    "_note": "Délais mesurés sur les vidéos par analysis/gadget_state.py. Ce ne sont PAS des valeurs de patch : aucune valeur trouvée dans les patch notes pour SONAR et DX3.",
+    "SONAR": { "cooldown_s": 40 },
+    "DX3": { "cooldown_s": 45 },
+    "STICKY": { "cooldown_s": 20 }
+  }
+}

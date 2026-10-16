@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findPython } from './maj/python.mjs';
 import { startupCheck } from './maj/report.mjs';
+import { watchPatches } from './patches/watch.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const win = process.platform === 'win32';
@@ -33,6 +34,8 @@ if (Number(process.versions.node.split('.')[0]) < 22) fail(`Node 22 ou plus requ
 // 0. Mise à jour depuis GitHub (seulement avec « npm start », jamais bloquante, désactivée par EVA_NO_UPDATE=1). Le code est mis à jour sans question ; les parties sensibles (masques, réglages du
 //    suivi, icônes d'armes) ne sont jamais modifiées sans ton accord. Faite avant le reste pour que de nouvelles dépendances soient installées dans la même foulée.
 if (run) await startupCheck(root, log);
+// Veille des patch notes du jeu (5 s au plus, silence hors ligne, ne modifie aucune valeur : voir scripts/patches/watch.mjs).
+if (run) await watchPatches(root, log);
 
 // 1. Dépendances du site : à refaire si node_modules est absent ou plus ancien que le verrou.
 const lock = join(root, 'package-lock.json');

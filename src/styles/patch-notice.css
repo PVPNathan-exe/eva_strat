@@ -1,0 +1,57 @@
+/* Bandeau « nouveau patch du jeu » (PatchNotice.tsx) : une ligne, extraits repliés. */
+
+.patch-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.35rem 1rem;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  font-size: 0.85rem;
+  color: var(--c-text-soft);
+}
+
+.patch-notice__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  min-width: 0;
+}
+
+.patch-notice__text {
+  flex: 1 1 18rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.patch-notice__text a {
+  color: var(--c-accent);
+}
+
+.patch-notice__done {
+  padding: 0.2rem 0.6rem;
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.patch-notice__done:hover {
+  border-color: var(--c-ok-text);
+}
+
+.patch-notice__extracts {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.patch-notice__list {
+  max-height: 14rem;
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  overflow-y: auto;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

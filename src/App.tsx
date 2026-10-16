@@ -8,6 +8,7 @@ import { MapCanvas } from './components/MapCanvas';
 import { AnalysisTab } from './components/analysis/AnalysisTab';
 import { DataTab } from './components/analysis/DataTab';
 import { ReadingTab } from './components/analysis/ReadingTab';
+import { PatchNotice } from './components/PatchNotice';
 import { StatsTab } from './components/stats/StatsTab';
 import { WeaponPrompt } from './components/analysis/WeaponPrompt';
 import { WeaponsTab } from './components/analysis/WeaponsTab';
@@ -67,6 +68,7 @@ export default function App() {
           Données
         </button>
       </nav>
+      <PatchNotice />
       {view === 'strategie' ? (
         <>
           <div className="strat-bars">

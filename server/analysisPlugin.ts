@@ -16,6 +16,7 @@ import type { Plugin } from 'vite';
 import { handleApi, type ApiContext, type Zones } from './api.ts';
 import { openDb } from './db.ts';
 import { handleData } from './dataTools.ts';
+import { handlePatchNotes } from './patchNotes.ts';
 import { pickVideoFile } from './filePicker.ts';
 import { isAllowedRequest } from './guard.ts';
 import { JobManager } from './jobs.ts';
@@ -406,6 +407,8 @@ export function analysisPlugin(): Plugin {
           }
 
           const body = method === 'GET' || method === 'DELETE' ? undefined : await readJson(req);
+          const patchNotes = handlePatchNotes({ dataDir }, method, url.pathname, url.searchParams, body); // veille des patch notes du jeu : /api/patch-notes
+          if (patchNotes) return sendJson(res, patchNotes.status, patchNotes.json);
           const data = await handleData({ python, root, dbPath, analysisRunning: () => jobs.running() !== null }, method, url.pathname, body);
           if (data) return sendJson(res, data.status, data.json);
           const result = handleApi(ctx, method, url.pathname, url.searchParams, body);
