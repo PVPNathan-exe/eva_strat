@@ -1,10 +1,11 @@
-// Routes /api/stats/* de l'onglet Stats : répartiteur (lives, links, presence, owners, episodes, teams, gadgets, duels, kill-scores, player-stats, game-summary, team-summary, global en GET ; PUT du verdict d'un épisode, seule écriture).
+// Routes /api/stats/* de l'onglet Stats : répartiteur (lives, links, presence, owners, episodes, teams, gadgets, duels, kill-scores, player-stats, game-summary, team-summary, global, players-summary, teams-summary en GET ; PUT du verdict d'un épisode, seule écriture).
 
 import type { ApiContext, ApiResult } from './api.ts';
 import { listEpisodes, putVerdict, teamAggregate } from './statsEpisodes.ts';
 import { gameSummary, listDuels, listGadgets, listKillScores, listPlayerStats } from './statsGame.ts';
 import { listLifeLoadouts, listLinks, listLives } from './statsLives.ts';
 import { listActive, listLevels, listOwners } from './statsOwners.ts';
+import { playersSummary, teamsSummary } from './statsPlayers.ts';
 import { presence } from './statsPresence.ts';
 import { globalSummary, teamSummary } from './statsTeam.ts';
 
@@ -26,6 +27,8 @@ const GET_ROUTES: Record<string, (ctx: ApiContext, query: URLSearchParams) => Ap
   '/api/stats/game-summary': gameSummary,
   '/api/stats/team-summary': teamSummary,
   '/api/stats/global': globalSummary,
+  '/api/stats/players-summary': playersSummary,
+  '/api/stats/teams-summary': teamsSummary,
 };
 
 /** Répond aux routes /api/stats/* ; null si la route n'en est pas une (handleApi continue alors). */
