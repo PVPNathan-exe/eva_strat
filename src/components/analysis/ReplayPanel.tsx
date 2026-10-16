@@ -8,6 +8,7 @@ import { Layers, Pause, Play } from 'lucide-react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { defaultInset, insetStorageKey, project, type Inset } from '../../lib/planInsets';
 import { observedAt, unconfirmedSet } from '../../lib/replayFlags';
+import { gadgetChips } from '../../lib/gadgetStates';
 import { gadgetChoices, noteMarks, type NoteShape } from '../../lib/reviewNotes';
 import type { ZoneColors } from '../../lib/safeZones';
 import { formatTime } from '../../lib/timeline';
@@ -19,6 +20,7 @@ import type { Game } from '../../types/analysis';
 import type { ReviewNote } from '../../types/stats';
 import { SafeZoneLayer } from '../stats/SafeZoneLayer';
 import { tokenRgb } from '../stats/useStats';
+import { GadgetChips } from './review/GadgetChips';
 import { KillList } from './review/KillList';
 import { NotePanel } from './review/NotePanel';
 import { boxStyleOf } from './review/notePlacement';
@@ -104,7 +106,9 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   const gameT = time - game.start_s;
   const note = useNoteDraft({
     game,
+    nameOf,
     selected,
+    onSelect: setSelected,
     time,
     inset,
     place,
@@ -119,8 +123,9 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   // Peu de notes visibles à la fois : recalculé à chaque image sans mémoïsation.
   const marksOnStage = noteMarks(showNotes ? reviewNotes.notes : [], draftShape, gameT, readAt);
 
-  // Clic sur une pastille : elle devient le joueur choisi (ou le redevient aucun).
-  const onDot = (slot: number) => setSelected(slot === selected ? null : slot);
+  // Pastilles de gadget : un joueur par pastille, nom et état du gadget à l'instant affiché.
+  const chips = gadgetChips(slotsPresent, reviewNotes.loadouts, reviewNotes.gadgetStates, gameT);
+  const aliveNow = new Set(shownAt(frames, time).filter((p) => p.alive).map((p) => p.slot));
 
   // Clic sur une note de la liste : le replay se place à son instant et son joueur est choisi.
   const openNote = (n: ReviewNote) => {
@@ -164,7 +169,6 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           placing={note.active}
           noteMarks={marksOnStage}
           dragHandlers={note.handlers}
-          onDot={onDot}
         />
 
         <div className="replay__bar">
@@ -181,6 +185,8 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
             ))}
           </select>
         </div>
+
+        <GadgetChips chips={chips} nameOf={nameOf} alive={aliveNow} selected={selected} onPick={note.pickChip} />
 
         {capture && (capture.A.length > 1 || capture.B.length > 1) && <ScoreChart capture={capture} start={game.start_s} end={game.end_s} time={time} onSeek={clock.seek} />}
       </div>

@@ -4,10 +4,14 @@
   min-width: 0;
 }
 
-/* Joueur choisi : anneau clair autour de sa pastille */
+/* Joueur choisi : anneau net autour de son pion, les autres pions sont atténués */
 .replay__dot.is-selected {
   box-shadow: 0 0 0 3px var(--c-cyan), 0 0 10px 3px var(--c);
   z-index: 2;
+}
+
+.replay__dot.is-dim {
+  opacity: 0.4;
 }
 
 .replay__dot.is-selected.is-unconfirmed {
@@ -20,8 +24,10 @@
   touch-action: none;
 }
 
-.replay__dot.is-passive {
-  pointer-events: none;
+/* Un pion se choisit d'un clic et se glisse (note « Position à corriger ») : le doigt ne fait pas défiler la page dessus */
+.replay__dot {
+  cursor: grab;
+  touch-action: none;
 }
 
 /* Légende de la zone de tir */
@@ -225,4 +231,104 @@
 
 .note__gadget.is-draft i {
   box-shadow: 0 0 0 2px var(--c-cyan);
+}
+
+/* Gadget de chaque joueur sous le plan : une rangée par équipe, les pastilles passent à la ligne */
+.gchips {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.gchips__team {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.gchip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'n who' 'n gad' 'n state';
+  column-gap: 0.4rem;
+  align-items: center;
+  box-sizing: border-box;
+  flex: 1 1 8rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.2rem 0.45rem;
+  border: 2px solid var(--c);
+  border-radius: 8px;
+  text-align: left;
+  line-height: 1.2;
+}
+
+.gchip b {
+  grid-area: n;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--c);
+  color: var(--c-bg);
+  font-size: 0.8rem;
+}
+
+.gchip__who {
+  grid-area: who;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-text-soft);
+  font-size: 0.75rem;
+}
+
+.gchip__gad {
+  grid-area: gad;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.gchip__state {
+  grid-area: state;
+  font-size: 0.72rem;
+}
+
+.gchip.is-ready .gchip__state {
+  color: var(--c-ok-text);
+}
+
+.gchip.is-used {
+  border-style: solid;
+  background: var(--c-surface-deep);
+  color: var(--c-text-muted);
+}
+
+.gchip.is-used .gchip__gad {
+  text-decoration: line-through;
+}
+
+.gchip.is-used .gchip__state,
+.gchip.is-unknown .gchip__state {
+  color: var(--c-text-muted);
+}
+
+.gchip.is-unknown {
+  border-style: dashed;
+}
+
+.gchip.is-dead {
+  opacity: 0.55;
+}
+
+/* Joueur choisi : anneau net, les autres pastilles sont atténuées (comme les pions du plan) */
+.gchips.has-selected .gchip:not(.is-selected) {
+  opacity: 0.45;
+}
+
+.gchip.is-selected {
+  box-shadow: 0 0 0 2px var(--c-cyan);
+  opacity: 1;
 }

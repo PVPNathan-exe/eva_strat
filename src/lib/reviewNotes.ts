@@ -128,12 +128,12 @@ export interface NoteDraftFields {
 /** Ce qui manque pour enregistrer la note (null : on peut enregistrer). */
 export function draftProblem(d: NoteDraftFields): string | null {
   if (d.kind === 'position') {
-    if (d.slot === null) return 'Choisis un joueur.';
-    if (d.x === null || d.y === null) return 'Clique sur le plan pour poser le fantôme.';
+    if (d.slot === null) return 'Choisis un joueur (pastille, clic sur le plan ou liste).';
+    if (d.x === null || d.y === null) return 'Glisse le joueur sur le plan, ou clique pour poser le fantôme.';
   }
   if (d.kind === 'action') {
-    if (d.slot === null) return 'Choisis un joueur.';
-    if (!d.gadget.trim()) return 'Choisis ou écris un gadget.';
+    if (d.slot === null) return 'Choisis un joueur (pastille de gadget ou liste).';
+    if (!d.gadget.trim()) return 'Choisis un gadget (ou « Autre »).';
     if (d.x === null || d.y === null) return 'Clique sur le plan pour poser le gadget.';
   }
   if (d.kind === 'note' && !d.text.trim()) return 'Écris la remarque.';

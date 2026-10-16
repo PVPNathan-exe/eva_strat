@@ -1,4 +1,5 @@
 // Plan de la game avec les joueurs : traînées, calques (zones peu fiables, zone de tir), pastilles numérotées et notes de review (fantômes, gadgets).
+// Le plan reçoit tous les gestes (useNoteDraft) : clic sur un pion = le choisir, glisser un pion = tracer son déplacement, clic ailleurs = poser le fantôme ou le gadget.
 // Les positions sont normalisées sur la minimap : `place` les ramène sur l'image du plan (cadre réglable par carte, lib/planInsets.ts).
 
 import type { ReactNode, PointerEvent } from 'react';
@@ -26,12 +27,16 @@ interface Props {
   unconfirmed: Set<string>;
   showUnconfirmed: boolean;
   selected: number | null;
-  /** Pose d'une note avec un joueur choisi : le plan reçoit le geste (clic = fantôme ou gadget) et les pastilles ne réagissent plus. */
+  /** Pose d'une note avec un joueur choisi : le curseur devient une croix et le plan ne défile plus au doigt. */
   placing: boolean;
   /** Notes de review à dessiner (dans leur fenêtre d'affichage) et brouillon en cours. */
   noteMarks: NoteMark[];
-  dragHandlers: { onPointerDown: (e: PointerEvent<HTMLDivElement>) => void; onPointerMove: (e: PointerEvent<HTMLDivElement>) => void; onPointerUp: (e: PointerEvent<HTMLDivElement>) => void };
-  onDot: (slot: number) => void;
+  dragHandlers: {
+    onPointerDown: (e: PointerEvent<HTMLDivElement>) => void;
+    onPointerMove: (e: PointerEvent<HTMLDivElement>) => void;
+    onPointerUp: (e: PointerEvent<HTMLDivElement>) => void;
+    onPointerCancel: () => void;
+  };
 }
 
 function dotTitle(p: Shown, name: string | undefined, observed: boolean, unconfirmed: boolean): string {
@@ -42,7 +47,7 @@ export function ReplayStage(props: Props) {
   const { plan, place, trails, shown, nameOf, observed, unconfirmed, selected, placing } = props;
 
   return (
-    <div className={`replay__stage${placing ? ' is-marking' : ''}`} {...(placing ? props.dragHandlers : {})}>
+    <div className={`replay__stage${placing ? ' is-marking' : ''}`} {...props.dragHandlers}>
       {plan ? <img src={plan.src} alt={`Plan ${plan.name}`} draggable={false} /> : <div className="replay__noplan" />}
       {trails && (
         <svg className="replay__trails" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -63,15 +68,16 @@ export function ReplayStage(props: Props) {
           bad ? 'is-unconfirmed' : '',
           p.slot === observed ? 'is-observed' : '',
           p.slot === selected ? 'is-selected' : '',
-          placing ? 'is-passive' : 'is-pickable',
+          selected !== null && p.slot !== selected ? 'is-dim' : '',
         ];
         return (
           <div
             key={p.slot}
             className={cls.filter(Boolean).join(' ')}
-            onClick={placing ? undefined : () => props.onDot(p.slot)}
+            data-slot={p.slot}
+            data-alive={p.alive ? '1' : '0'}
             style={{ left: `${x}%`, top: `${y}%`, ['--c' as string]: teamVar(p.team) }}
-            title={dotTitle(p, nameOf.get(p.slot), p.slot === observed, bad) + ' · clic : choisir ce joueur'}
+            title={dotTitle(p, nameOf.get(p.slot), p.slot === observed, bad) + ' · clic : choisir ce joueur, glisser : tracer son déplacement (note)'}
           >
             {p.alive && p.angle !== null && <i className={`replay__dir${p.coherence !== null && p.coherence < 0.4 ? ' is-doubtful' : ''}`} style={{ transform: `rotate(${p.angle}deg)`, opacity: p.coherence === null ? 1 : 0.35 + 0.65 * p.coherence }} />}
             <b>{p.alive ? numberOfSlot(p.slot) : <X className="ic" strokeWidth={3} />}</b>

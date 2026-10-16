@@ -2,7 +2,7 @@
 // Erreur réseau ou réponse 501 (route pas encore branchée) : message clair, jamais d'exception brute dans l'interface.
 
 import { jsonInit, parse } from './analysisApi.ts';
-import type { ReviewNote, ReviewNoteKind } from '../types/stats.ts';
+import type { GadgetState, ReviewNote, ReviewNoteKind } from '../types/stats.ts';
 
 /** La route existe mais n'est pas disponible (réponse 501). */
 export class ReviewNotesUnavailableError extends Error {
@@ -44,4 +44,6 @@ export const reviewNotesApi = {
   create: (note: ReviewNoteInput) => call<ReviewNote>('/api/review-notes', jsonInit('POST', note)),
   update: (id: number, patch: ReviewNotePatch) => call<unknown>(`/api/review-notes/${id}`, jsonInit('PUT', patch)),
   remove: (id: number) => call<unknown>(`/api/review-notes/${id}`, { method: 'DELETE' }),
+  /** États du gadget de chaque joueur (lecture seule, route /api/stats/gadgets). */
+  gadgetStates: (gameId: number) => call<GadgetState[]>(`/api/stats/gadgets?game=${gameId}`),
 };

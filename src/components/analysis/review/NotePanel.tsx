@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { Save, Trash2, Undo2 } from 'lucide-react';
+import { OTHER_GADGET } from '../../../lib/gadgetStates';
 import { draftBody, draftProblem, KIND_LABEL, playerLabel } from '../../../lib/reviewNotes';
 import { formatTime } from '../../../lib/timeline';
 import type { Game } from '../../../types/analysis';
@@ -11,11 +12,10 @@ import type { useNoteDraft } from './useNoteDraft';
 import type { useReviewNotes } from './useReviewNotes';
 
 const KINDS: ReviewNoteKind[] = ['position', 'action', 'note'];
-const FREE = '__free__';
 
 const GUIDE: Record<ReviewNoteKind, string> = {
-  position: 'Clique sur le plan pour poser le fantôme (où le joueur aurait dû être), glisse pour l\'ajuster, glisse depuis le fantôme pour donner son regard.',
-  action: 'Clique sur le plan pour poser le gadget à l\'endroit voulu.',
+  position: 'Glisse un joueur du plan vers l\'endroit où il aurait dû être (ou clique sur le plan pour poser le fantôme), puis enregistre.',
+  action: 'Choisis un joueur et son gadget (pastilles sous le plan), puis clique sur le plan pour poser le gadget.',
   note: 'Remarque libre à cet instant, le joueur est facultatif.',
 };
 
@@ -36,7 +36,7 @@ export function NotePanel({ game, nameOf, gadgets, api, note, onOpenNote }: Prop
   const [confirm, setConfirm] = useState<number | null>(null); // note dont la suppression attend sa confirmation
   const problem = draftProblem(draft);
   const known = [gadgets.current, ...gadgets.others].filter((g): g is string => !!g);
-  const choice = known.includes(draft.gadget) ? draft.gadget : FREE;
+  const choice = known.includes(draft.gadget) || draft.gadget === OTHER_GADGET ? draft.gadget : '';
 
   const save = async () => {
     if (problem) return;
@@ -48,7 +48,7 @@ export function NotePanel({ game, nameOf, gadgets, api, note, onOpenNote }: Prop
 
   return (
     <div className="review__notes">
-      <details className="review__fold" open onToggle={(e) => note.setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <details className="review__fold" open={note.open} onToggle={(e) => note.setOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary>Notes de review ({api.notes.length})</summary>
         <details className="help">
           <summary>À quoi servent ces notes</summary>
@@ -56,6 +56,11 @@ export function NotePanel({ game, nameOf, gadgets, api, note, onOpenNote }: Prop
             Ces notes ne changent <strong>aucune donnée</strong> : ni le suivi des joueurs, ni les statistiques. Elles servent à se souvenir plus tard des erreurs vues (un joueur trop avancé, un gadget pas utilisé) et, un jour, de base à un
             jeu d'échecs de stratégie. Un fantôme est un faux emplacement : la vraie position lue reste inchangée, un trait la relie au fantôme. Les corrections qui influent sur les données (position, regard, mort) restent dans l'onglet Lecture,
             option avancée. Une note se voit sur le plan de 3 s avant à 8 s après son instant (menu Affichage, « Afficher les notes »).
+          </p>
+          <p className="help__body">
+            <strong>Action</strong> : clique sur la pastille d'un joueur sous le plan (elle choisit le joueur et son gadget, le joueur est mis en évidence sur le plan), puis clique sur le plan à l'endroit où il pose son gadget.
+            <strong> Position à corriger</strong> : glisse un joueur du plan vers l'endroit où il aurait dû être (un simple clic le choisit seulement) ; le trait part de sa position lue, le fantôme se pose où tu lâches. Le commentaire est
+            prérempli, tu peux le modifier avant d'enregistrer. Glisser un joueur ne change jamais sa position lue.
           </p>
         </details>
 
@@ -72,23 +77,21 @@ export function NotePanel({ game, nameOf, gadgets, api, note, onOpenNote }: Prop
 
           {draft.kind === 'action' && (
             <div className="review__row">
-              {known.length > 0 && (
-                <select value={choice} onChange={(e) => note.setGadget(e.target.value === FREE ? '' : e.target.value)} title="Gadget de la vie du joueur à cet instant">
-                  {gadgets.current && <option value={gadgets.current}>{gadgets.current} (sa vie)</option>}
-                  {gadgets.others.map((g) => (
-                    <option key={g} value={g}>{g} (autre vie)</option>
-                  ))}
-                  <option value={FREE}>Autre (écrire)</option>
-                </select>
-              )}
-              {choice === FREE && <input type="text" value={draft.gadget} placeholder="Nom du gadget" onChange={(e) => note.setGadget(e.target.value)} />}
+              <select value={choice} onChange={(e) => note.setGadget(e.target.value || null)} title="Gadget du joueur choisi (les pastilles sous le plan le choisissent aussi)">
+                <option value="">Choisis un gadget</option>
+                {gadgets.current && <option value={gadgets.current}>{gadgets.current} (sa vie)</option>}
+                {gadgets.others.map((g) => (
+                  <option key={g} value={g}>{g} (autre vie)</option>
+                ))}
+                <option value={OTHER_GADGET}>Autre (gadget inconnu)</option>
+              </select>
             </div>
           )}
 
           <textarea
             rows={3}
             value={draft.text}
-            placeholder="Ton commentaire (la vidéo se met en pause quand tu cliques ici)"
+            placeholder="Ton commentaire (prérempli, modifiable ; la vidéo se met en pause quand tu cliques ici)"
             onFocus={note.startFreeze}
             onChange={(e) => note.setText(e.target.value)}
             onKeyDown={(e) => {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boxStyleOf, gazeAngle, pixelDistance, planToMinimap, stageFraction } from '../src/components/analysis/review/notePlacement.ts';
+import { boxStyleOf, DRAG_MIN_PX, gazeAngle, isDrag, pixelDistance, planToMinimap, stageFraction } from '../src/components/analysis/review/notePlacement.ts';
 
 const inset = { l: 0.02, t: 0.03, r: 0.01, b: 0.1 };
 // Même formule que planInsets.project (non importé : ce fichier lit un JSON que node ne charge pas sans attribut)
@@ -44,4 +44,13 @@ test('distance en pixels entre deux fractions du plan', () => {
   const rect = { width: 400, height: 200 };
   assert.equal(pixelDistance(rect, { x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 }), 0);
   assert.equal(pixelDistance(rect, { x: 0, y: 0 }, { x: 0.03, y: 0.04 }), Math.hypot(12, 8));
+});
+
+test('glisser ou clic : un appui qui reste sous la distance minimale est un clic simple', () => {
+  assert.equal(DRAG_MIN_PX, 6);
+  assert.equal(isDrag(0, 0), false);
+  assert.equal(isDrag(3, 4), false, '5 pixels : encore un clic');
+  assert.equal(isDrag(6, 0), true, '6 pixels : un glisser');
+  assert.equal(isDrag(-4, -5), true, 'distance diagonale');
+  assert.equal(isDrag(10, 0, 12), false, 'seuil réglable (doigt)');
 });

@@ -21,6 +21,14 @@ export function gazeAngle(dx: number, dy: number, minPixels = 10): number | null
   return Math.hypot(dx, dy) < minPixels ? null : (Math.atan2(dy, dx) * 180) / Math.PI + (dy < 0 ? 360 : 0);
 }
 
+/** Un appui sur un joueur devient un glisser (et non un simple clic) à partir de cette distance en pixels de l'écran. */
+export const DRAG_MIN_PX = 6;
+
+/** Vrai si le pointeur s'est assez éloigné de son point d'appui (en pixels de l'écran) pour être un glisser. */
+export function isDrag(dx: number, dy: number, minPixels = DRAG_MIN_PX): boolean {
+  return Math.hypot(dx, dy) >= minPixels;
+}
+
 /** Style qui place un élément exactement sur la minimap dans le plan (pourcentages de l'image du plan). */
 export function boxStyleOf(inset: Inset): CSSProperties {
   return { left: `${inset.l * 100}%`, top: `${inset.t * 100}%`, width: `${(1 - inset.l - inset.r) * 100}%`, height: `${(1 - inset.t - inset.b) * 100}%` };
