@@ -33,7 +33,7 @@ Document de travail de Claude (chef de chantier), écrit le 16 octobre 2026 apr�
 
 ## 4. Fichiers chauds (chef de chantier)
 
-`analysis/schema.sql` et `src/types/stats.ts` (faits), `analysis/stats_run.py` (STEPS), `server/statsApi.ts` (routes de S4 : le chef branche), `src/components/stats/StatsTab.tsx`, `src/components/analysis/AnalysisTab.tsx` (mise en page), `src/styles/tokens.css`, `src/styles/index.css`, `ARCHITECTURE.md`, `CLAUDE.md`, `docs/PLAN_RESTANT.md`, `package.json`.
+`analysis/schema.sql` et `src/types/stats.ts` (faits), `analysis/stats_run.py` (STEPS), `server/statsApi.ts` (routes de S4 : le chef branche), `src/components/stats/StatsTab.tsx`, `src/styles/tokens.css`, `src/styles/index.css`, `ARCHITECTURE.md`, `CLAUDE.md`, `docs/PLAN_RESTANT.md`, `package.json`.
 
 ## 5. Vagues (4 agents au plus à la fois)
 
@@ -60,7 +60,7 @@ Un seul calcul vidéo lourd à la fois sur la machine (P8). Le chef de chantier 
 - **Mesure** : sur les games 25, 26, 27 : nombre de duels, part gagnée par le plus de points de vie contre par kill, distribution des notes, 10 kills relus à la main avec leur note.
 
 ### F8 : reconstruction sous la vidéo (React)
-- **Possède** : `src/components/analysis/ReplayPanel.tsx` (le couper en fichiers de moins de 400 lignes si besoin), `GameBadge.tsx`, nouveaux composants `src/components/analysis/review/*`, `src/styles/analysis*.css` utiles ; pas `AnalysisTab.tsx` (le chef de chantier y place la reconstruction).
+- **Possède** : `src/components/analysis/ReplayPanel.tsx` (le couper en fichiers de moins de 400 lignes si besoin), `GameBadge.tsx`, nouveaux composants `src/components/analysis/review/*`, `src/styles/analysis*.css` utiles ; `src/components/analysis/AnalysisTab.tsx` (mise en page : la reconstruction passe sous la vidéo ; aucun autre agent n'y touche).
 - **Tâche** : rendre `ReplayPanel` utilisable sous la vidéo (largeur, hauteur, 1440 et 420 px) ; ajouter sans quitter l'écran : regard et position d'un joueur (corrections existantes de `useMarks.ts`, `MarkPanel.tsx`), commentaire (`comments.ts`, `CommentsPanel.tsx`), couche de zone de tir de l'arme tenue (`weaponRange.ts`, `visibility.ts`, `safeZones.ts`, couche `SafeZoneLayer.tsx` réutilisée sans modification), menu Affichage. Pas de bouton secondaire tant que P8 n'a pas rendu.
 - **Mesure** : tests TypeScript des fonctions pures ; rapport avec les captures à demander au chef de chantier.
 
