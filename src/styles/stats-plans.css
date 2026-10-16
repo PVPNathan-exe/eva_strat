@@ -1,0 +1,69 @@
+/* Vue Plans de l'onglet Stats (StatsPlans) : pions d'un plan importé, avec leur regard. Couleurs : palette .pal (stats.css) et tokens.css. */
+
+.plan__file {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 6px;
+  color: var(--c-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.plan__file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.plan__pawn {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  transform: translate(-50%, -50%);
+  background: var(--pal);
+  border: 2px solid var(--c-bg);
+  border-radius: 50%;
+  color: var(--c-bg);
+  font-size: 0.75rem;
+  line-height: 1;
+  pointer-events: auto;
+}
+
+.plan__pawn.is-dead {
+  opacity: 0.4;
+}
+
+/* Trait de regard : part du centre du pion dans la direction --gaze (0 = vers la droite, sens horaire) */
+.plan__gaze {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2.4rem;
+  height: 0;
+  border-top: 2px solid var(--pal);
+  transform: rotate(var(--gaze));
+  transform-origin: 0 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+@media (max-width: 600px) {
+  .plan__pawn {
+    width: 1.1rem;
+    height: 1.1rem;
+    font-size: 0.6rem;
+  }
+
+  .plan__gaze {
+    width: 1.6rem;
+  }
+}

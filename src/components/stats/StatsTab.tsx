@@ -1,20 +1,21 @@
-// Onglet Stats : filtres communs (carte, games, équipe suivie par nom, côté, joueur) et une vue à la fois : Parcours, Morts, Présence, Retakes, Rotations, Zones sûres.
+// Onglet Stats : filtres communs (carte, games, équipe suivie par nom, côté, joueur) et une vue à la fois : Parcours, Morts, Présence, Retakes, Rotations, Zones sûres, Plans (import EBP.GG).
 // Par défaut, une seule game est retenue (la plus récente de la carte) ; le menu Games en ajoute. Parcours, Morts et Zones sûres rejouent une game à la fois (sélecteur « Game rejouée »),
 // Présence et les cumuls additionnent les games retenues. Retakes et Rotations rejouent aussi une game (chronologie des points et des épisodes) ; Rotations garde un mode Cumul sur les games retenues.
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { Flame, Repeat, Route, ShieldCheck, Skull, Swords } from 'lucide-react';
+import { ClipboardList, Flame, Repeat, Route, ShieldCheck, Skull, Swords } from 'lucide-react';
 import { eligibleGames, pickGames, teamNames } from '../../lib/teamFollow';
 import { StatsFilters, type StatsFilterState } from './StatsFilters';
 import { StatsDeaths } from './StatsDeaths';
 import { StatsPaths } from './StatsPaths';
+import { StatsPlans } from './StatsPlans';
 import { StatsPresence } from './StatsPresence';
 import { StatsRetakes } from './StatsRetakes';
 import { StatsRotations } from './StatsRotations';
 import { StatsSafe } from './StatsSafe';
 import { gameLabel, INITIAL_FILTERS, mapsOf, noticeOf, specOf, useStatsGames } from './useStats';
 
-type View = 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe';
+type View = 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe' | 'plans';
 
 const REPLAY_VIEWS: View[] = ['parcours', 'morts', 'retakes', 'rotations', 'safe'];
 
@@ -53,6 +54,7 @@ export function StatsTab() {
         {tab('retakes', <Swords className="ic" />, 'Retakes')}
         {tab('rotations', <Repeat className="ic" />, 'Rotations')}
         {tab('safe', <ShieldCheck className="ic" />, 'Zones sûres')}
+        {tab('plans', <ClipboardList className="ic" />, 'Plans')}
       </div>
       {notice && <p className="stats__empty">{notice}</p>}
       {!notice && !map && <p className="stats__empty">Aucune game avec des positions lues. Lancer l'analyse détaillée d'une vidéo dans l'onglet Analyse (positions), puis calculer les statistiques : `python analysis/stats_run.py --game N`.</p>}
@@ -71,7 +73,9 @@ export function StatsTab() {
               </select>
             </label>
           )}
-          {selected.length === 0 || !replay ? (
+          {view === 'plans' ? (
+            <StatsPlans map={map} />
+          ) : selected.length === 0 || !replay ? (
             <p className="stats__empty">
               {mapGames.length === 0 ? 'Aucune game de cette carte pour ce choix d\'équipe et de côté.' : 'Aucune game retenue : cocher au moins une game dans le menu Games.'}
             </p>
