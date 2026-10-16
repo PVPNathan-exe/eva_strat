@@ -1,0 +1,130 @@
+/* Vue Global de l'onglet Stats (StatsGlobal) : légende, tableaux, avertissement du seuil de games. Couleurs : jetons de tokens.css et palette .pal de stats.css. */
+
+.global {
+  max-width: 100%;
+}
+
+/* Les couches de chaleur se superposent dans la boîte de la minimap */
+.global__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.global__gate {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--c-warn);
+  border-radius: 6px;
+  background: var(--c-surface);
+  color: var(--c-text-soft);
+  font-size: 0.88rem;
+}
+
+.global__note {
+  margin: 0.3rem 0 0;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+/* Légende toujours visible sous la barre */
+.global__legend {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  background: var(--c-surface);
+}
+
+.global__legend-text {
+  margin: 0;
+  color: var(--c-text-soft);
+  font-size: 0.82rem;
+}
+
+.global__legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+  min-width: 0;
+}
+
+.global__legend-games {
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+}
+
+.global__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+  color: var(--c-text);
+}
+
+.global__chip::before {
+  content: '';
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  background: var(--pal-base);
+}
+
+.global__scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--c-text-muted);
+  font-size: 0.78rem;
+}
+
+.global__scale-bar {
+  width: 6rem;
+  height: 0.55rem;
+  background: linear-gradient(90deg, var(--c-heat-low), var(--c-text-muted));
+  border: 1px solid var(--c-border);
+  border-radius: 3px;
+}
+
+/* Tableaux : défilement horizontal dans leur propre cadre, jamais sur la page */
+.global__block {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.global__title {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--c-text);
+}
+
+.global__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.global__table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: var(--c-text-soft);
+}
+
+.global__table th,
+.global__table td {
+  padding: 0.25rem 0.7rem 0.25rem 0;
+  border-bottom: 1px solid var(--c-border);
+  text-align: left;
+  font-weight: normal;
+  vertical-align: top;
+}
+
+.global__table thead th {
+  color: var(--c-text-muted);
+  font-size: 0.78rem;
+}

@@ -3,10 +3,11 @@
 // Présence et les cumuls additionnent les games retenues. Retakes et Rotations rejouent aussi une game (chronologie des points et des épisodes) ; Rotations garde un mode Cumul sur les games retenues.
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { ClipboardList, Flame, ListChecks, Repeat, Route, ShieldCheck, Skull, Swords, Users } from 'lucide-react';
+import { ClipboardList, Flame, Globe, ListChecks, Repeat, Route, ShieldCheck, Skull, Swords, Users } from 'lucide-react';
 import { eligibleGames, pickGames, teamNames } from '../../lib/teamFollow';
 import { StatsFilters, type StatsFilterState } from './StatsFilters';
 import { StatsDeaths } from './StatsDeaths';
+import { StatsGlobal } from './StatsGlobal';
 import { StatsPaths } from './StatsPaths';
 import { StatsPlans } from './StatsPlans';
 import { StatsPresence } from './StatsPresence';
@@ -17,7 +18,7 @@ import { StatsSafe } from './StatsSafe';
 import { StatsTeam } from './StatsTeam';
 import { gameLabel, INITIAL_FILTERS, mapsOf, noticeOf, specOf, useStatsGames } from './useStats';
 
-type View = 'recap' | 'equipe' | 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe' | 'plans';
+type View = 'recap' | 'equipe' | 'global' | 'parcours' | 'morts' | 'presence' | 'retakes' | 'rotations' | 'safe' | 'plans';
 
 const REPLAY_VIEWS: View[] = ['recap', 'parcours', 'morts', 'retakes', 'rotations', 'safe'];
 
@@ -52,6 +53,7 @@ export function StatsTab() {
       <div className="subtabs" role="tablist" aria-label="Vue des statistiques">
         {tab('recap', <ListChecks className="ic" />, 'Récap')}
         {tab('equipe', <Users className="ic" />, 'Équipe')}
+        {tab('global', <Globe className="ic" />, 'Global')}
         {tab('parcours', <Route className="ic" />, 'Parcours')}
         {tab('morts', <Skull className="ic" />, 'Morts')}
         {tab('presence', <Flame className="ic" />, 'Présence')}
@@ -79,6 +81,8 @@ export function StatsTab() {
           )}
           {view === 'plans' ? (
             <StatsPlans map={map} />
+          ) : view === 'global' ? (
+            <StatsGlobal map={map} games={mapGames} spec={spec} />
           ) : view === 'equipe' ? (
             <StatsTeam map={map} games={mapGames} spec={spec} />
           ) : selected.length === 0 || !replay ? (
