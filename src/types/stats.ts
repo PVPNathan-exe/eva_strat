@@ -180,4 +180,7 @@ export interface ReviewNote {
   gadget: string | null;
   text: string;
   created_at: string;
+  /** Deuxième point : fin du trait du SHIELD, ou point visé par le CLONE (direction et distance) ; null pour les autres notes. */
+  x2?: number | null;
+  y2?: number | null;
 }

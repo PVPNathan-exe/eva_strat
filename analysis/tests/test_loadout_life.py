@@ -219,3 +219,38 @@ def test_un_gadget_terne_deja_utilise_ne_vote_pas_pour_l_identite_de_l_icone(tmp
     assert L.classify(dim, tmp_path)["gadget"] is None
     reads = {"start": [L.classify(dim, tmp_path)] * 3, "end": []}
     assert L.vote_life(reads)["gadget"] is None  # aucune image disponible : pas d'identité devinée sur des images ternes
+
+
+# --- règle d'équipe : un seul SHIELD, SONAR et CLONE par équipe -------------------------------------------------------------------------------------------
+
+def _lv(slot, idx, t0, t1):
+    return {"slot": slot, "idx": idx, "t0": t0, "t1": t1}
+
+
+def _row(slot, idx, gadget, source):
+    return {"slot": slot, "life_idx": idx, "gadget": gadget, "source": source}
+
+
+NAMES_RULE = {"G1": "SHIELD", "G2": "SONAR", "G3": "DX3", "G4": "CLONE", "G5": "SONAR"}
+
+
+def test_deux_sonar_dans_la_meme_equipe_en_meme_temps_effacent_la_lecture_la_moins_sure():
+    lives = [_lv(1, 0, 0, 100), _lv(4, 0, 10, 80)]
+    rows = [_row(1, 0, "G2", "lu"), _row(4, 0, "G5", "pale")]  # deux icônes différentes, le même gadget SONAR
+    conflicts = L.apply_team_rule(rows, lives, NAMES_RULE)
+    assert [c["gadget"] for c in conflicts] == ["SONAR"] and conflicts[0]["perdants"] == [(4, 0)] and conflicts[0]["gardee"] == (1, 0)
+    assert rows[0]["gadget"] == "G2" and rows[1]["gadget"] is None
+
+
+def test_a_egalite_de_source_les_deux_lectures_sont_effacees():
+    rows = [_row(2, 0, "G1", "lu1"), _row(3, 0, "G1", "lu1")]
+    conflicts = L.apply_team_rule(rows, [_lv(2, 0, 0, 50), _lv(3, 0, 5, 60)], NAMES_RULE)
+    assert conflicts[0]["gardee"] is None and rows[0]["gadget"] is None and rows[1]["gadget"] is None
+
+
+def test_pas_de_conflit_entre_deux_equipes_deux_vies_qui_ne_se_chevauchent_pas_ni_pour_le_dx3():
+    # même SONAR dans les deux équipes : normal ; même joueur à deux vies : normal ; vies successives de deux coéquipiers : normal ; DX3 à plusieurs : permis
+    rows = [_row(1, 0, "G2", "lu"), _row(5, 0, "G2", "lu"), _row(2, 0, "G2", "lu"), _row(3, 0, "G3", "lu"), _row(4, 0, "G3", "lu")]
+    lives = [_lv(1, 0, 0, 30), _lv(5, 0, 0, 100), _lv(2, 0, 40, 90), _lv(3, 0, 0, 100), _lv(4, 0, 0, 100)]
+    assert L.apply_team_rule(rows, lives, NAMES_RULE) == []
+    assert all(r["gadget"] for r in rows)

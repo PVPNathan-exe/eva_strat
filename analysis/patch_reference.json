@@ -59,7 +59,8 @@
           "duree_s": 10,
           "points_de_vie": 400,
           "hauteur_m": 1,
-          "arrete_les_balles": true
+          "arrete_les_balles": true,
+          "max_par_equipe": 1
         },
         "source": {
           "type": "information de l'utilisateur",
@@ -145,7 +146,22 @@
         }
       }
     ],
-    "SONAR": [],
+    "SONAR": [
+      {
+        "patch": null,
+        "date": "2026-10-16",
+        "champs": {
+          "max_par_equipe": 1
+        },
+        "source": {
+          "type": "information de l'utilisateur",
+          "url": null,
+          "citation": "une équipe n'a qu'un shield, qu'un sonar et qu'un clone",
+          "citation_exacte": false,
+          "note": "règle donnée par l'utilisateur le 16/10/2026 (exemple : Artefact, SNV contre NCT) ; pour le clone le patch 1.8.0 dit aussi « un seul Echo par équipe »"
+        }
+      }
+    ],
     "DX3": []
   },
   "mesure_sur_videos_non_sourcee": {

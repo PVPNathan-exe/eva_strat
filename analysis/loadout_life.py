@@ -30,13 +30,15 @@ import loadout
 import weapons
 
 MODULE = "loadout_life"
-REVISION = 2  # 2 : un gadget terne (déjà utilisé) ne vote plus pour l'identité de l'icône (GADGET_MIN_TONE)
+REVISION = 3  # 3 : règle d'équipe (un seul SHIELD, SONAR et CLONE par équipe à un instant) ; 2 : un gadget terne (déjà utilisé) ne vote plus pour l'identité de l'icône (GADGET_MIN_TONE)
 
 START_OFFSETS = (0.8, 1.8, 3.0, 4.5, 6.5, 9.0)  # images lues après l'apparition (secondes) : le joueur a le temps de tenir et de changer d'arme
 END_OFFSETS = (-1.2, -0.7, -0.3)  # images lues avant la mort : l'arme tenue au moment de mourir
 END_OFFSETS_GAME_END = (-3.0, -2.4, -1.8)  # fin de game : l'écran de fin noircit environ 1,1 s avant la dernière image
 MIN_ALIVE_S = 0.3  # une image doit tomber au moins 0,3 s avant la fin de la vie
 MAX_WORKERS = 3  # lectures d'images ffmpeg en parallèle (règle du projet : 3 processus de lecture au plus)
+UNIQUE_GADGETS = ("SHIELD", "SONAR", "CLONE")  # règle du jeu (information de l'utilisateur, 16/10/2026) : une équipe n'a qu'un SHIELD, un SONAR et un CLONE (DX3, STICKY et MEDPACK peuvent être plusieurs)
+TEAM_RULE_MIN_OVERLAP_S = 1.0  # deux vies de joueurs de la même équipe se chevauchent si elles ont plus d'une seconde en commun
 ORIGIN_RANK = {"lu": 0, "lu1": 1, "pale": 2, "game": 3}  # du plus fiable au moins fiable
 GADGET_MIN_TONE = 55  # relief (95e centile) à partir duquel l'icône du gadget est celle d'un gadget DISPONIBLE (noire) : 55 à 125 mesuré, un gadget utilisé n'a que 14 à 44 (analysis/gadget_state.py)
 PALE_MAX_TONE = 50  # relief (95e centile) au-dessus duquel une case n'est plus « rangée » : mesuré 11 à 47 sur 320 bandeaux
@@ -216,6 +218,7 @@ def compute_detail(conn, game_id, folder=weapons.ICON_DIR, create=False, use_gam
                 "gadget": next((c["banner"] for c in every if c["gadget"]), None),
             }
         rows.append(vote)
+    report["team_rule"] = apply_team_rule(rows, lives, weapons.display_names(folder))
     return rows, report
 
 
@@ -226,6 +229,35 @@ def compute(conn, game_id, folder=weapons.ICON_DIR, create=False, use_game=False
         return 0
     write(conn, game_id, rows)
     return len(rows)
+
+
+def apply_team_rule(rows, lives, names):
+    """Règle d'équipe : un seul SHIELD, un seul SONAR et un seul CLONE par équipe à un instant. Quand deux vies qui se chevauchent, de deux joueurs d'une même équipe, ont le même gadget unique, la lecture la
+    moins sûre (`source` : lu, lu1, pale, game) est effacée (gadget inconnu plutôt qu'un nom faux) ; à égalité les deux sont effacées (on ne sait pas laquelle est juste). Modifie `rows` sur place et
+    renvoie la liste des conflits [{gadget, perdants: [(slot, vie)], gardee: (slot, vie) ou None}]."""
+    span = {(l["slot"], l["idx"]): (l["t0"], l["t1"]) for l in lives}
+    conflicts, cleared = [], set()
+    for team_low in (True, False):
+        mine = [r for r in rows if (r["slot"] <= 4) == team_low and r.get("gadget")]
+        for name in UNIQUE_GADGETS:
+            same = [r for r in mine if names.get(r["gadget"]) == name]
+            for i in range(len(same)):
+                for j in range(i + 1, len(same)):
+                    a, b = same[i], same[j]
+                    if a["slot"] == b["slot"]:
+                        continue
+                    (a0, a1), (b0, b1) = span.get((a["slot"], a["life_idx"]), (0, 0)), span.get((b["slot"], b["life_idx"]), (0, 0))
+                    if min(a1, b1) - max(a0, b0) <= TEAM_RULE_MIN_OVERLAP_S:
+                        continue
+                    ra, rb = ORIGIN_RANK.get(a.get("source"), 4), ORIGIN_RANK.get(b.get("source"), 4)
+                    losers = [a, b] if ra == rb else [a] if ra > rb else [b]
+                    kept = None if ra == rb else (b if ra > rb else a)
+                    conflicts.append({"gadget": name, "perdants": [(r["slot"], r["life_idx"]) for r in losers], "gardee": (kept["slot"], kept["life_idx"]) if kept else None})
+                    cleared.update((r["slot"], r["life_idx"]) for r in losers)
+    for r in rows:
+        if (r["slot"], r["life_idx"]) in cleared:
+            r["gadget"] = None
+    return conflicts
 
 
 def write(conn, game_id, rows):
@@ -267,8 +299,19 @@ def main(argv=None):
     parser.add_argument("--icons", default=str(weapons.ICON_DIR), help="Dossier des icônes (modèles et names.json)")
     parser.add_argument("--create-icons", action="store_true", help="Créer un modèle pour chaque icône inconnue et nette (à nommer ensuite)")
     parser.add_argument("--game-fallback", action="store_true", help="Reprendre l'équipement de la game (table loadouts) pour les cases restées vides")
+    parser.add_argument("--rule-only", action="store_true", help="Applique seulement la règle d'équipe (un SHIELD, un SONAR, un CLONE par équipe) aux lignes déjà écrites, sans relire la vidéo")
     args = parser.parse_args(argv)
     conn = db.connect(args.db)
+    if args.rule_only:
+        rows = [dict(r) for r in conn.execute("SELECT slot, life_idx, gadget, source FROM life_loadouts WHERE game_id = ?", (args.game,))]
+        lives = [dict(r) for r in conn.execute("SELECT slot, idx, t0, t1 FROM lives WHERE game_id = ?", (args.game,))]
+        conflicts = apply_team_rule(rows, lives, weapons.display_names(Path(args.icons)))
+        if conflicts and not args.dry_run:
+            for slot, life in {p for c in conflicts for p in c["perdants"]}:
+                conn.execute("UPDATE life_loadouts SET gadget = NULL WHERE game_id = ? AND slot = ? AND life_idx = ?", (args.game, slot, life))
+            conn.commit()
+        print(json.dumps({"game": args.game, "conflits": conflicts, "écrit": bool(conflicts) and not args.dry_run}, ensure_ascii=False))
+        return 0
     rows, report = compute_detail(conn, args.game, Path(args.icons), args.create_icons, args.game_fallback)
     if report.get("error"):
         print(json.dumps({"game": args.game, "error": report["error"]}, ensure_ascii=False))

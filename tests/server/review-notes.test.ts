@@ -157,3 +157,18 @@ test('les notes ne touchent à aucune autre table', () => {
   call(ctx, 'POST', '/api/review-notes', position(g));
   assert.deepEqual(['user_marks', 'comments', 'samples', 'episodes'].map(count), before);
 });
+
+test('une action SHIELD ou CLONE exige un deuxième point (trait du shield, direction et distance du clone), les autres gadgets non', () => {
+  const ctx = testContext();
+  const game = insertGame(ctx);
+  const post = (body: Record<string, unknown>) => handleReviewNotes(ctx, 'POST', '/api/review-notes', new URLSearchParams(), { game_id: game, t: 10, kind: 'action', slot: 3, x: 0.4, y: 0.5, text: '', ...body })!;
+  assert.equal(post({ gadget: 'SHIELD' }).status, 400);
+  assert.match(String((post({ gadget: 'shield' }).json as { error: string }).error), /deuxième point/);
+  assert.equal(post({ gadget: 'CLONE', x2: 0.5 }).status, 400, 'x2 sans y2 refusé');
+  const ok = post({ gadget: 'SHIELD', x2: 0.45, y2: 0.52 });
+  assert.equal(ok.status, 201);
+  assert.deepEqual([(ok.json as { x2: number }).x2, (ok.json as { y2: number }).y2], [0.45, 0.52]);
+  assert.equal(post({ gadget: 'CLONE', x2: 0.6, y2: 0.5 }).status, 201);
+  assert.equal(post({ gadget: 'STICKY' }).status, 201, 'le STICKY se pose avec un seul point');
+  assert.equal(post({ gadget: 'SHIELD', x2: 2, y2: 0.5 }).status, 400, 'hors de la minimap');
+});

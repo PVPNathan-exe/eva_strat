@@ -23,6 +23,8 @@
   --c-blue: #3d8bff;
   --c-yellow: #ffd60a;
   --c-cyan: #5adceb;
+  --c-shield: #6fb6ff; /* trait du shield posé dans une note de review (10 s) */
+  --c-clone: var(--c-cyan); /* trajet du clone (Echo) dans une note de review */
 
   /* Accents et variantes sombres des états */
   --c-accent: #6c8cff;

@@ -24,6 +24,9 @@ export function openDb(path: string, schemaPath: string): DatabaseSync {
   if (killMeta.length && !killMeta.some((c) => c.name === 'revision')) db.exec('ALTER TABLE kills_meta ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
   const sampleCols = db.prepare('PRAGMA table_info(samples)').all() as { name: string }[];
   if (sampleCols.length && !sampleCols.some((c) => c.name === 'gaze_coh')) db.exec('ALTER TABLE samples ADD COLUMN gaze_coh REAL');
+  const noteCols = db.prepare('PRAGMA table_info(review_notes)').all() as { name: string }[]; // notes de review : deuxième point du shield (trait) et du clone (direction et distance)
+  if (noteCols.length && !noteCols.some((c) => c.name === 'x2')) db.exec('ALTER TABLE review_notes ADD COLUMN x2 REAL');
+  if (noteCols.length && !noteCols.some((c) => c.name === 'y2')) db.exec('ALTER TABLE review_notes ADD COLUMN y2 REAL');
   const markCols = db.prepare('PRAGMA table_info(user_marks)').all() as { name: string }[];
   if (markCols.length && !markCols.some((c) => c.name === 'frame')) {
     db.exec('ALTER TABLE user_marks ADD COLUMN frame INTEGER');

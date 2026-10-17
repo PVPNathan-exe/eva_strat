@@ -6,7 +6,9 @@ import type { ApiContext, ApiResult } from './api.ts';
 type Row = Record<string, unknown>;
 
 const KINDS = ['position', 'action', 'note'];
-const COLUMNS = 'id, game_id, t, slot, kind, x, y, angle, gadget, text, created_at';
+const COLUMNS = 'id, game_id, t, slot, kind, x, y, angle, gadget, text, created_at, x2, y2';
+/** Gadgets qui se posent avec un deuxième point : le SHIELD est un trait (début et fin), le CLONE une direction et une distance (le point visé ; le trajet s'arrête au premier obstacle). */
+const TWO_POINT_GADGETS = ['SHIELD', 'CLONE'];
 const COORD_MIN = -0.2; // minimap normalisée, avec un peu de marge hors du cadre
 const COORD_MAX = 1.2;
 const TEXT_MAX = 2000;
@@ -23,6 +25,8 @@ interface Fields {
   slot: number | null;
   x: number | null;
   y: number | null;
+  x2: number | null;
+  y2: number | null;
   angle: number | null;
   gadget: string | null;
   text: string;
@@ -40,6 +44,9 @@ function requiredMissing(kind: string, f: Fields): string | null {
   if (kind === 'note') return f.text ? null : 'Une note libre exige un texte (text)';
   if (f.slot === null || f.x === null || f.y === null) return `Une note '${kind}' exige le joueur (slot), x et y`;
   if (kind === 'action' && !f.gadget) return "Une note 'action' exige aussi le gadget";
+  if (kind === 'action' && f.gadget && TWO_POINT_GADGETS.includes(f.gadget.toUpperCase()) && (f.x2 === null || f.y2 === null)) {
+    return `Une action ${f.gadget.toUpperCase()} exige un deuxième point (x2 et y2) : ${f.gadget.toUpperCase() === 'SHIELD' ? 'la fin du trait' : 'le point visé (direction et distance)'}`;
+  }
   return null;
 }
 
@@ -55,6 +62,11 @@ function checkFields(kind: string, raw: Row): Fields | string {
   if (typeof x === 'string') return x;
   const y = coord('y', raw.y);
   if (typeof y === 'string') return y;
+  const x2 = coord('x2', raw.x2);
+  if (typeof x2 === 'string') return x2;
+  const y2 = coord('y2', raw.y2);
+  if (typeof y2 === 'string') return y2;
+  if ((x2 === null) !== (y2 === null)) return 'x2 et y2 vont ensemble (les deux ou aucun)';
   let angle: number | null = null;
   if (!isNil(raw.angle)) {
     if (!isNum(raw.angle)) return "L'angle doit être un nombre fini (degrés)";
@@ -71,7 +83,7 @@ function checkFields(kind: string, raw: Row): Fields | string {
     text = raw.text.trim();
     if (text.length > TEXT_MAX) return `Le texte doit faire ${TEXT_MAX} caractères au plus`;
   }
-  const fields: Fields = { t: raw.t, slot, x, y, angle, gadget, text };
+  const fields: Fields = { t: raw.t, slot, x, y, x2, y2, angle, gadget, text };
   return requiredMissing(kind, fields) ?? fields;
 }
 
@@ -90,8 +102,8 @@ function createNote(ctx: ApiContext, body: Row): ApiResult {
   if (typeof f === 'string') return fail(f);
   if (!ctx.db.prepare('SELECT id FROM games WHERE id = ?').get(body.game_id)) return fail('Game inconnue', 404);
   const r = ctx.db
-    .prepare('INSERT INTO review_notes (game_id, t, slot, kind, x, y, angle, gadget, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(body.game_id, f.t, f.slot, body.kind, f.x, f.y, f.angle, f.gadget, f.text);
+    .prepare('INSERT INTO review_notes (game_id, t, slot, kind, x, y, x2, y2, angle, gadget, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(body.game_id, f.t, f.slot, body.kind, f.x, f.y, f.x2, f.y2, f.angle, f.gadget, f.text);
   const row = ctx.db.prepare(`SELECT ${COLUMNS} FROM review_notes WHERE id = ?`).get(Number(r.lastInsertRowid)) as Row;
   return reply(201, { ...row });
 }
@@ -101,12 +113,12 @@ function updateNote(ctx: ApiContext, id: number, body: Row): ApiResult {
   if (!current) return fail('Note introuvable', 404);
   if ('kind' in body && body.kind !== current.kind) return fail('Le type de la note (kind) ne se modifie pas');
   const merged: Row = { ...current };
-  for (const key of ['t', 'slot', 'x', 'y', 'angle', 'gadget', 'text']) if (key in body) merged[key] = body[key];
+  for (const key of ['t', 'slot', 'x', 'y', 'x2', 'y2', 'angle', 'gadget', 'text']) if (key in body) merged[key] = body[key];
   const f = checkFields(current.kind as string, merged);
   if (typeof f === 'string') return fail(f);
   ctx.db
-    .prepare('UPDATE review_notes SET t = ?, slot = ?, x = ?, y = ?, angle = ?, gadget = ?, text = ? WHERE id = ?')
-    .run(f.t, f.slot, f.x, f.y, f.angle, f.gadget, f.text, id);
+    .prepare('UPDATE review_notes SET t = ?, slot = ?, x = ?, y = ?, x2 = ?, y2 = ?, angle = ?, gadget = ?, text = ? WHERE id = ?')
+    .run(f.t, f.slot, f.x, f.y, f.x2, f.y2, f.angle, f.gadget, f.text, id);
   const row = ctx.db.prepare(`SELECT ${COLUMNS} FROM review_notes WHERE id = ?`).get(id) as Row;
   return reply(200, { ...row });
 }

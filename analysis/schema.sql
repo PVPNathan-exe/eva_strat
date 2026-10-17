@@ -387,6 +387,8 @@ CREATE TABLE IF NOT EXISTS review_notes (
   angle REAL,
   gadget TEXT,
   text TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  x2 REAL,  -- deuxième point : fin du trait du SHIELD, ou point visé par le CLONE (direction et distance) ; NULL pour les autres notes
+  y2 REAL
 );
 CREATE INDEX IF NOT EXISTS idx_review_notes_game ON review_notes(game_id, t);
