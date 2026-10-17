@@ -8,10 +8,10 @@
    "p95": 5.90297,
    "n": 96
   },
-  "assists_per_min:repli": {
+  "assists_per_min:tableau": {
    "p05": 0.0,
-   "p50": 0.19398,
-   "p95": 0.637,
+   "p50": 0.41741,
+   "p95": 1.09562,
    "n": 96
   },
   "cohesion": {
@@ -74,10 +74,10 @@
    "p95": 0.68092,
    "n": 96
   },
-  "share_assists:repli": {
+  "share_assists:tableau": {
    "p05": 0.0,
-   "p50": 0.22222,
-   "p95": 0.66667,
+   "p50": 0.25,
+   "p95": 0.5,
    "n": 96
   },
   "share_deaths": {
