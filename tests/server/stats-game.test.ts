@@ -174,3 +174,21 @@ test('game-summary : un point resté allumé sur le HUD ne compte pas comme un c
   [['C', 37, 127], ['B', 127, 217], ['A', 217, 307], ['B', 308, 397], ['D', 397, 539], ['B', 489, 511], ['B', 525, 539]].forEach(([p, a, b]) => pa.run(id, p, a, b, 'hud'));
   assert.equal((gameSummary(ctx, q(`game=${id}`)).json as { point_changes: number }).point_changes, 5);
 });
+
+test('game-summary : la note de la mort vient de death_impact quand elle existe (bouclier humain), sinon l ancienne règle (opposé du kill)', () => {
+  const ctx = testContext();
+  const g = insertGame(ctx, 'Polaris');
+  const pl = ctx.db.prepare('INSERT INTO players (game_id, slot, name) VALUES (?, ?, ?)');
+  pl.run(g, 1, 'Ana');
+  pl.run(g, 5, 'Bob');
+  const sc = ctx.db.prepare('INSERT INTO kill_scores (game_id, t, killer_slot, victim_slot, impact, reasons, death_impact) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  sc.run(g, 30, 5, 1, 2, '["bouclier humain"]', 1); // Ana meurt en bouclier humain : sa mort vaut +1, pas -2
+  sc.run(g, 60, 1, 5, 1, '[]', null); // ancien calcul : la mort de Bob vaut -1
+  const j = gameSummary(ctx, q(`game=${g}`)).json as { players: { slot: number; kill_score_sum: number; death_score_sum: number; death_notes: { impact: number }[] }[] };
+  const ana = j.players.find((p) => p.slot === 1)!;
+  const bob = j.players.find((p) => p.slot === 5)!;
+  assert.deepEqual(ana.death_notes.map((n) => n.impact), [1]);
+  assert.equal(ana.death_score_sum, 1);
+  assert.deepEqual(bob.death_notes.map((n) => n.impact), [-1]);
+  assert.equal(bob.kill_score_sum, 2);
+});

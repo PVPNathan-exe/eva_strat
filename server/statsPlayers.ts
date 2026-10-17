@@ -157,7 +157,7 @@ function tally(rows: Appearance[]) {
 /** Notes de kill d'une game : somme des impact par tueur et des -impact par victime ; map vide si la game n'a aucune note. */
 function loadScores(ctx: ApiContext, ids: Set<number>): { kill: Map<string, number>; death: Map<string, number>; games: Set<number> } {
   const out = { kill: new Map<string, number>(), death: new Map<string, number>(), games: new Set<number>() };
-  const rows = ctx.db.prepare('SELECT game_id, killer_slot, victim_slot, impact FROM kill_scores').all() as Row[];
+  const rows = ctx.db.prepare('SELECT game_id, killer_slot, victim_slot, impact, death_impact FROM kill_scores').all() as Row[];
   for (const r of rows) {
     const gid = Number(r.game_id);
     if (!ids.has(gid)) continue;
@@ -165,7 +165,8 @@ function loadScores(ctx: ApiContext, ids: Set<number>): { kill: Map<string, numb
     const impact = Number(r.impact);
     const killer = num(r.killer_slot);
     if (killer !== null) out.kill.set(`${gid}|${killer}`, (out.kill.get(`${gid}|${killer}`) ?? 0) + impact);
-    out.death.set(`${gid}|${r.victim_slot}`, (out.death.get(`${gid}|${r.victim_slot}`) ?? 0) - impact);
+    const deathImpact = num(r.death_impact); // note de la mort (règle du 17/10/2026) ; ancien calcul sans elle : -impact
+    out.death.set(`${gid}|${r.victim_slot}`, (out.death.get(`${gid}|${r.victim_slot}`) ?? 0) + (deathImpact ?? -impact));
   }
   return out;
 }

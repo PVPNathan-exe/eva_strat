@@ -349,6 +349,7 @@ CREATE TABLE IF NOT EXISTS kill_scores (
   victim_slot INTEGER NOT NULL CHECK (victim_slot BETWEEN 1 AND 8),
   impact REAL NOT NULL,
   reasons TEXT,
+  death_impact REAL,  -- note de la MORT du point de vue de la victime (règle de l'utilisateur du 17/10/2026 : indépendante de celle du kill) ; NULL : ancien calcul, la mort valait alors -impact
   PRIMARY KEY (game_id, t, victim_slot)
 );
 

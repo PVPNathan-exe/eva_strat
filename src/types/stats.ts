@@ -142,6 +142,8 @@ export interface KillScore {
   victim_slot: number;
   impact: number;
   reasons: string[] | null;
+  /** Note de la mort du point de vue de la victime ; null : ancien calcul (la mort valait -impact). */
+  death_impact?: number | null;
 }
 
 /** Bilan d'un joueur sur une game ; vitesses en m/s. */

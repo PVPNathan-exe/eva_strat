@@ -174,12 +174,12 @@ function decodeReasons(raw: unknown): string[] | null {
   return Array.isArray(v) ? v.map((x) => String(x)) : null;
 }
 
-/** Les notes de kill d'une game, dans l'ordre du temps : [{ game_id, t, killer_slot, victim_slot, impact, reasons }] (impact du point de vue de l'équipe du tueur, reasons décodé). */
+/** Les notes de kill d'une game, dans l'ordre du temps : [{ game_id, t, killer_slot, victim_slot, impact, reasons, death_impact }] (impact du point de vue de l'équipe du tueur, death_impact : note de la mort du point de vue de la victime, null pour l'ancien calcul où elle valait -impact ; reasons décodé). */
 export function listKillScores(ctx: ApiContext, query: URLSearchParams): ApiResult {
   const gameId = gameParam(query);
   if (typeof gameId === 'string') return fail(gameId);
   const rows = ctx.db
-    .prepare('SELECT game_id, t, killer_slot, victim_slot, impact, reasons FROM kill_scores WHERE game_id = ? ORDER BY t, victim_slot')
+    .prepare('SELECT game_id, t, killer_slot, victim_slot, impact, reasons, death_impact FROM kill_scores WHERE game_id = ? ORDER BY t, victim_slot')
     .all(gameId) as Row[];
   return reply(200, rows.map((r) => ({ ...r, reasons: decodeReasons(r.reasons) })));
 }
@@ -244,7 +244,7 @@ export function gameSummary(ctx: ApiContext, query: URLSearchParams): ApiResult 
   const deathNotes = new Map<number, Note[]>();
   const push = (m: Map<number, Note[]>, slot: number, note: Note) => m.set(slot, [...(m.get(slot) ?? []), note]);
   const scores = ctx.db
-    .prepare('SELECT t, killer_slot, victim_slot, impact, reasons FROM kill_scores WHERE game_id = ? ORDER BY t, victim_slot')
+    .prepare('SELECT t, killer_slot, victim_slot, impact, reasons, death_impact FROM kill_scores WHERE game_id = ? ORDER BY t, victim_slot')
     .all(gameId) as Row[];
   for (const s of scores) {
     const reasons = decodeReasons(s.reasons);
@@ -252,7 +252,9 @@ export function gameSummary(ctx: ApiContext, query: URLSearchParams): ApiResult 
     const killer = num(s.killer_slot);
     const victim = Number(s.victim_slot);
     if (killer !== null) push(killNotes, killer, { t: Number(s.t), other_slot: victim, impact, reasons });
-    push(deathNotes, victim, { t: Number(s.t), other_slot: killer, impact: -impact, reasons });
+    // Note de la mort : celle de la colonne death_impact (règle du 17/10/2026, indépendante de celle du kill) ; ancien calcul sans elle : l'opposé de la note du kill
+    const deathImpact = num(s.death_impact);
+    push(deathNotes, victim, { t: Number(s.t), other_slot: killer, impact: deathImpact ?? -impact, reasons });
   }
 
   const slots = [...new Set([...stats.keys(), ...names.keys(), ...killNotes.keys(), ...deathNotes.keys()])].sort((a, b) => a - b);

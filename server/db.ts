@@ -27,6 +27,8 @@ export function openDb(path: string, schemaPath: string): DatabaseSync {
   const noteCols = db.prepare('PRAGMA table_info(review_notes)').all() as { name: string }[]; // notes de review : deuxième point du shield (trait) et du clone (direction et distance)
   if (noteCols.length && !noteCols.some((c) => c.name === 'x2')) db.exec('ALTER TABLE review_notes ADD COLUMN x2 REAL');
   if (noteCols.length && !noteCols.some((c) => c.name === 'y2')) db.exec('ALTER TABLE review_notes ADD COLUMN y2 REAL');
+  const scoreCols = db.prepare('PRAGMA table_info(kill_scores)').all() as { name: string }[]; // note de la mort, séparée de celle du kill
+  if (scoreCols.length && !scoreCols.some((c) => c.name === 'death_impact')) db.exec('ALTER TABLE kill_scores ADD COLUMN death_impact REAL');
   const markCols = db.prepare('PRAGMA table_info(user_marks)').all() as { name: string }[];
   if (markCols.length && !markCols.some((c) => c.name === 'frame')) {
     db.exec('ALTER TABLE user_marks ADD COLUMN frame INTEGER');
