@@ -1,12 +1,13 @@
 // Vue Présence : chaleur du temps passé par case de la minimap, pour une équipe ou un joueur, sur les games retenues.
 // La grille est agrégée par le serveur (/api/stats/presence) ; lissage, mise à l'échelle et couleurs sont faits ici (lib/heatGrid.ts, couleurs de tokens.css).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { blur, gridFromCells, heatPixels, normalize, totalSeconds } from '../../lib/heatGrid';
 import { formatTime } from '../../lib/timeline';
 import { presenceGroups, type FollowSpec } from '../../lib/teamFollow';
 import { noticeOf, tokenRgb, usePresenceGroups, type StatsGame } from './useStats';
+import { PlanCanvas } from '../PlanCanvas';
 import { StatsMapBase } from './StatsMapBase';
 
 const GRID_N = 64; // côté de la grille demandée au serveur
@@ -18,16 +19,9 @@ interface Props {
   spec: FollowSpec;
 }
 
-/** Couche de chaleur : un canevas n par n étiré sur la minimap (le navigateur interpole entre les cases). */
-function HeatLayer({ pixels, n }: { pixels: Uint8ClampedArray; n: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const ctx = ref.current?.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, n, n); // jamais de pixels de la carte précédente
-    ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), n, n), 0, 0);
-  }, [pixels, n]);
-  return <canvas ref={ref} width={n} height={n} className="stats__heat" />;
+/** Couche de chaleur : un canevas n par n étiré sur la minimap (le navigateur interpole entre les cases), ou tracé déformé sur le plan pour une carte à maillage (Artefact). */
+function HeatLayer({ pixels, n, warp }: { pixels: Uint8ClampedArray; n: number; warp?: string }) {
+  return <PlanCanvas pixels={pixels} w={n} h={n} warp={warp} className="stats__heat" />;
 }
 
 export function StatsPresence({ map, games, spec }: Props) {
@@ -79,10 +73,10 @@ export function StatsPresence({ map, games, spec }: Props) {
       {notice && <p className="stats__empty">{notice}</p>}
       {empty && <p className="stats__empty">Aucune présence pour ce choix. Elle se calcule à partir des vies, game par game : `python analysis/stats_run.py --game N`.</p>}
       <StatsMapBase map={map} corridors={corridors} stations={stations} spawns={spawns}>
-        {({ boxStyle }) =>
+        {({ boxStyle, warp }) =>
           view && view.total > 0 ? (
             <div className="statsmap__layer" style={boxStyle}>
-              <HeatLayer key={map} pixels={view.pixels} n={view.n} />
+              <HeatLayer key={map} pixels={view.pixels} n={view.n} warp={warp} />
             </div>
           ) : null
         }

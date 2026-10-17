@@ -109,11 +109,11 @@ export function StatsGlobal({ map, games }: Props) {
           <GlobalLegend layer={layer} games={data.games} />
           {blank && <p className="stats__empty">Rien à montrer pour ce calque et ce côté dans ces games.</p>}
           <StatsMapBase map={map} corridors={corridors} stations={stations} spawns={spawns}>
-            {({ boxStyle }) =>
+            {({ boxStyle, warp }) =>
               images.length > 0 && !blank ? (
                 <div className="statsmap__layer" style={boxStyle} aria-label={globalLayerDef(layer).label}>
                   {images.map((img) => (
-                    <GlobalCanvas key={`${map}-${img.side}`} pixels={img.pixels} n={data.n} />
+                    <GlobalCanvas key={`${map}-${img.side}`} pixels={img.pixels} n={data.n} warp={warp} />
                   ))}
                 </div>
               ) : null

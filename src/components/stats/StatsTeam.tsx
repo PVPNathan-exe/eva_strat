@@ -131,11 +131,11 @@ export function StatsTeam({ map, games, spec }: Props) {
             </p>
           )}
           <StatsMapBase map={map} corridors={corridors} stations={stations} spawns={spawns}>
-            {({ boxStyle }) =>
+            {({ boxStyle, warp }) =>
               images.length > 0 && !blank ? (
                 <div className="statsmap__layer" style={boxStyle} aria-label={layerDef(shown).label}>
                   {images.map((img, i) => (
-                    <HeatCanvas key={`${map}-${i}`} pixels={img.pixels} n={data.n} />
+                    <HeatCanvas key={`${map}-${i}`} pixels={img.pixels} n={data.n} warp={warp} />
                   ))}
                 </div>
               ) : null

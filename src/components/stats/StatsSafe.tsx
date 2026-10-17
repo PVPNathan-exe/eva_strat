@@ -185,12 +185,13 @@ export function StatsSafe({ map, replay, spec }: Props) {
       )}
       {!notice && unknownLevel > 0 && <p className="stats__empty">Niveau des joueurs non calculé pour cette game (lancer npm run stats) : les deux étages sont mélangés.</p>}
       <StatsMapBase map={map} spawns>
-        {({ boxStyle }) =>
+        {({ boxStyle, warp }) =>
           instant && shooters.length > 0 ? (
             <SafeZoneLayer
               result={instant.result}
               colors={colors}
               boxStyle={boxStyle}
+              warp={warp}
               only={only}
               outlines={wanted ? wanted : outlines}
               pins={pins}

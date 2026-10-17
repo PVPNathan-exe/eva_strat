@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { Layers, Pause, Play } from 'lucide-react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { defaultInset, insetStorageKey, project, type Inset } from '../../lib/planInsets';
+import { isWarped } from '../../lib/planWarp';
 import { observedAt, unconfirmedSet } from '../../lib/replayFlags';
 import { clonePath, type ClonePathResult, type Point } from '../../lib/clonePath';
 import { cloneParams, gadgetKind } from '../../lib/gadgetParams';
@@ -99,7 +100,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
   );
   const zoneLayer =
     showZone && zone.zone && selected !== null ? (
-      <SafeZoneLayer result={zone.zone.result} colors={zoneColors} boxStyle={boxStyleOf(inset)} outlines={selected} pins={false} show="shot" outlineKind="tir" />
+      <SafeZoneLayer result={zone.zone.result} colors={zoneColors} boxStyle={boxStyleOf(inset)} warp={isWarped(inset) ? inset.warp : undefined} outlines={selected} pins={false} show="shot" outlineKind="tir" />
     ) : null;
 
   // Notes de review : le brouillon (volet NotePanel) et le geste de pose sur le plan. Rien de cela ne modifie les données lues.
@@ -142,7 +143,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     const r = m.gadgetKind === 'clone' && m.slot !== null && m.to ? resolveClone(m.slot, m.at, m.to, m.t) : null;
     if (r) clones.set(m.key, r);
   }
-  const gadgetView = { gameT, clones, speedMs: cloneConf?.speedMs ?? null, radiusOf: (m: number) => radiusInPlan(inset, m) };
+  const gadgetView = { gameT, clones, speedMs: cloneConf?.speedMs ?? null, radiusOf: (m: number, at?: { x: number; y: number }) => radiusInPlan(inset, m, at) };
 
   // Pastilles de gadget : un joueur par pastille, nom et état du gadget à l'instant affiché.
   const chips = gadgetChips(slotsPresent, reviewNotes.loadouts, reviewNotes.gadgetStates, gameT);
@@ -329,13 +330,19 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
 
         <details className="replay__align">
           <summary>Alignement sur le plan</summary>
-          {(['l', 't', 'r', 'b'] as const).map((k) => (
-            <label key={k}>
-              {{ l: 'Gauche', t: 'Haut', r: 'Droite', b: 'Bas' }[k]}
-              <input type="range" min={-0.05} max={0.2} step={0.002} value={inset[k]} onChange={(e) => changeInset({ [k]: Number(e.target.value) })} />
-            </label>
-          ))}
-          <button onClick={() => changeInset(defaultInset(game.map ?? ''))}>Réinitialiser</button>
+          {isWarped(inset) ? (
+            <p className="help__body">Carte alignée par sections (stations, coins des blocs : analysis/map_warp.json) : pas de réglage à la main.</p>
+          ) : (
+            <>
+              {(['l', 't', 'r', 'b'] as const).map((k) => (
+                <label key={k}>
+                  {{ l: 'Gauche', t: 'Haut', r: 'Droite', b: 'Bas' }[k]}
+                  <input type="range" min={-0.05} max={0.2} step={0.002} value={inset[k]} onChange={(e) => changeInset({ [k]: Number(e.target.value) })} />
+                </label>
+              ))}
+              <button onClick={() => changeInset(defaultInset(game.map ?? ''))}>Réinitialiser</button>
+            </>
+          )}
         </details>
       </div>
     </div>

@@ -5,6 +5,7 @@
 // Seuls les pions de chaque étape sont lus ; dessins, texte, spécialités et le bloc « immersive » sont ignorés (format non décodé).
 
 import type { Inset } from './planInsets';
+import { unprojectInset } from './planWarp.ts';
 import type { TeamSide } from '../types/stats';
 
 export interface PlanPawn {
@@ -40,9 +41,9 @@ export function gazeFromEbp(angle: number): number {
   return (((angle - 90) % 360) + 360) % 360;
 }
 
-/** Pourcentage du plan vers position de la minimap : inverse de `planInsets.project`. */
+/** Pourcentage du plan vers position de la minimap : inverse de `planInsets.project` (cadre affine ou maillage de planWarp.ts). */
 export function minimapFromPlan(inset: Inset, leftPct: number, topPct: number): { x: number; y: number } {
-  return { x: (leftPct / 100 - inset.l) / (1 - inset.l - inset.r), y: (topPct / 100 - inset.t) / (1 - inset.t - inset.b) };
+  return unprojectInset(inset, leftPct / 100, topPct / 100);
 }
 
 /** Numéro EBP (jaune 1 à 4, bleu 6 à 9) vers le joueur 1 à 8. */

@@ -15,7 +15,7 @@ export interface GadgetView {
   /** Vitesse du clone en m/s (référence) ; null : pas de point qui avance. */
   speedMs: number | null;
   /** Rayon en mètres vers les demi-axes d'une ellipse du plan, en pourcentages (notePlacement.radiusInPlan). */
-  radiusOf: (m: number) => { rx: number; ry: number };
+  radiusOf: (m: number, at?: { x: number; y: number }) => { rx: number; ry: number };
 }
 
 interface Ring {
@@ -50,7 +50,7 @@ export function GadgetShapes({ marks, place, view }: Props) {
       <svg className="replay__trails" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         {rings.map((r) => {
           const c = place(r.at.x, r.at.y);
-          const { rx, ry } = view.radiusOf(r.m);
+          const { rx, ry } = view.radiusOf(r.m, r.at);
           return <ellipse key={r.key} cx={c.x} cy={c.y} rx={rx} ry={ry} className="note__radius" vectorEffect="non-scaling-stroke" />;
         })}
         {shields.map((m) => {
@@ -74,7 +74,7 @@ export function GadgetShapes({ marks, place, view }: Props) {
       {rings.map((r) => {
         const c = place(r.at.x, r.at.y);
         return (
-          <em key={`l-${r.key}`} className="note__rlabel" style={{ left: `${c.x}%`, top: `${c.y - view.radiusOf(r.m).ry}%` }} title={r.label}>
+          <em key={`l-${r.key}`} className="note__rlabel" style={{ left: `${c.x}%`, top: `${c.y - view.radiusOf(r.m, r.at).ry}%` }} title={r.label}>
             {formatMetres(r.m)}
           </em>
         );

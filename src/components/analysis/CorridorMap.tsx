@@ -1,12 +1,14 @@
 // Carte des couloirs lus par le programme : le masque des zones praticables, les traits de murs, les stations de tyrolienne et les zones de départ, posés sur le plan
 // de la carte (cadre aligné sur ses murs, voir planInsets.ts). Tout ce qui n'est pas en rouge est « hors limites » pour le programme.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Layers } from 'lucide-react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { loadTinted, readingOf, rotorsOf, type Rgb } from '../../lib/mapReading';
 import { arcPoints, solidArcs, windowArcs } from '../../lib/rotors';
 import { defaultInset, isAligned, project } from '../../lib/planInsets';
+import { frameBox, isWarped, projectPath } from '../../lib/planWarp';
+import { PlanCanvas } from '../PlanCanvas';
 import { ReliabilityLayer } from './ReliabilityLayer';
 import { useGameFlags } from './useGameFlags';
 
@@ -14,25 +16,21 @@ const RED: Rgb = [255, 59, 59];
 const YELLOW: Rgb = [255, 214, 10];
 const CYAN: Rgb = [90, 220, 235]; // étages superposés : sol gardé par un passage en dessous
 
-/** Affiche une image en niveaux de gris comme une couche colorée. */
-function Tinted({ url, color, alpha }: { url: string; color: Rgb; alpha: number }) {
-  const ref = useRef<HTMLCanvasElement>(null);
+/** Affiche une image en niveaux de gris comme une couche colorée (tracée déformée sur le plan quand la carte a un maillage : `warp` = nom de la carte). */
+function Tinted({ url, color, alpha, warp }: { url: string; color: Rgb; alpha: number; warp?: string }) {
+  const [src, setSrc] = useState<HTMLCanvasElement | null>(null);
   useEffect(() => {
     let cancelled = false;
     loadTinted(url, color, alpha)
-      .then((src) => {
-        const canvas = ref.current;
-        if (cancelled || !canvas) return;
-        canvas.width = src.width;
-        canvas.height = src.height;
-        canvas.getContext('2d')?.drawImage(src, 0, 0);
+      .then((tinted) => {
+        if (!cancelled) setSrc(tinted);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, [url, color, alpha]);
-  return <canvas ref={ref} className="corridor__canvas" />;
+  return <PlanCanvas canvas={src} warp={warp} scale={2} smooth={false} className="corridor__canvas" />;
 }
 
 export function CorridorMap({ map }: { map: string }) {
@@ -55,8 +53,10 @@ export function CorridorMap({ map }: { map: string }) {
   const { reliability } = useGameFlags(-1, map, 0);
 
   // Cadre de la minimap sur le plan, en fractions du plan
-  const frame = { left: `${inset.l * 100}%`, top: `${inset.t * 100}%`, width: `${(1 - inset.l - inset.r) * 100}%`, height: `${(1 - inset.t - inset.b) * 100}%` };
+  const frame = frameBox(inset); // tout le plan pour une carte à maillage (couches déjà tracées dans le plan)
+  const warp = isWarped(inset) ? inset.warp : undefined;
   const at = (x: number, y: number) => project(inset, x, y);
+  const outline = (pts: [number, number][]) => projectPath(inset, pts).map((p) => `${p.x},${p.y}`).join(' '); // lignes brisées : suivent la déformation d'un maillage
 
   return (
     <div className="corridor">
@@ -86,23 +86,23 @@ export function CorridorMap({ map }: { map: string }) {
         {background && <img src={background} alt={aligned ? `Plan ${map}` : `Minimap de ${map}`} draggable={false} />}
         {corridors && reading.maskUrl && (
           <div className="corridor__layer" style={frame}>
-            <Tinted url={reading.maskUrl} color={RED} alpha={115} />
+            <Tinted url={reading.maskUrl} color={RED} alpha={115} warp={warp} />
           </div>
         )}
         {under && reading.underUrl && (
           <div className="corridor__layer" style={frame}>
-            <Tinted url={reading.underUrl} color={CYAN} alpha={190} />
+            <Tinted url={reading.underUrl} color={CYAN} alpha={190} warp={warp} />
           </div>
         )}
         {walls && reading.linesUrl && (
           <div className="corridor__layer" style={frame}>
-            <Tinted url={reading.linesUrl} color={YELLOW} alpha={200} />
+            <Tinted url={reading.linesUrl} color={YELLOW} alpha={200} warp={warp} />
           </div>
         )}
         <svg className="corridor__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
           {capture &&
             reading.capture.map((polygon, i) => (
-              <polygon key={`cap${i}`} points={polygon.map(([x, y]) => `${at(x, y).x},${at(x, y).y}`).join(' ')} className="corridor__capture" vectorEffect="non-scaling-stroke" />
+              <polygon key={`cap${i}`} points={outline([...polygon, polygon[0]])} className="corridor__capture" vectorEffect="non-scaling-stroke" />
             ))}
           {rings &&
             rotors?.anneaux.flatMap((ring) =>
@@ -134,12 +134,15 @@ export function CorridorMap({ map }: { map: string }) {
             )}
           {lines &&
             reading.openings.map((o, i) => {
+              const cls = `corridor__line corridor__line--${o.kind}${o.under ? ' is-under' : ''}`;
+              if (warp) return <polyline key={`line${i}`} points={outline([o.from, o.to])} fill="none" className={cls} vectorEffect="non-scaling-stroke" />;
               const a = at(o.from[0], o.from[1]);
               const b = at(o.to[0], o.to[1]);
-              return <line key={`line${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`corridor__line corridor__line--${o.kind}${o.under ? ' is-under' : ''}`} vectorEffect="non-scaling-stroke" />;
+              return <line key={`line${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={cls} vectorEffect="non-scaling-stroke" />;
             })}
           {spawns &&
             reading.spawns.map((s, i) => {
+              if (warp) return <polygon key={`${s.team}${i}`} points={outline([[s.rect[0], s.rect[1]], [s.rect[2], s.rect[1]], [s.rect[2], s.rect[3]], [s.rect[0], s.rect[3]], [s.rect[0], s.rect[1]]])} className={`corridor__spawn corridor__spawn--${s.team}`} />;
               const a = at(s.rect[0], s.rect[1]);
               const b = at(s.rect[2], s.rect[3]);
               return <rect key={`${s.team}${i}`} x={a.x} y={a.y} width={b.x - a.x} height={b.y - a.y} className={`corridor__spawn corridor__spawn--${s.team}`} />;
