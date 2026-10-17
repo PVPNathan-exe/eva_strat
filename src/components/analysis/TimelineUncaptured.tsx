@@ -1,4 +1,4 @@
-// Frise zoomée d'Outlaw : hachures grises sur les moments où le point actif n'appartient à personne (/api/stats/owners).
+// Frise zoomée d'Outlaw : barre grise sur les moments où le point actif n'appartient à personne (/api/stats/owners).
 // Sans cela la barre garde la couleur de la dernière équipe qui a capturé, et le temps où le point est neutre ne se voit pas.
 
 import { useEffect, useMemo, useState } from 'react';

@@ -78,7 +78,7 @@ export function SegmentTimeline({ duration }: { duration: number }) {
             </p>
             <p className="help__body">
               Trait jaune : changement du point de capture actif (la pastille donne la lettre du point qui devient actif), avec une bande de 10 s avant ; un clic place la vidéo au début de la bande.
-              {zoomed.map === 'Outlaw' ? ' Hachures grises : le point actif n’appartient à personne (pas encore pris, ou perdu).' : ''}
+              {zoomed.map === 'Outlaw' ? ' Barre grise : le point actif n’appartient à personne (pas encore pris, ou perdu).' : ''}
               {noPointChange ? ' Aucun changement de point sur cette carte : pas de repères.' : ''}
             </p>
           </details>
