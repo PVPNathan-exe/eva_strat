@@ -102,6 +102,58 @@ def test_petits_degats_ou_trop_loin_ou_sans_chevauchement_ne_sont_pas_un_duel():
     assert run(ISOLES, [], decale)[1] == []
 
 
+# ---------------------------------------------------------------- régénération, interruption par un tiers (règles du 17 octobre 2026)
+
+def test_duel_sans_mort_finit_a_la_regeneration_mesuree_quand_la_remontee_n_est_pas_lue():
+    hp = hp_track({1: [(30.0, 1.0), (31.0, 0.5)], 6: [(31.0, 1.0), (32.0, 0.8)]})
+    _conn, [d] = run(ISOLES, [], hp)
+    assert d["data"]["ended_by"] == "regeneration" and {v["source"] for v in d["data"]["regen"].values()} == {"mesure"}
+    assert abs(d["t0"] - 30.0) < 0.6 and abs(d["t1"] - (31.0 + duels.REGEN_DELAY_S)) < 0.4  # la régénération du premier des deux (dernière perte du 1 à 31 s + délai mesuré)
+
+
+def test_duel_sans_mort_finit_au_debut_de_la_remontee_quand_elle_est_lue():
+    hp = hp_track({1: [(30.0, 1.0), (31.0, 0.5), (36.0, 0.5), (37.0, 1.0)], 6: [(31.0, 1.0), (32.0, 0.8)]})
+    _conn, [d] = run(ISOLES, [], hp)
+    assert abs(d["t1"] - 36.0) < 0.3 and d["data"]["regen"]["1"]["source"] == "lu"
+    assert d["winner"] == 6 and abs(d["data"]["hp_end"]["1"] - 0.5) < 0.05  # les points de vie restants sont lus avant la remontée
+
+
+def test_kill_d_un_coequipier_interrompt_le_duel_et_il_n_est_pas_credite():
+    players = {1: at(FAR_A), 2: at(FAR_A), 6: dying(6, 33.0, stay(FAR_A))}
+    hp = hp_track({1: [(30.0, 1.0), (31.0, 0.5)], 6: [(30.0, 1.0), (33.0, 0.0)]})
+    _conn, found = run(players, [(33.0, 2, 6)], hp)
+    assert [(d["slot_a"], d["slot_b"], d["winner"], d["outcome"]) for d in found] == [(1, 6, None, "interrompu")]  # le kill du 2 n'est plus un duel avec kill
+    assert found[0]["data"]["interrupted_by"] == {"slot": 2, "victim": 6, "t": 33.0} and found[0]["data"]["ended_by"] == "kill_tiers"
+    assert abs(found[0]["t1"] - 33.0) < 0.6
+
+
+def test_le_coequipier_qui_a_aussi_perdu_de_la_vie_face_a_la_victime_garde_son_duel_avec_kill():
+    players = {1: at(FAR_A), 2: at(FAR_A), 6: dying(6, 33.0, stay(FAR_A))}
+    hp = hp_track({1: [(30.0, 1.0), (31.0, 0.5)], 2: [(31.0, 1.0), (32.0, 0.6)], 6: [(30.0, 1.0), (33.0, 0.0)]})
+    _conn, found = run(players, [(33.0, 2, 6)], hp)
+    assert sorted((d["slot_a"], d["slot_b"], d["outcome"], d["winner"]) for d in found) == [(1, 6, "interrompu", None), (2, 6, "kill", 2)]
+
+
+def test_mort_sans_kill_lu_pendant_un_duel_est_indecise():
+    players = {1: at(FAR_A), 6: dying(6, 33.0, stay(FAR_A))}
+    hp = hp_track({1: [(30.0, 1.0), (31.0, 0.5)], 6: [(30.0, 1.0), (33.0, 0.0)]})
+    _conn, [d] = run(players, [], hp)
+    assert d["outcome"] == "indecis" and d["winner"] is None and d["data"]["ended_by"] == "mort_sans_kill"
+
+
+def test_kill_de_l_autre_duelliste_reste_un_duel_avec_kill_sans_doublon():
+    players = {1: at(FAR_A), 6: dying(6, 33.0, stay(FAR_A))}
+    hp = hp_track({1: [(30.0, 1.0), (31.0, 0.5)], 6: [(30.0, 1.0), (33.0, 0.0)]})
+    _conn, found = run(players, [(33.0, 1, 6)], hp)
+    assert [(d["slot_a"], d["slot_b"], d["outcome"], d["winner"]) for d in found] == [(1, 6, "kill", 1)]
+
+
+def test_la_fin_de_game_borne_la_regeneration():
+    hp = hp_track({1: [(194.0, 1.0), (195.0, 0.5)], 6: [(194.0, 1.0), (195.0, 0.6)]})
+    _conn, [d] = run(ISOLES, [], hp)
+    assert d["t1"] <= 200.0 - duels.END_BLANK_S + 1e-6 and d["data"]["hp_end"]["1"] is not None
+
+
 # ---------------------------------------------------------------- cache des bandeaux
 
 def write_cache(tmp_path, fills, n=300):
