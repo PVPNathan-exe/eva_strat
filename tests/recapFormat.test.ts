@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assistsCell,
   captureScoreOf,
   fmtCount,
   fmtDecimal,
@@ -13,6 +14,7 @@ import {
   killSentence,
   killsOnDeaths,
   notesMissingNotice,
+  officialTitle,
   opposite,
   orderPlayers,
   playerName,
@@ -41,14 +43,16 @@ function player(slot: number, over: Partial<RecapPlayer> = {}): RecapPlayer {
     kill_score_sum: 0,
     death_score_sum: 0,
     score_sum: 0,
+    rating: null,
     kill_notes: [],
     death_notes: [],
+    scoreboard: null,
     ...over,
   };
 }
 
 function summary(players: RecapPlayer[]): GameSummary {
-  const zero = { kills: 0, deaths: 0, gadget_uses: null, gadget_unused_at_death: null, gadget_possible: null, duels_won: 0, duels_lost: 0, duels_other: 0, kill_score_sum: 0, death_score_sum: 0 };
+  const zero = { kills: 0, deaths: 0, gadget_uses: null, gadget_unused_at_death: null, gadget_possible: null, duels_won: 0, duels_lost: 0, duels_other: 0, kill_score_sum: 0, death_score_sum: 0, rating: { individual: null, teamplay: null, overall: null } };
   return { game: { id: 7, map: 'Polaris', team_a: 'SNV', team_b: 'NCT', start_s: 100, end_s: 400, duration_s: 300 }, map: 'Polaris', point_changes: 0, players, teams: { A: zero, B: zero }, games: 1, min: 5 };
 }
 
@@ -198,4 +202,24 @@ test('messages quand les tables ne sont pas calculées', () => {
   assert.equal(notesMissingNotice(summary([player(1), player(6)])), null);
   // des kills au bilan mais aucune note : notes pas calculées
   assert.match(notesMissingNotice(summary([player(1, { kills: 3 }), player(6)])) ?? '', /Notes des kills pas calculées/);
+});
+
+test('assistsCell : valeur officielle, n/d sans tableau ou lecture illisible (jamais 0 par défaut)', () => {
+  assert.deepEqual(assistsCell(player(1, { scoreboard: { kills: 10, deaths: 5, assists: 1, score: 700 } })).text, '1');
+  assert.equal(assistsCell(player(1, { scoreboard: { kills: 10, deaths: 5, assists: 0, score: 700 } })).text, '0');
+  const unread = assistsCell(player(1, { scoreboard: { kills: 10, deaths: 5, assists: null, score: 700 } }));
+  assert.equal(unread.text, 'n/d');
+  assert.match(unread.title ?? '', /illisibles/);
+  const none = assistsCell(player(1));
+  assert.equal(none.text, 'n/d');
+  assert.match(none.title ?? '', /Pas de tableau/);
+});
+
+test('officialTitle : rien sans tableau, valeurs officielle et calculée quand elles diffèrent', () => {
+  const board = { kills: 10, deaths: 5, assists: 1, score: 700 };
+  assert.equal(officialTitle('kills', 9, null), undefined);
+  assert.match(officialTitle('kills', 9, board) ?? '', /officiels \(tableau de fin de game\) : 10 ; calculés par l'analyse : 9/);
+  assert.match(officialTitle('deaths', 5, board) ?? '', /identiques/);
+  assert.match(officialTitle('deaths', null, board) ?? '', /non calculés/);
+  assert.match(officialTitle('kills', 3, { ...board, kills: null }) ?? '', /illisibles/);
 });

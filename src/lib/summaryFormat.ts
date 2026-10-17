@@ -2,7 +2,7 @@
 // d'une borne « possible »), couleur de palette d'une équipe par son nom, messages quand les statistiques ne sont pas calculées. Aucune dépendance au navigateur.
 // Les notes et les duels sont des conventions sans vérité terrain ; le score de capture final n'est pas un résultat de match (games.winner n'est pas renseigné).
 
-import type { FinalCapture, Maybe, PlayerGameRow, TeamGameRow } from '../types/statsSummary.ts';
+import type { FinalCapture, Maybe, PlayerGameRow, RatingTriple, TeamGameRow } from '../types/statsSummary.ts';
 import { NA, NOT_ESTABLISHED, type Cell } from './recapFormat.ts';
 import { nameKey, type Palette } from './teamFollow.ts';
 import { formatTime } from './timeline.ts';
@@ -140,6 +140,16 @@ export function captureAverage(rows: Pick<TeamGameRow, 'final_capture'>[]): Fina
   return { own: mean((c) => c.own), opponent: mean((c) => c.opponent) };
 }
 
+/** Moyenne des notes d'une liste de games : une moyenne par note sur les games où elle existe (jamais de 0 inventé), `games_rated` = games où la note globale existe ; null partout sans aucune note. */
+export function meanRatings(rows: (RatingTriple | null | undefined)[]): RatingTriple & { games_rated: number } {
+  const real = rows.filter((r): r is RatingTriple => !!r);
+  const mean = (pick: (r: RatingTriple) => Maybe): Maybe => {
+    const v = real.map(pick).filter((x): x is number => present(x));
+    return v.length === 0 ? null : v.reduce((a, b) => a + b, 0) / v.length;
+  };
+  return { individual: mean((r) => r.individual), teamplay: mean((r) => r.teamplay), overall: mean((r) => r.overall), games_rated: real.filter((r) => present(r.overall)).length };
+}
+
 /** Ligne de total d'un joueur : somme des games AVEC bilan. Vitesse moyenne pondérée par le temps vivant, 98e centile = médiane des games, « possible » nul dès qu'une game ne l'établit pas. */
 export function totalPlayerGames(rows: PlayerGameRow[]): PlayerGameRow {
   const r = rows.filter((x) => x.has_stats);
@@ -164,6 +174,7 @@ export function totalPlayerGames(rows: PlayerGameRow[]): PlayerGameRow {
     duels_lost: sumStrict(r.map((x) => x.duels_lost)),
     duels_other: sumStrict(r.map((x) => x.duels_other)),
     score_sum: sumStrict(r.map((x) => x.score_sum)),
+    rating: { ...meanRatings(rows.map((x) => x.rating)), assists: sumStrict(rows.map((x) => x.rating?.assists)), assist_source: null },
     has_stats: r.length > 0,
   };
 }
@@ -188,6 +199,7 @@ export function totalTeamGames(rows: TeamGameRow[]): TeamGameRow {
     gadget_uses: sumStrict(r.map((x) => x.gadget_uses)),
     gadget_possible: sumStrict(r.map((x) => x.gadget_possible)),
     point_changes: sumStrict(r.map((x) => x.point_changes)),
+    rating: meanRatings(rows.map((x) => x.rating)),
     has_stats: r.length > 0,
   };
 }

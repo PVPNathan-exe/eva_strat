@@ -108,6 +108,14 @@ export function StatsRecap({ map, replay, spec }: Props) {
           secondaire encore disponible est mauvais ; le garder sans mourir ne l'est pas en soi. La vitesse moyenne est mesurée sur les lignes vivantes, tyroliennes et sauts exclus. La vitesse maximale affichée est le 98e centile ;
           le <b>maximum brut</b> (en infobulle) peut contenir des erreurs de lecture. Un joueur sans bilan (« n/d ») n'a pas de ligne calculée. Un clic sur l'instant d'un kill ouvre la vidéo 5 s avant.
         </p>
+        <p className="help__body">
+          <b>Note sur 20</b> : la globale est la moyenne de deux sous-notes sur 20. L'<b>individuelle</b> vient des kills, morts et assistances du joueur (par minute) et de la qualité de ses kills et de ses morts. Le <b>teamplay</b>{' '}
+          compare ses kills, morts et assistances au total de son équipe et ajoute la présence sur la map (vivant et hors de la zone de départ), le temps près du point actif, la <b>prise d'espace</b> (position moyenne sur l'axe entre les deux
+          départs), la <b>prise de fight</b> (le plus avancé au contact, premier kill du combat), la <b>prise d'aggro</b> (1 ou 2 ennemis qui se rapprochent de lui pendant que ses coéquipiers sont ailleurs, crédit entier s'il survit ou est
+          vengé, demi-crédit sinon ; le regard de l'ennemi n'est pas utilisé), les trades, la cohésion et l'usage du secondaire. Une <b>assistance</b> est celle du tableau de fin de game quand il est lu ; sinon un repli : un coéquipier
+          du tueur à moins de 3 m de la victime dans les 4,6 s avant sa mort. L'échelle est tirée des games déjà calculées : 10 est la médiane, 0 le 5e centile et 20 le 95e (plafonné), donc une note se lit par rapport à ces games. Une composante
+          sans donnée est ignorée de la moyenne (le détail, dépliable sous le nom du joueur, la liste avec sa raison) ; une sous-note sans assez de composantes est « n/d », jamais 0. Ce sont des <b>conventions sans vérité terrain</b>.
+        </p>
       </details>
     </div>
   );

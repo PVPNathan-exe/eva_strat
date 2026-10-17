@@ -4,6 +4,7 @@
 import type { ApiContext, ApiResult } from './api.ts';
 import { fail, gamesParam, nameKey, playerIdentity, pointChanges, reply, TEAM_MIN_GAMES } from './statsGame.ts';
 import type { Row } from './statsGame.ts';
+import { loadRatings, meanRating, teamRatingOfGame, type RatingNotes } from './statsRatings.ts';
 
 const NAME_MAX = 80;
 const round3 = (v: number): number => Math.round(v * 1000) / 1000;
@@ -118,6 +119,8 @@ interface Appearance {
   /** Sommes des notes de la game pour ce joueur ; null si la game n'a aucune note de kill. */
   killScore: number | null;
   deathScore: number | null;
+  /** Notes sur 20 de la game (null : pas de note calculée pour ce joueur dans cette game). */
+  rating: RatingNotes | null;
 }
 
 const col = (rows: Appearance[], key: string): (number | null)[] => rows.filter((a) => a.stats).map((a) => num(a.stats?.[key]));
@@ -177,6 +180,7 @@ function appearances(ctx: ApiContext, games: GameRow[]): Appearance[] {
   const ids = new Set(byId.keys());
   const stats = loadStats(ctx, ids);
   const scores = loadScores(ctx, ids);
+  const ratings = loadRatings(ctx, ids);
   const out: Appearance[] = [];
   const rows = ctx.db.prepare('SELECT game_id, slot, name FROM players ORDER BY game_id, slot').all() as { game_id: number; slot: number; name: string }[];
   for (const r of rows) {
@@ -193,6 +197,7 @@ function appearances(ctx: ApiContext, games: GameRow[]): Appearance[] {
       stats: stats.get(k) ?? null,
       killScore: hasScores ? round3(scores.kill.get(k) ?? 0) : null,
       deathScore: hasScores ? round3(scores.death.get(k) ?? 0) : null,
+      rating: ratings.get(k) ?? null,
     });
   }
   return out;
@@ -226,6 +231,7 @@ function perGameOfPlayer(a: Appearance) {
     duels_lost: num(s?.duels_lost),
     duels_other: num(s?.duels_other),
     score_sum: scoreSum(a.killScore, a.deathScore),
+    rating: a.rating,
     has_stats: s !== null,
   };
 }
@@ -250,6 +256,7 @@ function playerRow(key: string, rows: Appearance[]) {
     kill_score_sum: killScore,
     death_score_sum: deathScore,
     score_sum: scoreSum(killScore, deathScore),
+    rating: meanRating(rows.map((a) => a.rating)),
   };
 }
 
@@ -313,6 +320,8 @@ interface TeamGame {
   rows: Appearance[];
   changes: number;
   capture: Pct | null;
+  /** Note de l'équipe dans la game : moyenne de ses joueurs, seulement si les quatre ont la note. */
+  rating: ReturnType<typeof teamRatingOfGame>;
 }
 
 function perGameOfTeam(t: TeamGame) {
@@ -334,6 +343,7 @@ function perGameOfTeam(t: TeamGame) {
     gadget_uses: sums.gadget_uses,
     gadget_possible: sums.gadget_possible,
     point_changes: t.changes,
+    rating: t.rating,
     has_stats: t.rows.some((r) => r.stats),
   };
 }
@@ -349,6 +359,7 @@ function teamRow(key: string, parts: TeamGame[]) {
     ...tally(rows),
     games_with_stats: parts.filter((p) => p.rows.some((r) => r.stats)).length,
     point_changes: parts.reduce((s, p) => s + p.changes, 0),
+    rating: meanRating(parts.map((p) => p.rating)),
     final_capture_avg: { own: mean(captured.map((p) => p.capture?.own ?? null)), opponent: mean(captured.map((p) => p.capture?.opponent ?? null)) },
   };
 }
@@ -367,6 +378,7 @@ export function teamsSummary(ctx: ApiContext, query: URLSearchParams): ApiResult
   const people = appearances(ctx, inScope);
   const stats = loadStats(ctx, ids);
   const captures = lastCaptures(ctx, ids);
+  const ratings = loadRatings(ctx, ids);
 
   const byTeam = new Map<string, TeamGame[]>();
   for (const game of inScope) {
@@ -377,10 +389,11 @@ export function teamsSummary(ctx: ApiContext, query: URLSearchParams): ApiResult
       // Les joueurs du côté : ceux qui ont un pseudo, plus ceux qui n'ont qu'une ligne de bilan (le bilan ne dépend pas du pseudo).
       const named = people.filter((a) => a.game.id === game.id && a.side === side);
       const bare = [1, 2, 3, 4].map((i) => (side === 'A' ? i : i + 4)).filter((slot) => stats.has(`${game.id}|${slot}`) && !named.some((a) => a.slot === slot));
-      const rows = [...named, ...bare.map((slot): Appearance => ({ game, slot, side, name: '', team: name, stats: stats.get(`${game.id}|${slot}`) ?? null, killScore: null, deathScore: null }))];
+      const rows = [...named, ...bare.map((slot): Appearance => ({ game, slot, side, name: '', team: name, stats: stats.get(`${game.id}|${slot}`) ?? null, killScore: null, deathScore: null, rating: null }))];
       const cap = captures.get(game.id);
       const capture: Pct | null = cap && (cap[side] !== null || cap[otherSide(side)] !== null) ? { own: cap[side], opponent: cap[otherSide(side)] } : null;
-      const part: TeamGame = { game, side, name: name ?? '', rows, changes: pointChanges(ctx, game.id, game.map), capture };
+      const part: TeamGame = { game, side, name: name ?? '', rows, changes: pointChanges(ctx, game.id, game.map), capture,
+        rating: teamRatingOfGame([1, 2, 3, 4].map((i) => ratings.get(`${game.id}|${side === 'A' ? i : i + 4}`) ?? null)) };
       byTeam.set(key, [...(byTeam.get(key) ?? []), part]);
     }
   }

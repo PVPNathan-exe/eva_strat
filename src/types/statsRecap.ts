@@ -1,7 +1,21 @@
 // Types des réponses de GET /api/stats/game-summary (server/statsGame.ts) pour la vue Récap. Temps en secondes depuis le début de la game.
 // Un joueur sans ligne dans player_game_stats (`has_stats` faux) n'a aucun des champs de bilan : ils sont absents ou null, jamais 0.
 
+import type { PlayerRatingRow, RatingDetail } from './stats.ts';
+
 export type RecapTeam = 'A' | 'B';
+
+/** Note sur 20 d'un joueur dans la game (routes `game-summary`) : les trois notes, les assistances et le détail de chaque composante. */
+export interface RecapRating extends Omit<PlayerRatingRow, 'game_id' | 'slot'> {
+  detail: RatingDetail | null;
+}
+
+/** Les trois notes sur 20 d'une équipe (moyenne de ses quatre joueurs, null quand un joueur n'a pas la note). */
+export interface RecapTeamRating {
+  individual: number | null;
+  teamplay: number | null;
+  overall: number | null;
+}
 
 /** Une note de kill ou de mort. `impact` est déjà du point de vue du joueur (l'opposé de celui du kill pour la victime). */
 export interface RecapNote {
@@ -36,6 +50,14 @@ export interface RecapStats {
   duels_other?: number | null;
 }
 
+/** Kills, morts, assistances et score lus sur l'écran de fin de game (analysis/scoreboard.py). */
+export interface RecapScoreboard {
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  score: number | null;
+}
+
 export interface RecapPlayer extends RecapStats {
   game_id: number;
   slot: number;
@@ -46,6 +68,10 @@ export interface RecapPlayer extends RecapStats {
   kill_score_sum: number;
   death_score_sum: number;
   score_sum: number;
+  /** Note sur 20 (null : aucune note calculée pour ce joueur dans cette game). */
+  rating: RecapRating | null;
+  /** Valeurs officielles du tableau de fin de game (null : pas de tableau lu pour cette game) ; chaque valeur null = n/d. */
+  scoreboard: RecapScoreboard | null;
   kill_notes: RecapNote[];
   death_notes: RecapNote[];
 }
@@ -62,6 +88,7 @@ export interface RecapTeamTotals {
   duels_other: number | null;
   kill_score_sum: number;
   death_score_sum: number;
+  rating: RecapTeamRating;
 }
 
 export interface GameSummary {

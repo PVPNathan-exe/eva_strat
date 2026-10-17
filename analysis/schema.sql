@@ -374,6 +374,20 @@ CREATE TABLE IF NOT EXISTS player_game_stats (
   PRIMARY KEY (game_id, slot)
 );
 
+-- Note d'un joueur sur une game, sur 20 (analysis/player_ratings.py) : `individual` (kills, morts, assistances du joueur), `teamplay` (comparé à son équipe, présence, espace, fight, aggro...), `overall` = moyenne des deux ; NULL = non établie
+-- (la raison est dans `data`, JSON : valeur brute, note, poids et raison d'absence de chaque composante). `assists` : assistances comptées (`assist_source` : `tableau` de fin de game ou `repli` mesuré). Une convention, pas une vérité terrain.
+CREATE TABLE IF NOT EXISTS player_ratings (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  individual REAL,
+  teamplay REAL,
+  overall REAL,
+  assists INTEGER,
+  assist_source TEXT,
+  data TEXT,
+  PRIMARY KEY (game_id, slot)
+);
+
 -- Notes de review : annotations posées sur la reconstruction sous la vidéo, SANS aucun effet sur les données lues (le suivi, les stats et les corrections `user_marks` ne les lisent jamais).
 -- kind 'position' : le joueur `slot` était trop avancé (ou mal placé) à l'instant `t` ; (x, y) est l'endroit où il aurait dû être (position « fausse » voulue), `angle` le regard voulu (degrés, 0 = est) ;
 -- kind 'action' : action à faire à l'instant `t`, par exemple poser le gadget `gadget` du joueur `slot` en (x, y) ; kind 'note' : remarque libre. `text` : le commentaire qui explique l'erreur.
@@ -394,3 +408,18 @@ CREATE TABLE IF NOT EXISTS review_notes (
   y2 REAL
 );
 CREATE INDEX IF NOT EXISTS idx_review_notes_game ON review_notes(game_id, t);
+
+-- Tableau de fin de game (analysis/scoreboard.py) : valeurs OFFICIELLES du jeu par joueur (kills, morts, assistances, score) lues sur l'écran qui suit la victoire ; NULL = n/d (lecture douteuse, jamais un chiffre deviné).
+-- name_read : pseudo lu sur le tableau (texte normalisé), t_video : instant de la vidéo lu, source : provenance de la ligne.
+CREATE TABLE IF NOT EXISTS scoreboard (
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 8),
+  kills INTEGER,
+  deaths INTEGER,
+  assists INTEGER,
+  score INTEGER,
+  name_read TEXT,
+  t_video REAL,
+  source TEXT NOT NULL DEFAULT 'ecran_de_fin',
+  PRIMARY KEY (game_id, slot)
+);

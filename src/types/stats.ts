@@ -167,6 +167,58 @@ export interface PlayerGameStats {
   duels_other: number;
 }
 
+/** Une composante d'une sous-note (analysis/player_ratings.py) : valeur brute, note sur 20 et poids ; `reason` dit pourquoi elle n'a pas de valeur ou de note (jamais 0). */
+export interface RatingComponent {
+  label: string;
+  weight: number;
+  /** Vrai : moins c'est mieux (morts, cohésion), la note est inversée. */
+  down: boolean;
+  raw: number | null;
+  note: number | null;
+  reason?: string;
+}
+
+/** Une sous-note (individuelle ou teamplay) avec ses composantes ; `note` null : moins de la moitié du poids disponible, `reason` donne la cause. */
+export interface RatingGroupDetail {
+  note: number | null;
+  reason: string | null;
+  components: Record<string, RatingComponent>;
+}
+
+/** Colonne `data` de player_ratings : le détail de la note d'un joueur dans une game. Conventions sans vérité terrain. */
+export interface RatingDetail {
+  revision: number;
+  /** Source des assistances : `tableau` de fin de game (valeur du jeu) ou `repli` mesuré par proximité. */
+  assist_source: 'tableau' | 'repli';
+  /** Vrai : le regard des ennemis n'est pas utilisé (décision de l'utilisateur). */
+  gaze_excluded: boolean;
+  meta: {
+    kills: number;
+    deaths: number;
+    assists_fallback: number;
+    team_kills: number;
+    team_deaths: number;
+    team_assists: number;
+    game_minutes: number;
+    kills_with_assist: number;
+    kills_total: number;
+  };
+  individual: RatingGroupDetail;
+  teamplay: RatingGroupDetail;
+  overall_reason: string | null;
+}
+
+/** Ligne de la table player_ratings : note sur 20 d'un joueur dans une game (null : non établie, jamais 0). */
+export interface PlayerRatingRow {
+  game_id: number;
+  slot: number;
+  individual: number | null;
+  teamplay: number | null;
+  overall: number | null;
+  assists: number | null;
+  assist_source: 'tableau' | 'repli' | null;
+}
+
 export type ReviewNoteKind = 'position' | 'action' | 'note';
 
 /** Note de review (docs/PLAN_STATS_2.md, vague 5) : annotation sans effet sur les données lues. (x, y) en fractions de la minimap, angle en degrés (0 = est), t en secondes depuis le début de la game. */
@@ -185,4 +237,19 @@ export interface ReviewNote {
   /** Deuxième point : fin du trait du SHIELD, ou point visé par le CLONE (direction et distance) ; null pour les autres notes. */
   x2?: number | null;
   y2?: number | null;
+}
+
+/** Ligne de GET /api/stats/scoreboard : valeurs officielles du tableau de fin de game (null : n/d, lecture douteuse, jamais un chiffre deviné). */
+export interface ScoreboardRow {
+  game_id: number;
+  slot: number;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  score: number | null;
+  /** Pseudo lu sur le tableau (texte normalisé). */
+  name_read: string | null;
+  /** Instant de la vidéo (secondes) de l'image lue. */
+  t_video: number | null;
+  source: string;
 }

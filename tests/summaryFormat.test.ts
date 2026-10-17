@@ -25,12 +25,12 @@ import type { PlayerGameRow, PlayerSummaryRow, TeamGameRow } from '../src/types/
 
 const pg = (over: Partial<PlayerGameRow> = {}): PlayerGameRow => ({
   game_id: 1, map: 'Polaris', start_s: 10, team: 'NCT', opponent: 'SNV', side: 'A', slot: 1, kills: 5, deaths: 2, kd: 2.5, alive_s: 100, v_mean: 2, v_p98: 4,
-  gadget_uses: 3, gadget_unused_at_death: 1, gadget_possible: 4, duels_won: 3, duels_lost: 1, duels_other: 0, score_sum: 2, has_stats: true, ...over,
+  gadget_uses: 3, gadget_unused_at_death: 1, gadget_possible: 4, duels_won: 3, duels_lost: 1, duels_other: 0, score_sum: 2, rating: { individual: 12, teamplay: 14, overall: 13, assists: 2, assist_source: 'repli' }, has_stats: true, ...over,
 });
 
 const tg = (over: Partial<TeamGameRow> = {}): TeamGameRow => ({
   game_id: 1, map: 'Polaris', start_s: 10, side: 'A', opponent: 'SNV', winner: null, final_capture: { own: 99, opponent: 27 }, kills: 10, deaths: 8, kd: 1.25,
-  duels_won: 4, duels_lost: 2, duels_other: 1, gadget_uses: 6, gadget_possible: 8, point_changes: 4, has_stats: true, ...over,
+  duels_won: 4, duels_lost: 2, duels_other: 1, gadget_uses: 6, gadget_possible: 8, point_changes: 4, rating: { individual: 10, teamplay: 12, overall: 11 }, has_stats: true, ...over,
 });
 
 test('sortRows : valeurs absentes toujours en bas, égalités dans l\'ordre d\'origine', () => {
@@ -147,7 +147,8 @@ test('messages : base sans statistiques et games sans bilan', () => {
 test('colonnes joueurs : non établi pour un secondaire sans délai, n/d sans bilan, tri par kills', () => {
   const sumRow = (over: Partial<PlayerSummaryRow>): PlayerSummaryRow => ({
     key: 'a', name: 'Alexo', team: 'NCT', games: 3, games_with_stats: 3, maps: ['Polaris'], kills: 10, deaths: 5, kd: 2, alive_s: 600, v_mean: 2.1, v_p98_median: 4.5,
-    gadget_uses: 2, gadget_unused_at_death: null, gadget_possible: null, duels_won: 4, duels_lost: 4, duels_other: 1, kill_score_sum: 3, death_score_sum: -1, score_sum: 2, ...over,
+    gadget_uses: 2, gadget_unused_at_death: null, gadget_possible: null, duels_won: 4, duels_lost: 4, duels_other: 1, kill_score_sum: 3, death_score_sum: -1, score_sum: 2,
+    rating: { individual: 11, teamplay: 12, overall: 11.5, games_rated: 3, individual_games: 3, teamplay_games: 3 }, ...over,
   });
   const cols = playerSummaryColumns(5);
   const cell = (id: string, row: PlayerSummaryRow) => cols.find((c) => c.id === id)!.cell(row);

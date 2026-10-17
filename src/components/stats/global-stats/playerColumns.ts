@@ -4,7 +4,7 @@ import { fmtSpeed, NA, signed, type Cell } from '../../../lib/recapFormat.ts';
 import { numberOfSlot } from '../../../lib/killTimeline.ts';
 import { durationCell, gamesCell, mapsCell, sideLabel } from '../../../lib/summaryFormat.ts';
 import type { PlayerGameRow, PlayerSummaryRow } from '../../../types/statsSummary.ts';
-import { statColumns, textCell, unusedColumn, type Column } from './columns.ts';
+import { ratingColumns, ratingDetailColumns, statColumns, textCell, unusedColumn, type Column } from './columns.ts';
 
 const SPEED_TITLE = 'Vitesse moyenne sur les lignes vivantes, tyroliennes et sauts exclus (m/s), pondérée par le temps vivant.';
 const P98_TITLE = '98e centile de la vitesse (m/s), médiane par game quand plusieurs games : jamais le maximum brut, qui peut contenir des erreurs de lecture.';
@@ -29,6 +29,7 @@ export function playerSummaryColumns(min: number): Column<PlayerSummaryRow>[] {
       cell: (r) => gamesCell(r.games_with_stats, r.games),
     },
     { id: 'maps', label: 'Cartes', numeric: false, value: (r) => r.maps.length, cell: (r) => mapsCell(r.maps) },
+    ...ratingColumns<PlayerSummaryRow>((r) => r.rating, (r) => r.games),
     c.kills,
     c.deaths,
     c.kd,
@@ -62,6 +63,7 @@ export function playerGameColumns(): Column<PlayerGameRow>[] {
       cell: (r) => ({ text: `${sideLabel(r.side)}, n° ${numberOfSlot(r.slot)}` }),
       inTotal: false,
     },
+    ...ratingDetailColumns<PlayerGameRow>((r) => r.rating),
     c.kills,
     c.deaths,
     c.kd,

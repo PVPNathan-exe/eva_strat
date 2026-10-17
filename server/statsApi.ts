@@ -7,6 +7,7 @@ import { listLifeLoadouts, listLinks, listLives } from './statsLives.ts';
 import { listActive, listLevels, listOwners } from './statsOwners.ts';
 import { playersSummary, teamsSummary } from './statsPlayers.ts';
 import { presence } from './statsPresence.ts';
+import { listScoreboard } from './statsScoreboard.ts';
 import { globalSummary, teamSummary } from './statsTeam.ts';
 
 /** Routes en lecture seule (GET). */
@@ -24,6 +25,7 @@ const GET_ROUTES: Record<string, (ctx: ApiContext, query: URLSearchParams) => Ap
   '/api/stats/duels': listDuels,
   '/api/stats/kill-scores': listKillScores,
   '/api/stats/player-stats': listPlayerStats,
+  '/api/stats/scoreboard': listScoreboard,
   '/api/stats/game-summary': gameSummary,
   '/api/stats/team-summary': teamSummary,
   '/api/stats/global': globalSummary,

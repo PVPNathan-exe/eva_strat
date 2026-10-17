@@ -26,6 +26,12 @@ export function SummaryHelp({ kind }: Props) {
         )}
       </p>
       <p className="help__body">
+        <b>Notes sur 20</b> : la <b>globale</b> est la moyenne de l'<b>individuelle</b> (kills, morts et assistances) et du <b>teamplay</b> (part de l'équipe, présence, espace, fight, aggro, trades, cohésion, secondaire),
+        10 étant la médiane des games calculées. Chaque moyenne ne compte que les games où la note existe : la colonne <b>Games notées</b> dit combien, et une note jamais calculée est « n/d » (jamais 0).
+        {!players && " La note d'une équipe dans une game est la moyenne de ses quatre joueurs, seulement si les quatre ont la note."} Le détail composante par composante est dans le Récap (clic sur le nom d'un joueur).
+        Ce sont des <b>conventions sans vérité terrain</b>.
+      </p>
+      <p className="help__body">
         <b>Duels</b>
         {players ? ' et notes des kills' : ''} : ce sont des <b>conventions</b> de calcul, sans vérité terrain. La part de duels gagnés est gagnés sur (gagnés + perdus) ; les duels « autres » n'ont pas de vainqueur net ; sous
         le nombre de games minimal donné par le serveur, la part n'est pas montrée. {players ? '' : 'Les changements de point sont ceux de la carte (aucun sur Engine). '}

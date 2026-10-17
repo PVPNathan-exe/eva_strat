@@ -157,6 +157,24 @@ export function captureScoreOf(series: { A: { v: number }[]; B: { v: number }[] 
 /** Pourcentage entier : « 99 % ». */
 export const pctLabel = (v: number): string => `${Math.round(v)} %`;
 
+/** Assistances officielles du tableau de fin de game ; « n/d » sans tableau lu ou quand la valeur est illisible (jamais 0 par défaut). */
+export function assistsCell(p: Pick<RecapPlayer, 'scoreboard'>): Cell {
+  const v = p.scoreboard?.assists;
+  if (present(v)) return { text: String(v), title: 'Assistances officielles, lues sur le tableau de fin de game.' };
+  return { text: NA, title: p.scoreboard ? 'Assistances illisibles sur le tableau de fin de game.' : 'Pas de tableau de fin de game lu pour cette game (vidéo coupée avant, ou pas encore calculé).' };
+}
+
+/** Kills ou morts calculés par l'analyse ; l'infobulle donne la valeur officielle du tableau de fin de game quand elle diffère (rien quand il n'y a pas de tableau). */
+export function officialTitle(kind: 'kills' | 'deaths', computed: number | null | undefined, board: RecapPlayer['scoreboard'] | undefined): string | undefined {
+  const official = board?.[kind];
+  const label = kind === 'kills' ? 'Kills' : 'Morts';
+  if (!board) return undefined;
+  if (!present(official)) return `${label} officiels illisibles sur le tableau de fin de game.`;
+  if (!present(computed)) return `${label} officiels (tableau de fin de game) : ${official} ; non calculés par l'analyse.`;
+  if (official === computed) return `${label} identiques au tableau de fin de game (${official}).`;
+  return `${label} officiels (tableau de fin de game) : ${official} ; calculés par l'analyse : ${computed}.`;
+}
+
 /** Commande qui calcule les tables Stats d'une game. */
 export const statsCommand = (gameId: number): string => `npm run stats -- --game ${gameId}`;
 

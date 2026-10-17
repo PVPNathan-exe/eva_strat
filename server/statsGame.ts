@@ -4,6 +4,8 @@
 import type { ApiContext, ApiResult } from './api.ts';
 import { TEAM_MIN_GAMES } from './statsEpisodes.ts';
 import { gameParam } from './statsOwners.ts';
+import { loadGameRatings, teamRatingOfGame } from './statsRatings.ts';
+import { loadGameScoreboard } from './statsScoreboard.ts';
 
 export const reply = (status: number, json: unknown): ApiResult => ({ status, json });
 export const fail = (error: string, status = 400): ApiResult => reply(status, { error });
@@ -226,7 +228,8 @@ export function pointChanges(ctx: ApiContext, gameId: number, map: string | null
 
 /**
  * GET /api/stats/game-summary?game= : le récap d'une game. Par joueur : les colonnes de player_game_stats, le pseudo, la somme et la liste des notes (kill_notes, death_notes).
- * Par équipe (A, B) : les totaux. Plus le nom de la carte et le nombre de changements de point. `games` vaut 1 et `min` 5 (seuil d'affichage des vues multi-games).
+ * `rating` : la note sur 20 du joueur (individuelle, teamplay, globale, assistances et leur source, détail de chaque composante) ou null si la game n'a pas de note calculée ; chaque note vaut null quand elle n'est pas établie.
+ * Par équipe (A, B) : les totaux et la note moyenne des joueurs (seulement si tous les joueurs de l'équipe l'ont). Plus le nom de la carte et le nombre de changements de point. `games` vaut 1 et `min` 5 (seuil d'affichage des vues multi-games).
  * Game inconnue : 404.
  */
 export function gameSummary(ctx: ApiContext, query: URLSearchParams): ApiResult {
@@ -240,6 +243,8 @@ export function gameSummary(ctx: ApiContext, query: URLSearchParams): ApiResult 
   const names = new Map<number, string>();
   for (const r of ctx.db.prepare('SELECT slot, name FROM players WHERE game_id = ?').all(gameId) as { slot: number; name: string }[]) names.set(r.slot, r.name);
 
+  const ratings = loadGameRatings(ctx, gameId);
+  const board = loadGameScoreboard(ctx, gameId);
   const killNotes = new Map<number, Note[]>();
   const deathNotes = new Map<number, Note[]>();
   const push = (m: Map<number, Note[]>, slot: number, note: Note) => m.set(slot, [...(m.get(slot) ?? []), note]);
@@ -257,7 +262,7 @@ export function gameSummary(ctx: ApiContext, query: URLSearchParams): ApiResult 
     push(deathNotes, victim, { t: Number(s.t), other_slot: killer, impact: deathImpact ?? -impact, reasons });
   }
 
-  const slots = [...new Set([...stats.keys(), ...names.keys(), ...killNotes.keys(), ...deathNotes.keys()])].sort((a, b) => a - b);
+  const slots = [...new Set([...stats.keys(), ...names.keys(), ...killNotes.keys(), ...deathNotes.keys(), ...ratings.keys(), ...board.keys()])].sort((a, b) => a - b);
   const players = slots.map((slot) => {
     const kn = killNotes.get(slot) ?? [];
     const dn = deathNotes.get(slot) ?? [];
@@ -271,6 +276,8 @@ export function gameSummary(ctx: ApiContext, query: URLSearchParams): ApiResult 
       kill_score_sum: killSum,
       death_score_sum: deathSum,
       score_sum: round3(killSum + deathSum),
+      rating: ratings.get(slot) ?? null,
+      scoreboard: board.get(slot) ?? null,
       kill_notes: kn,
       death_notes: dn,
     };
@@ -291,6 +298,7 @@ export function gameSummary(ctx: ApiContext, query: URLSearchParams): ApiResult 
       duels_other: sum(col('duels_other')),
       kill_score_sum: round3(mine.reduce((a, p) => a + p.kill_score_sum, 0)),
       death_score_sum: round3(mine.reduce((a, p) => a + p.death_score_sum, 0)),
+      rating: teamRatingOfGame((team === 'A' ? [1, 2, 3, 4] : [5, 6, 7, 8]).map((slot) => ratings.get(slot) ?? null)), // les quatre joueurs de l'équipe : un joueur sans ligne empêche la note d'équipe
     };
   };
 

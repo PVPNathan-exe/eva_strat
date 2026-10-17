@@ -3,7 +3,8 @@
 
 import { fmtCount, gadgetCell, killsOnDeaths, NA, unusedCell, type Cell } from '../../../lib/recapFormat.ts';
 import { duelShare, duelShareCell, kdSort, noStatsCell, sortRows, type SortDir, type SortValue } from '../../../lib/summaryFormat.ts';
-import type { Maybe } from '../../../types/statsSummary.ts';
+import { meanRatingCell, ratingCell } from '../../../lib/ratingFormat.ts';
+import type { Maybe, RatingMean, RatingTriple } from '../../../types/statsSummary.ts';
 
 /** Une colonne d'un tableau triable. */
 export interface Column<T> {
@@ -93,4 +94,55 @@ export const textCell = (text: string | null | undefined, title?: string): Cell 
 export function sortByColumn<T>(rows: T[], columns: Column<T>[], sort: { col: string; dir: SortDir }): T[] {
   const col = columns.find((c) => c.id === sort.col);
   return col ? sortRows(rows, col.value, sort.dir) : rows;
+}
+
+const RATING_TITLE = 'Note sur 20 (10 = médiane de la base), convention sans vérité terrain.';
+
+/**
+ * Colonnes de notes d'un tableau global (moyenne sur les games notées) : globale, individuelle, teamplay et nombre de games notées. Une note jamais calculée est « n/d » (jamais 0) ;
+ * l'infobulle dit combien de games la portent, car la moyenne ne compte que celles où la note existe.
+ */
+export function ratingColumns<T>(get: (r: T) => RatingMean, totalGames: (r: T) => number): Column<T>[] {
+  const mean = (id: string, label: string, pick: (m: RatingMean) => Maybe, games: (m: RatingMean) => number): Column<T> => ({
+    id,
+    label,
+    title: `${label} : moyenne sur les games où la note existe. ${RATING_TITLE}`,
+    numeric: true,
+    value: (r) => pick(get(r)),
+    cell: (r) => meanRatingCell(pick(get(r)), games(get(r)), totalGames(r), label),
+  });
+  return [
+    mean('rating_overall', 'Note globale /20', (m) => m.overall, (m) => m.games_rated),
+    mean('rating_individual', 'Individuelle /20', (m) => m.individual, (m) => m.individual_games),
+    mean('rating_teamplay', 'Teamplay /20', (m) => m.teamplay, (m) => m.teamplay_games),
+    {
+      id: 'rating_games',
+      label: 'Games notées',
+      title: 'Games où la note globale existe (celles de la moyenne), sur le total de games de la ligne.',
+      numeric: true,
+      value: (r) => get(r).games_rated,
+      cell: (r) => ({ text: get(r).games_rated === totalGames(r) ? String(get(r).games_rated) : `${get(r).games_rated} sur ${totalGames(r)}` }),
+    },
+  ];
+}
+
+/** Colonnes de notes d'un détail game par game : les trois notes de la game (« n/d » quand non établie ou absente ; la ligne de total donne la moyenne des games notées). */
+export function ratingDetailColumns<T>(get: (r: T) => (RatingTriple & { games_rated?: number }) | null): Column<T>[] {
+  const one = (id: string, label: string, pick: (m: RatingTriple) => Maybe): Column<T> => ({
+    id,
+    label,
+    title: `${label}. ${RATING_TITLE}`,
+    numeric: true,
+    value: (r) => {
+      const m = get(r);
+      return m ? pick(m) : null;
+    },
+    cell: (r) => {
+      const m = get(r);
+      if (!m) return { text: NA, title: 'Note pas calculée pour cette game.' };
+      const extra = typeof m.games_rated === 'number' ? `Moyenne de ${m.games_rated} game${m.games_rated > 1 ? 's' : ''} notée${m.games_rated > 1 ? 's' : ''}.` : undefined;
+      return ratingCell(pick(m), null, extra);
+    },
+  });
+  return [one('rating_overall', 'Note globale /20', (m) => m.overall), one('rating_individual', 'Individuelle /20', (m) => m.individual), one('rating_teamplay', 'Teamplay /20', (m) => m.teamplay)];
 }

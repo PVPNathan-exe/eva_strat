@@ -1,0 +1,168 @@
+/* Notes sur 20 du Récap (recap/RecapRating, ligne dépliée de recap/RecapPlayers). Couleurs : jetons de tokens.css seulement. */
+
+.recap__expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recap__expand:hover {
+  color: var(--c-text);
+}
+
+.recap__overall {
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.recap__detail > td {
+  padding: 0.6rem 0.8rem;
+  background: var(--c-surface-2);
+  text-align: left;
+  white-space: normal;
+}
+
+/* Le détail reste dans la largeur visible du tableau qui défile : il ne s'étire pas sur toutes les colonnes */
+.recap__detail-in {
+  position: sticky;
+  left: 0;
+  width: min(100%, 80rem);
+  max-width: calc(100vw - 3rem);
+}
+
+.rating {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  text-align: left; /* le tableau du Récap aligne ses cellules à droite */
+}
+
+.rating__line,
+.rating__why {
+  margin: 0;
+  max-width: 90ch;
+  color: var(--c-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.rating__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+  gap: 0.8rem;
+}
+
+.rating__group {
+  min-width: 0;
+}
+
+.rating__title {
+  margin: 0 0 0.3rem;
+  color: var(--c-text);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.rating__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.rating__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.rating__table th,
+.rating__table td {
+  padding: 0.2rem 0.5rem;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-soft);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rating__table thead th {
+  color: var(--c-text-muted);
+  font-weight: 600;
+}
+
+.rating__table tbody th {
+  color: var(--c-text);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+
+.rating__table thead th:first-child {
+  text-align: left;
+}
+
+.rating__table tr.is-absent td,
+.rating__table tr.is-absent th {
+  color: var(--c-text-muted);
+}
+
+.rating__down {
+  color: var(--c-text-muted);
+}
+
+.rating__absent {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--c-text-muted);
+  font-size: 0.76rem;
+}
+
+/* Écran étroit : chaque composante devient un bloc (libellé, puis valeur, note et poids sur une ligne) au lieu d'un tableau qui défile */
+@media (max-width: 40rem) {
+  .rating__table,
+  .rating__table tbody,
+  .rating__table tr,
+  .rating__table th,
+  .rating__table td {
+    display: block;
+  }
+
+  .rating__table thead {
+    display: none;
+  }
+
+  .rating__table tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.8rem;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--c-border);
+  }
+
+  .rating__table th,
+  .rating__table td {
+    padding: 0;
+    border: 0;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .rating__table tbody th {
+    flex: 1 1 100%;
+  }
+
+  .rating__table td:nth-of-type(2)::before {
+    content: 'note ';
+    color: var(--c-text-muted);
+  }
+
+  .rating__table td:nth-of-type(3)::before {
+    content: 'poids ';
+    color: var(--c-text-muted);
+  }
+}

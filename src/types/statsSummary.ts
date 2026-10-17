@@ -4,11 +4,35 @@
 /** Nombre qui peut ne pas être établi (null). */
 export type Maybe = number | null;
 
+/** Notes sur 20 moyennées sur plusieurs games : chaque moyenne ne porte que sur les games où la note existe, jamais de moyenne partielle sans le nombre de games. */
+export interface RatingMean {
+  individual: Maybe;
+  teamplay: Maybe;
+  overall: Maybe;
+  /** Games où la note GLOBALE existe (celles de la moyenne globale). */
+  games_rated: number;
+  individual_games: number;
+  teamplay_games: number;
+}
+
+/** Les trois notes d'une game (joueur ou équipe). */
+export interface RatingTriple {
+  individual: Maybe;
+  teamplay: Maybe;
+  overall: Maybe;
+}
+
 /** Étendue demandée : toutes les cartes (map vide) ou une seule. */
 export interface SummaryScope {
   map: string | null;
   team?: string | null;
 }
+
+/** Notes d'un joueur dans une game, avec ses assistances et leur source (`tableau` de fin de game ou `repli`) ; `games_rated` n'existe que sur une ligne de total (nombre de games dont vient la moyenne). */
+export type PlayerGameRating = RatingTriple & { assists: Maybe; assist_source: string | null; games_rated?: number };
+
+/** Notes d'une équipe dans une game (moyenne de ses quatre joueurs) ; `games_rated` seulement sur une ligne de total. */
+export type TeamGameRating = RatingTriple & { games_rated?: number };
 
 /** Une ligne de la table globale des joueurs : toutes les games du joueur dans l'étendue. */
 export interface PlayerSummaryRow {
@@ -39,6 +63,7 @@ export interface PlayerSummaryRow {
   kill_score_sum: Maybe;
   death_score_sum: Maybe;
   score_sum: Maybe;
+  rating: RatingMean;
 }
 
 /** Une ligne du détail d'un joueur : une game. */
@@ -64,6 +89,8 @@ export interface PlayerGameRow {
   duels_lost: Maybe;
   duels_other: Maybe;
   score_sum: Maybe;
+  /** Notes de la game (null : aucune note calculée) et assistances avec leur source. */
+  rating: PlayerGameRating | null;
   has_stats: boolean;
 }
 
@@ -101,6 +128,7 @@ export interface TeamSummaryRow {
   gadget_possible: Maybe;
   point_changes: Maybe;
   final_capture_avg: FinalCapture | null;
+  rating: RatingMean;
 }
 
 /** Une ligne du détail d'une équipe : une game. */
@@ -122,6 +150,8 @@ export interface TeamGameRow {
   gadget_uses: Maybe;
   gadget_possible: Maybe;
   point_changes: Maybe;
+  /** Moyenne des quatre joueurs de l'équipe dans la game, null quand un des quatre n'a pas la note. */
+  rating: TeamGameRating;
   has_stats: boolean;
 }
 

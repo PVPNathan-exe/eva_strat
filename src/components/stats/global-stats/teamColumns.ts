@@ -4,7 +4,7 @@
 import { NA } from '../../../lib/recapFormat.ts';
 import { captureCell, captureSort, gamesCell, mapsCell, pointChangesCell, sideLabel } from '../../../lib/summaryFormat.ts';
 import type { TeamGameRow, TeamSummaryRow } from '../../../types/statsSummary.ts';
-import { statColumns, textCell, type Column } from './columns.ts';
+import { ratingColumns, ratingDetailColumns, statColumns, textCell, type Column } from './columns.ts';
 
 const CHANGES_TITLE = 'Changements de point actif pendant la game (aucun sur Engine et Helios Station).';
 const SIDE_TITLE = 'Gauche (orange, joueurs 1 à 4) ou droite (bleue, joueurs 5 à 8)';
@@ -24,6 +24,7 @@ export function teamSummaryColumns(min: number): Column<TeamSummaryRow>[] {
       cell: (r) => gamesCell(r.games_with_stats, r.games),
     },
     { id: 'maps', label: 'Cartes', numeric: false, value: (r) => r.maps.length, cell: (r) => mapsCell(r.maps) },
+    ...ratingColumns<TeamSummaryRow>((r) => r.rating, (r) => r.games),
     c.kills,
     c.deaths,
     c.kd,
@@ -61,6 +62,7 @@ export function teamGameColumns(): Column<TeamGameRow>[] {
       value: (r) => captureSort(r.final_capture),
       cell: (r) => captureCell(r.final_capture),
     },
+    ...ratingDetailColumns<TeamGameRow>((r) => r.rating),
     c.kills,
     c.deaths,
     c.kd,
