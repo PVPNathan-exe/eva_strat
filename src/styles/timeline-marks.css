@@ -55,6 +55,17 @@
   z-index: 1; /* au-dessus du trait jaune, qui coupait la lettre */
 }
 
+/* Moments où le point actif n'est capturé par personne (Outlaw) : hachures grises sur la barre */
+.timeline__uncaptured {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(135deg, var(--c-timeline-neutral) 0 3px, transparent 3px 7px);
+  box-shadow: inset 0 2px 0 var(--c-timeline-neutral), inset 0 -2px 0 var(--c-timeline-neutral);
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* Nom de la carte au début de chaque game de la vue complète (coupé avec des points de suspension quand la game est courte) */
 
 .timeline__game-label {
