@@ -2,6 +2,7 @@
 // Fonctions pures, testées dans tests/gadgetStates.test.ts. Temps : secondes depuis le début de la game (comme gadget_state et life-loadouts).
 
 import type { GadgetState, LifeLoadoutAt, ReviewNoteKind } from '../types/stats.ts';
+import { displaySeconds, gadgetKind } from './gadgetParams.ts';
 import { slotNumber } from './reviewNotes.ts';
 
 export type GadgetStatus = GadgetState['state'];
@@ -69,10 +70,18 @@ export function playerName(slot: number, nameOf: Map<number, string>): string {
 
 const FEMININE = new Set(['SONAR']);
 
-/** « SNVXPRIME pose sa SONAR ici » ; « pose son gadget » quand le gadget est inconnu. */
-export function actionText(player: string, gadget: string | null | undefined): string {
+/**
+ * « SNVXPRIME pose sa SONAR ici » ; « pose son gadget » quand le gadget est inconnu.
+ * SHIELD : « SNVXALEXO pose son SHIELD ici (10 s) » (durée de la référence). CLONE : « SNVXPRIME envoie son CLONE vers ce point : arrêt sur un mur à 8,2 m » (`detail` : la phrase d'arrêt).
+ */
+export function actionText(player: string, gadget: string | null | undefined, detail: string | null = null): string {
   const label = gadgetLabel(gadget);
   if (label === 'inconnu') return `${player} pose son gadget ici`;
+  if (gadgetKind(gadget) === 'shield') {
+    const secs = displaySeconds(gadget);
+    return `${player} pose son ${label} ici${secs !== null ? ` (${secs} s)` : ''}`;
+  }
+  if (gadgetKind(gadget) === 'clone') return `${player} envoie son ${label} vers ce point${detail ? ` : ${detail}` : ''}`;
   return `${player} pose ${FEMININE.has(label) ? 'sa' : 'son'} ${label} ici`;
 }
 
@@ -82,9 +91,9 @@ export function positionText(player: string): string {
 }
 
 /** Commentaire prérempli du brouillon (modifiable) : vide tant que le joueur ou la pose manque, et pour une remarque. */
-export function autoNoteText(kind: ReviewNoteKind, slot: number | null, gadget: string | null | undefined, placed: boolean, nameOf: Map<number, string>): string {
+export function autoNoteText(kind: ReviewNoteKind, slot: number | null, gadget: string | null | undefined, placed: boolean, nameOf: Map<number, string>, detail: string | null = null): string {
   if (slot === null) return '';
-  if (kind === 'action') return actionText(playerName(slot, nameOf), gadget);
+  if (kind === 'action') return actionText(playerName(slot, nameOf), gadget, detail);
   if (kind === 'position' && placed) return positionText(playerName(slot, nameOf));
   return '';
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boxStyleOf, DRAG_MIN_PX, gazeAngle, isDrag, pixelDistance, planToMinimap, stageFraction } from '../src/components/analysis/review/notePlacement.ts';
+import { boxStyleOf, DRAG_MIN_PX, gazeAngle, isDrag, pixelDistance, planToMinimap, radiusInPlan, stageFraction } from '../src/components/analysis/review/notePlacement.ts';
 
 const inset = { l: 0.02, t: 0.03, r: 0.01, b: 0.1 };
 // Même formule que planInsets.project (non importé : ce fichier lit un JSON que node ne charge pas sans attribut)
@@ -53,4 +53,13 @@ test('glisser ou clic : un appui qui reste sous la distance minimale est un clic
   assert.equal(isDrag(6, 0), true, '6 pixels : un glisser');
   assert.equal(isDrag(-4, -5), true, 'distance diagonale');
   assert.equal(isDrag(10, 0, 12), false, 'seuil réglable (doigt)');
+});
+
+test('rayon en mètres vers ellipse du plan : 3,1 m = un dixième de la largeur de la minimap', () => {
+  const r = radiusInPlan({ l: 0, t: 0, r: 0, b: 0 }, 3.1);
+  assert.ok(Math.abs(r.rx - 10) < 1e-9);
+  assert.ok(Math.abs(r.ry - (3.1 / 16.5) * 100) < 1e-9);
+  const framed = radiusInPlan(inset, 3.1); // la minimap occupe 97 % de la largeur et 87 % de la hauteur du plan
+  assert.ok(Math.abs(framed.rx - 10 * 0.97) < 1e-9);
+  assert.ok(Math.abs(framed.ry - (3.1 / 16.5) * 87) < 1e-9);
 });

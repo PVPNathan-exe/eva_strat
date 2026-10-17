@@ -8,6 +8,8 @@ import { Layers, Pause, Play } from 'lucide-react';
 import { builtinMaps } from '../../lib/builtinMaps';
 import { defaultInset, insetStorageKey, project, type Inset } from '../../lib/planInsets';
 import { observedAt, unconfirmedSet } from '../../lib/replayFlags';
+import { clonePath, type ClonePathResult, type Point } from '../../lib/clonePath';
+import { cloneParams, gadgetKind } from '../../lib/gadgetParams';
 import { gadgetChips } from '../../lib/gadgetStates';
 import { gadgetChoices, noteMarks, type NoteShape } from '../../lib/reviewNotes';
 import type { ZoneColors } from '../../lib/safeZones';
@@ -23,12 +25,14 @@ import { tokenRgb } from '../stats/useStats';
 import { GadgetChips } from './review/GadgetChips';
 import { KillList } from './review/KillList';
 import { NotePanel } from './review/NotePanel';
-import { boxStyleOf } from './review/notePlacement';
+import { NoteLegend } from './review/NoteLegend';
+import { boxStyleOf, radiusInPlan } from './review/notePlacement';
 import { PlayerPanel } from './review/PlayerPanel';
 import { computeTrails, formatFine, groupFrames, numberOfSlot, shownAt } from './review/replayFrames';
 import { ReplayStage } from './review/ReplayStage';
 import { ScoreChart } from './review/ScoreChart';
 import { WEAPON_CHOICES, type WeaponChoice } from './review/shotZone';
+import { useCloneGrid } from './review/useCloneGrid';
 import { useNoteDraft } from './review/useNoteDraft';
 import { useReplayClock, RATES } from './review/useReplayClock';
 import { useReplayData } from './review/useReplayData';
@@ -103,6 +107,15 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     const p = shownAt(frames, t + game.start_s).find((q) => q.slot === slot && q.alive);
     return p ? { x: p.x, y: p.y } : null;
   };
+  // Trajet du clone : grille des obstacles de la carte (chargée seulement quand elle sert), joueurs vivants à l'instant de la note, portée de la référence.
+  const hasCloneNote = reviewNotes.notes.some((n) => n.kind === 'action' && gadgetKind(n.gadget) === 'clone');
+  const cloneGrid = useCloneGrid(game.map ?? '', selected !== null || (showNotes && hasCloneNote));
+  const cloneConf = cloneParams();
+  const resolveClone = (slot: number, from: Point, aim: Point, t: number): ClonePathResult | null => {
+    if (!cloneGrid.grid || !cloneConf) return null;
+    const players = shownAt(frames, t + game.start_s).filter((p) => p.alive).map((p) => ({ slot: p.slot, x: p.x, y: p.y }));
+    return clonePath({ from, aim, grid: cloneGrid.grid, players, maxRangeM: cloneConf.maxRangeM, ignoreSlot: slot });
+  };
   const gameT = time - game.start_s;
   const note = useNoteDraft({
     game,
@@ -113,15 +126,23 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
     inset,
     place,
     defaultGadget: gadgetChoices(reviewNotes.loadouts, selected, gameT).current,
+    readAt,
+    resolveClone,
     freeze: () => {
       getVideoElement()?.pause();
       if (!clock.follow && clock.playing) clock.seek(time);
     },
   });
   const gadgets = gadgetChoices(reviewNotes.loadouts, selected, note.draft.t);
-  const draftShape: NoteShape | null = note.draft.kind === 'note' ? null : { kind: note.draft.kind, slot: note.draft.slot, t: note.draft.t, x: note.draft.x, y: note.draft.y, angle: note.draft.angle, gadget: note.draft.gadget };
+  const draftShape: NoteShape | null = note.draft.kind === 'note' ? null : { kind: note.draft.kind, slot: note.draft.slot, t: note.draft.t, x: note.draft.x, y: note.draft.y, x2: note.draft.x2, y2: note.draft.y2, angle: note.draft.angle, gadget: note.draft.gadget };
   // Peu de notes visibles à la fois : recalculé à chaque image sans mémoïsation.
   const marksOnStage = noteMarks(showNotes ? reviewNotes.notes : [], draftShape, gameT, readAt);
+  const clones = new Map<string, ClonePathResult>();
+  for (const m of marksOnStage) {
+    const r = m.gadgetKind === 'clone' && m.slot !== null && m.to ? resolveClone(m.slot, m.at, m.to, m.t) : null;
+    if (r) clones.set(m.key, r);
+  }
+  const gadgetView = { gameT, clones, speedMs: cloneConf?.speedMs ?? null, radiusOf: (m: number) => radiusInPlan(inset, m) };
 
   // Pastilles de gadget : un joueur par pastille, nom et état du gadget à l'instant affiché.
   const chips = gadgetChips(slotsPresent, reviewNotes.loadouts, reviewNotes.gadgetStates, gameT);
@@ -168,6 +189,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
           selected={selected}
           placing={note.active}
           noteMarks={marksOnStage}
+          gadgetView={gadgetView}
           dragHandlers={note.handlers}
         />
 
@@ -226,7 +248,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
                   </label>
                 </>
               )}
-              <label title="Fantômes et gadgets des notes de review, de 3 s avant à 8 s après leur instant (aucun effet sur les données)">
+              <label title="Fantômes et gadgets des notes de review, de 3 s avant à 8 s après leur instant (trait du SHIELD et trajet du CLONE : de leur instant à + 10 s ; aucun effet sur les données)">
                 <input type="checkbox" checked={showNotes} onChange={(e) => setShowNotes(e.target.checked)} />
                 Afficher les notes
               </label>
@@ -271,6 +293,7 @@ export function ReplayPanel({ game, large = false }: { game: Game; large?: boole
             )}
           </div>
         )}
+        <NoteLegend marks={marksOnStage} clones={clones} nameOf={nameOf} notice={cloneGrid.notice} />
         {showZone && (
           <details className="help">
             <summary>Comment lire la zone de tir</summary>

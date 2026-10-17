@@ -8,6 +8,7 @@ import { flagKey } from '../../../lib/replayFlags';
 import type { NoteMark } from '../../../lib/reviewNotes';
 import type { Reliability } from '../../../types/analysis';
 import { ReliabilityLayer } from '../ReliabilityLayer';
+import type { GadgetView } from './GadgetShapes';
 import { NoteLayer } from './NoteLayer';
 import { numberOfSlot, teamVar, type Shown, type Trail } from './replayFrames';
 
@@ -31,6 +32,8 @@ interface Props {
   placing: boolean;
   /** Notes de review à dessiner (dans leur fenêtre d'affichage) et brouillon en cours. */
   noteMarks: NoteMark[];
+  /** Instant, trajets de clone et rayons pour dessiner les gadgets des notes. */
+  gadgetView: GadgetView;
   dragHandlers: {
     onPointerDown: (e: PointerEvent<HTMLDivElement>) => void;
     onPointerMove: (e: PointerEvent<HTMLDivElement>) => void;
@@ -85,7 +88,7 @@ export function ReplayStage(props: Props) {
           </div>
         );
       })}
-      <NoteLayer marks={props.noteMarks} place={place} />
+      <NoteLayer marks={props.noteMarks} place={place} view={props.gadgetView} />
       {!plan && <p className="replay__hint">Choisis la carte de la game pour afficher son plan.</p>}
     </div>
   );

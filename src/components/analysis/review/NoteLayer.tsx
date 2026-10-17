@@ -1,16 +1,19 @@
 // Notes de review dessinées sur le plan : fantôme en pointillé (numéro du joueur, regard voulu) relié par un trait à la position lue, gadget posé avec une pastille portant son nom.
+// Les formes des gadgets (trait du SHIELD, trajet du CLONE, cercles des rayons) sont dans GadgetShapes.
 // Purement visuel : une note ne change aucune donnée. Les positions viennent de lib/reviewNotes.noteMarks (fractions de la minimap), `place` les ramène sur le plan.
 
 import { Fragment } from 'react';
 import { slotNumber, type NoteMark } from '../../../lib/reviewNotes';
+import { GadgetShapes, type GadgetView } from './GadgetShapes';
 import { teamVar } from './replayFrames';
 
 interface Props {
   marks: NoteMark[];
   place: (x: number, y: number) => { x: number; y: number };
+  view: GadgetView;
 }
 
-export function NoteLayer({ marks, place }: Props) {
+export function NoteLayer({ marks, place, view }: Props) {
   if (marks.length === 0) return null;
   const links = marks.filter((m) => m.read);
   return (
@@ -22,6 +25,7 @@ export function NoteLayer({ marks, place }: Props) {
           return <line key={m.key} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`note__link${m.draft ? ' is-draft' : ''}`} vectorEffect="non-scaling-stroke" />;
         })}
       </svg>
+      <GadgetShapes marks={marks} place={place} view={view} />
       {marks.map((m) => {
         const p = place(m.at.x, m.at.y);
         const team = m.slot !== null ? teamVar(m.slot <= 4 ? 'A' : 'B') : 'var(--c-cyan)';

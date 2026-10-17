@@ -2,6 +2,7 @@
 // Fonctions pures (tests/notePlacement.test.ts) : le cadre de la minimap dans le plan vient de lib/planInsets.ts.
 
 import type { CSSProperties } from 'react';
+import { ARENA_M } from '../../../lib/pathCut.ts';
 import type { Inset } from '../../../lib/planInsets.ts';
 
 /** Position du pointeur dans un rectangle, en fractions (0 à 1, bornées). */
@@ -32,6 +33,11 @@ export function isDrag(dx: number, dy: number, minPixels = DRAG_MIN_PX): boolean
 /** Style qui place un élément exactement sur la minimap dans le plan (pourcentages de l'image du plan). */
 export function boxStyleOf(inset: Inset): CSSProperties {
   return { left: `${inset.l * 100}%`, top: `${inset.t * 100}%`, width: `${(1 - inset.l - inset.r) * 100}%`, height: `${(1 - inset.t - inset.b) * 100}%` };
+}
+
+/** Rayon en mètres vers les deux demi-axes d'une ellipse, en pourcentages de l'image du plan (un cercle de la carte, étiré comme la minimap l'est dans le plan). */
+export function radiusInPlan(inset: Inset, metresRadius: number): { rx: number; ry: number } {
+  return { rx: (metresRadius / ARENA_M[0]) * (1 - inset.l - inset.r) * 100, ry: (metresRadius / ARENA_M[1]) * (1 - inset.t - inset.b) * 100 };
 }
 
 /** Distance en pixels entre deux points donnés en fractions d'un rectangle (pour savoir si un clic tombe sur le fantôme). */

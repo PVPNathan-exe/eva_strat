@@ -86,7 +86,7 @@ test('gadgets proposés : celui de la vie à l instant, puis ceux des autres vie
 });
 
 test('brouillon : ce qui manque pour enregistrer, et corps envoyé au serveur', () => {
-  const base: NoteDraftFields = { kind: 'position', slot: 2, t: 12.5, x: null, y: null, angle: null, gadget: '', text: '' };
+  const base: NoteDraftFields = { kind: 'position', slot: 2, t: 12.5, x: null, y: null, x2: null, y2: null, angle: null, gadget: '', text: '' };
   assert.match(draftProblem(base) ?? '', /plan/);
   assert.match(draftProblem({ ...base, slot: null }) ?? '', /joueur/);
   assert.equal(draftProblem({ ...base, x: 0.3, y: 0.4 }), null, 'position sans commentaire : permise');
@@ -96,9 +96,49 @@ test('brouillon : ce qui manque pour enregistrer, et corps envoyé au serveur', 
   assert.equal(draftProblem({ ...base, kind: 'note', slot: null, text: 'Mauvais placement' }), null);
 
   const pos = draftBody({ ...base, x: 0.3, y: 0.4, angle: 90, gadget: 'x', text: ' trop avancé ' });
-  assert.deepEqual(pos, { t: 12.5, kind: 'position', slot: 2, x: 0.3, y: 0.4, angle: 90, gadget: null, text: 'trop avancé' });
+  assert.deepEqual(pos, { t: 12.5, kind: 'position', slot: 2, x: 0.3, y: 0.4, x2: null, y2: null, angle: 90, gadget: null, text: 'trop avancé' });
   const act = draftBody({ ...base, kind: 'action', x: 0.3, y: 0.4, angle: 90, gadget: ' STICKY ', text: 'à poser ici' });
-  assert.deepEqual(act, { t: 12.5, kind: 'action', slot: 2, x: 0.3, y: 0.4, angle: null, gadget: 'STICKY', text: 'à poser ici' });
+  assert.deepEqual(act, { t: 12.5, kind: 'action', slot: 2, x: 0.3, y: 0.4, x2: null, y2: null, angle: null, gadget: 'STICKY', text: 'à poser ici' });
   const rem = draftBody({ ...base, kind: 'note', slot: null, x: 0.3, y: 0.4, angle: 10, gadget: 'x', text: 'ok' });
-  assert.deepEqual(rem, { t: 12.5, kind: 'note', slot: null, x: null, y: null, angle: null, gadget: null, text: 'ok' });
+  assert.deepEqual(rem, { t: 12.5, kind: 'note', slot: null, x: null, y: null, x2: null, y2: null, angle: null, gadget: null, text: 'ok' });
+});
+
+test('SHIELD et CLONE : visibles de l instant de la note à + 10 s (pas la fenêtre des autres notes)', () => {
+  assert.equal(isNoteShown(100, 97, 'SHIELD'), false, 'avant l instant : rien');
+  assert.equal(isNoteShown(100, 100, 'SHIELD'), true);
+  assert.equal(isNoteShown(100, 110, 'SHIELD'), true);
+  assert.equal(isNoteShown(100, 110.1, 'SHIELD'), false);
+  assert.equal(isNoteShown(100, 105, 'CLONE'), true);
+  assert.equal(isNoteShown(100, 98, 'CLONE'), false);
+  assert.equal(isNoteShown(100, 98, 'STICKY'), true, 'autre gadget : 3 s avant');
+  assert.equal(isNoteShown(100, 108, 'STICKY'), true, 'autre gadget : 8 s après');
+  assert.equal(isNoteShown(100, 98), true, 'sans gadget : fenêtre commune');
+});
+
+test('marque d un SHIELD ou d un CLONE : deuxième point gardé ; un autre gadget n en a pas', () => {
+  const shield = markOf(note(1, 10, { kind: 'action', gadget: 'SHIELD', x: 0.2, y: 0.5, x2: 0.3, y2: 0.5 }), false, readAt);
+  assert.equal(shield?.gadgetKind, 'shield');
+  assert.deepEqual(shield?.to, { x: 0.3, y: 0.5 });
+  assert.equal(shield?.t, 10);
+  const clone = markOf(note(2, 10, { kind: 'action', gadget: 'CLONE', x: 0.2, y: 0.5, x2: 0.4, y2: 0.6 }), false, readAt);
+  assert.equal(clone?.gadgetKind, 'clone');
+  assert.deepEqual(clone?.to, { x: 0.4, y: 0.6 });
+  assert.equal(clone?.gadget, 'CLONE');
+  const sticky = markOf(note(3, 10, { kind: 'action', gadget: 'STICKY', x: 0.2, y: 0.5, x2: 0.4, y2: 0.6 }), false, readAt);
+  assert.equal(sticky?.gadgetKind, 'point');
+  assert.equal(sticky?.to, null);
+  assert.equal(markOf(note(4, 10, { kind: 'action', gadget: 'SHIELD', x: 0.2, y: 0.5 }), false, readAt)?.to, null, 'fin du trait manquante');
+});
+
+test('brouillon SHIELD et CLONE : deuxième point exigé, corps envoyé avec x2 et y2', () => {
+  const base: NoteDraftFields = { kind: 'action', slot: 2, t: 12.5, x: null, y: null, x2: null, y2: null, angle: null, gadget: 'SHIELD', text: '' };
+  assert.match(draftProblem(base) ?? '', /Glisser pour tracer le trait du shield/);
+  assert.match(draftProblem({ ...base, x: 0.2, y: 0.5 }) ?? '', /Glisser pour tracer le trait du shield/, 'début sans fin');
+  assert.equal(draftProblem({ ...base, x: 0.2, y: 0.5, x2: 0.3, y2: 0.5 }), null);
+  const clone = { ...base, gadget: 'CLONE' };
+  assert.match(draftProblem({ ...clone, x: 0.2, y: 0.5 }) ?? '', /direction et la distance/);
+  assert.match(draftProblem({ ...clone, x2: 0.3, y2: 0.5 }) ?? '', /position lue/, 'joueur sans position lue');
+  assert.equal(draftProblem({ ...clone, x: 0.2, y: 0.5, x2: 0.3, y2: 0.5 }), null);
+  assert.deepEqual(draftBody({ ...base, x: 0.2, y: 0.5, x2: 0.3, y2: 0.4 }), { t: 12.5, kind: 'action', slot: 2, x: 0.2, y: 0.5, x2: 0.3, y2: 0.4, angle: null, gadget: 'SHIELD', text: '' });
+  assert.equal(draftBody({ ...base, gadget: 'STICKY', x: 0.2, y: 0.5, x2: 0.3, y2: 0.4 }).x2, null, 'STICKY : pas de deuxième point');
 });

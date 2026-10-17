@@ -3,6 +3,8 @@
 
 import { useState } from 'react';
 import { Save, Trash2, Undo2 } from 'lucide-react';
+import { CLONE_CONTACT_M, stopText } from '../../../lib/clonePath';
+import { cloneParams, displaySeconds, formatMetres, gadgetKind } from '../../../lib/gadgetParams';
 import { OTHER_GADGET } from '../../../lib/gadgetStates';
 import { draftBody, draftProblem, KIND_LABEL, playerLabel } from '../../../lib/reviewNotes';
 import { formatTime } from '../../../lib/timeline';
@@ -15,7 +17,7 @@ const KINDS: ReviewNoteKind[] = ['position', 'action', 'note'];
 
 const GUIDE: Record<ReviewNoteKind, string> = {
   position: 'Glisse un joueur du plan vers l\'endroit où il aurait dû être (ou clique sur le plan pour poser le fantôme), puis enregistre.',
-  action: 'Choisis un joueur et son gadget (pastilles sous le plan), puis clique sur le plan pour poser le gadget.',
+  action: 'Choisis un joueur et son gadget (pastilles sous le plan), puis clique sur le plan pour poser le gadget (SHIELD : glisse pour tracer le trait ; CLONE : appuie ou glisse pour viser).',
   note: 'Remarque libre à cet instant, le joueur est facultatif.',
 };
 
@@ -37,6 +39,8 @@ export function NotePanel({ game, nameOf, gadgets, api, note, onOpenNote }: Prop
   const problem = draftProblem(draft);
   const known = [gadgets.current, ...gadgets.others].filter((g): g is string => !!g);
   const choice = known.includes(draft.gadget) || draft.gadget === OTHER_GADGET ? draft.gadget : '';
+  const shape = draft.kind === 'action' ? gadgetKind(draft.gadget) : 'point';
+  const clone = cloneParams();
 
   const save = async () => {
     if (problem) return;
@@ -55,10 +59,17 @@ export function NotePanel({ game, nameOf, gadgets, api, note, onOpenNote }: Prop
           <p className="help__body">
             Ces notes ne changent <strong>aucune donnée</strong> : ni le suivi des joueurs, ni les statistiques. Elles servent à se souvenir plus tard des erreurs vues (un joueur trop avancé, un gadget pas utilisé) et, un jour, de base à un
             jeu d'échecs de stratégie. Un fantôme est un faux emplacement : la vraie position lue reste inchangée, un trait la relie au fantôme. Les corrections qui influent sur les données (position, regard, mort) restent dans l'onglet Lecture,
-            option avancée. Une note se voit sur le plan de 3 s avant à 8 s après son instant (menu Affichage, « Afficher les notes »).
+            option avancée. Une note se voit sur le plan de 3 s avant à 8 s après son instant (menu Affichage, « Afficher les notes ») ; le trait d'un SHIELD et le trajet d'un CLONE, de leur instant à + 10 s.
           </p>
           <p className="help__body">
-            <strong>Action</strong> : clique sur la pastille d'un joueur sous le plan (elle choisit le joueur et son gadget, le joueur est mis en évidence sur le plan), puis clique sur le plan à l'endroit où il pose son gadget.
+            <strong>Action</strong> : clique sur la pastille d'un joueur sous le plan (elle choisit le joueur et son gadget, le joueur est mis en évidence sur le plan), puis clique sur le plan à l'endroit où il pose son gadget
+            (un cercle montre le rayon quand la référence de jeu le connaît : seulement le STICKY, 3 m de mort sur le coup et 5 m de dégâts ; les autres rayons sont inconnus et jamais inventés).
+            <strong> SHIELD</strong> : glisse sur le plan pour tracer le trait (début puis fin) ; il s'affiche en bleu avec sa longueur en mètres, de l'instant de la note à + {displaySeconds('SHIELD') ?? '?'} s (durée de la référence).
+            Un simple clic ne trace rien. <strong>CLONE</strong> : il part de la position lue du joueur choisi ; appuie ou glisse sur le plan pour donner la direction et la distance voulues.
+            Il avance en ligne droite{clone ? ` à ${(clone.speedMs * 3.6).toFixed(0)} km/h pendant ${clone.durationS} s au plus (portée maximale ${formatMetres(clone.maxRangeM)})` : ''}, puis s'arrête au premier mur
+            (de n'importe quel type : mur, vitre, fenêtre, porte, bloc de tir par-dessus, bord de la carte) ou au premier joueur vivant (contact à {formatMetres(CLONE_CONTACT_M)}, hypothèse) ; le trajet est en pointillé, un point avance à sa vitesse
+            et, à l'arrêt sur un mur ou un joueur, les rayons connus s'affichent en cercles. La demande parle de « 2 grenades » sans les nommer : on montre le STICKY (3 m et 5 m) et on écrit « rayon non connu » pour le DX3 et le SONAR.
+            Les murs viennent du masque de la carte (le niveau d'un étage d'Atlantis ou de The Cliff n'est pas distingué).
             <strong> Position à corriger</strong> : glisse un joueur du plan vers l'endroit où il aurait dû être (un simple clic le choisit seulement) ; le trait part de sa position lue, le fantôme se pose où tu lâches. Le commentaire est
             prérempli, tu peux le modifier avant d'enregistrer. Glisser un joueur ne change jamais sa position lue.
           </p>
@@ -110,6 +121,8 @@ export function NotePanel({ game, nameOf, gadgets, api, note, onOpenNote }: Prop
               <Save className="ic" /> Enregistrer
             </button>
           </div>
+          {note.hint && note.hint !== problem && <p className="review__done review__done--todo">{note.hint}</p>}
+          {shape === 'clone' && note.cloneResult && <p className="review__guide">Trajet du clone : {stopText(note.cloneResult, formatMetres)}{note.cloneResult.capped ? ` (distance voulue ${formatMetres(note.cloneResult.wantedM)}, raccourcie à la portée maximale)` : ''}.</p>}
           {problem && <p className="review__done review__done--todo">{problem}</p>}
           {(error || api.error) && <p className="games__error">{error ?? api.error}</p>}
         </div>

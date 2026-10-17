@@ -31,13 +31,16 @@ export interface ReviewNoteInput {
   slot: number | null;
   x: number | null;
   y: number | null;
+  /** Deuxième point : fin du trait du SHIELD, point visé du CLONE (null sinon). */
+  x2?: number | null;
+  y2?: number | null;
   angle: number | null;
   gadget: string | null;
   text: string;
 }
 
 /** Champs modifiables d'une note (le PUT ne change ni la game ni la sorte). */
-export type ReviewNotePatch = Partial<Pick<ReviewNote, 't' | 'slot' | 'x' | 'y' | 'angle' | 'gadget' | 'text'>>;
+export type ReviewNotePatch = Partial<Pick<ReviewNote, 't' | 'slot' | 'x' | 'y' | 'x2' | 'y2' | 'angle' | 'gadget' | 'text'>>;
 
 export const reviewNotesApi = {
   list: (gameId: number) => call<ReviewNote[]>(`/api/review-notes?game=${gameId}`),

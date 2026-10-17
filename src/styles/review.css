@@ -1,4 +1,5 @@
 /* Écran de review : joueur choisi, notes de review (fantômes, gadgets), légende de la zone de tir (components/analysis/review/) */
+@import './note-gadgets.css'; /* trait du SHIELD, trajet du CLONE, rayons : fichier à part (limite de 400 lignes) */
 
 .review {
   min-width: 0;

@@ -1,0 +1,106 @@
+/* Gadgets des notes de review : trait du SHIELD (10 s), trajet du CLONE, cercles des rayons connus (components/analysis/review/GadgetShapes.tsx, NoteLegend.tsx) */
+.note__shield {
+  stroke: var(--c-shield);
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: 0.9;
+}
+
+.note__shield.is-draft {
+  stroke-width: 5;
+  opacity: 1;
+}
+
+.note__clonepath {
+  stroke: var(--c-clone);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+.note__clonepath.is-draft {
+  stroke-width: 3;
+}
+
+.note__aimline {
+  stroke: var(--c-clone);
+  stroke-width: 1;
+  stroke-dasharray: 1 5;
+  opacity: 0.5;
+}
+
+.note__radius {
+  fill: color-mix(in srgb, var(--c-danger) 12%, transparent);
+  stroke: var(--c-danger-soft);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+.note__len,
+.note__rlabel {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 0 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
+  color: var(--c-text);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.note__len {
+  border: 1px solid var(--c-shield);
+}
+
+.note__rlabel {
+  border: 1px solid var(--c-danger-soft);
+}
+
+.note__clone,
+.note__stop {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.note__clone {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--c-bg);
+  border-radius: 50%;
+  background: var(--c-clone);
+}
+
+.note__clone.is-arrived {
+  box-shadow: 0 0 0 2px var(--c-clone);
+}
+
+.note__stop {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border: 2px solid var(--c-clone);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.note__legend .key-shield,
+.note__legend .key-clone {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  margin-right: 0.35rem;
+  border-radius: 0;
+  vertical-align: middle;
+}
+
+.note__legend .key-shield {
+  border-top: 4px solid var(--c-shield);
+}
+
+.note__legend .key-clone {
+  border-top: 2px dashed var(--c-clone);
+}

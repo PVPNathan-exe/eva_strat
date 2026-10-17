@@ -3,6 +3,7 @@
 // Temps des notes : secondes depuis le début de la game. Positions : fractions de la minimap. Testé dans tests/reviewNotes.test.ts.
 
 import type { LifeLoadoutAt, ReviewNote, ReviewNoteKind } from '../types/stats.ts';
+import { displaySeconds, gadgetKind, type GadgetKind } from './gadgetParams.ts';
 
 /** Une note se voit à partir de ce temps avant son instant (secondes de game). */
 export const NOTE_BEFORE_S = 3;
@@ -20,8 +21,13 @@ export const KIND_LABEL: Record<ReviewNoteKind, string> = {
 /** Numéro affiché dans le jeu (même règle que numberOfSlot du replay : le créneau 5 à 8 de l'équipe B s'affiche 6 à 9). */
 export const slotNumber = (slot: number) => (slot <= 4 ? slot : slot + 1);
 
-/** La note est dessinée sur le plan quand l'instant `gameT` (secondes de game) est dans [t - NOTE_BEFORE_S, t + NOTE_AFTER_S]. */
-export function isNoteShown(noteT: number, gameT: number): boolean {
+/**
+ * La note est dessinée sur le plan quand l'instant `gameT` (secondes de game) est dans [t - NOTE_BEFORE_S, t + NOTE_AFTER_S].
+ * Exception : le trait d'un SHIELD et le trajet d'un CLONE (`gadget`) se voient de l'instant de la note à + leur durée de jeu (10 s, gadgetParams.displaySeconds).
+ */
+export function isNoteShown(noteT: number, gameT: number, gadget: string | null = null): boolean {
+  const lasts = displaySeconds(gadget);
+  if (lasts !== null) return gameT >= noteT && gameT <= noteT + lasts;
   return gameT >= noteT - NOTE_BEFORE_S && gameT <= noteT + NOTE_AFTER_S;
 }
 
@@ -42,8 +48,16 @@ export interface NoteMark {
   key: string;
   kind: ReviewNoteKind;
   slot: number | null;
-  /** Où la note est posée : fantôme du joueur, ou gadget. */
+  /** Instant de la note (secondes de game). */
+  t: number;
+  /** Où la note est posée : fantôme du joueur, ou gadget (SHIELD : début du trait ; CLONE : départ). */
   at: { x: number; y: number };
+  /** Deuxième point d'un SHIELD (fin du trait) ou d'un CLONE (point visé) ; null pour les autres notes ou tant qu'il manque. */
+  to: { x: number; y: number } | null;
+  /** Forme de la pose d'une action (trait, direction et distance, point) ; null pour les autres notes. */
+  gadgetKind: GadgetKind | null;
+  /** Nom du gadget d'une action (tel qu'enregistré) ; null sinon. */
+  gadget: string | null;
   /** Position lue du joueur à l'instant de la note (trait vers le fantôme) ; null si inconnue. */
   read: { x: number; y: number } | null;
   /** Regard voulu du fantôme (degrés, 0 = droite, 90 = bas). */
@@ -62,6 +76,9 @@ export interface NoteShape {
   t: number;
   x: number | null;
   y: number | null;
+  /** Deuxième point (SHIELD, CLONE). */
+  x2?: number | null;
+  y2?: number | null;
   angle: number | null;
   gadget: string | null;
 }
@@ -70,13 +87,19 @@ export interface NoteShape {
 export function markOf(n: NoteShape, draft: boolean, readAt: (slot: number, t: number) => { x: number; y: number } | null): NoteMark | null {
   if (n.kind === 'note' || n.x === null || n.y === null) return null;
   const at = { x: n.x, y: n.y };
+  const gk = n.kind === 'action' ? gadgetKind(n.gadget) : null;
+  const to = gk && gk !== 'point' && n.x2 != null && n.y2 != null ? { x: n.x2, y: n.y2 } : null;
   let read = n.slot !== null ? readAt(n.slot, n.t) : null;
   if (n.kind === 'action' || (read && Math.hypot(read.x - at.x, read.y - at.y) < GHOST_MIN_LINK)) read = null;
   return {
     key: draft ? 'draft' : `note-${n.id}`,
     kind: n.kind,
     slot: n.slot,
+    t: n.t,
     at,
+    to,
+    gadgetKind: gk,
+    gadget: n.kind === 'action' ? (n.gadget && n.gadget.trim() ? n.gadget.trim() : null) : null,
     read,
     angle: n.kind === 'position' ? n.angle : null,
     label: n.kind === 'action' ? (n.gadget && n.gadget.trim() ? n.gadget.trim() : 'Gadget') : null,
@@ -93,7 +116,7 @@ export function noteMarks(
 ): NoteMark[] {
   const out: NoteMark[] = [];
   for (const n of notes) {
-    if (!isNoteShown(n.t, gameT)) continue;
+    if (!isNoteShown(n.t, gameT, n.kind === 'action' ? n.gadget : null)) continue;
     const m = markOf(n, false, readAt);
     if (m) out.push(m);
   }
@@ -120,6 +143,9 @@ export interface NoteDraftFields {
   t: number;
   x: number | null;
   y: number | null;
+  /** Deuxième point : fin du trait du SHIELD, point visé du CLONE (null pour les autres). */
+  x2: number | null;
+  y2: number | null;
   angle: number | null;
   gadget: string;
   text: string;
@@ -134,6 +160,10 @@ export function draftProblem(d: NoteDraftFields): string | null {
   if (d.kind === 'action') {
     if (d.slot === null) return 'Choisis un joueur (pastille de gadget ou liste).';
     if (!d.gadget.trim()) return 'Choisis un gadget (ou « Autre »).';
+    const gk = gadgetKind(d.gadget);
+    if (gk === 'shield' && (d.x === null || d.y === null || d.x2 === null || d.y2 === null)) return 'Glisser pour tracer le trait du shield.';
+    if (gk === 'clone' && (d.x2 === null || d.y2 === null)) return 'Appuie ou glisse sur le plan : la direction et la distance du clone.';
+    if (gk === 'clone' && (d.x === null || d.y === null)) return "Ce joueur n'a pas de position lue à cet instant : le clone part de sa position lue.";
     if (d.x === null || d.y === null) return 'Clique sur le plan pour poser le gadget.';
   }
   if (d.kind === 'note' && !d.text.trim()) return 'Écris la remarque.';
@@ -143,12 +173,15 @@ export function draftProblem(d: NoteDraftFields): string | null {
 /** Corps du POST /api/review-notes (sans game_id). Les champs inutiles à la sorte de note sont mis à null. */
 export function draftBody(d: NoteDraftFields) {
   const placed = d.kind !== 'note';
+  const twoPoints = d.kind === 'action' && gadgetKind(d.gadget) !== 'point'; // SHIELD et CLONE : le serveur exige le deuxième point
   return {
     t: Math.max(0, d.t),
     kind: d.kind,
     slot: d.slot,
     x: placed ? d.x : null,
     y: placed ? d.y : null,
+    x2: twoPoints ? d.x2 : null,
+    y2: twoPoints ? d.y2 : null,
     angle: d.kind === 'position' ? d.angle : null,
     gadget: d.kind === 'action' ? d.gadget.trim() : null,
     text: d.text.trim(),

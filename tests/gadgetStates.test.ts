@@ -72,3 +72,13 @@ test('textes préremplis : action, position, joueur sans pseudo, gadget inconnu'
   assert.equal(autoNoteText('action', null, 'SONAR', false, names), '', 'sans joueur');
   assert.equal(autoNoteText('note', 2, 'SONAR', true, names), '');
 });
+
+test('texte prérempli du SHIELD (durée de la référence) et du CLONE (phrase d arrêt)', () => {
+  assert.equal(actionText('SNVXALEXO', 'SHIELD'), 'SNVXALEXO pose son SHIELD ici (10 s)');
+  assert.equal(actionText('SNVXPRIME', 'CLONE'), 'SNVXPRIME envoie son CLONE vers ce point');
+  assert.equal(actionText('SNVXPRIME', 'CLONE', 'arrêt sur un mur à 8,2 m'), 'SNVXPRIME envoie son CLONE vers ce point : arrêt sur un mur à 8,2 m');
+  assert.equal(actionText('SNVXPRIME', 'echo', 'arrêt sur un joueur à 4 m'), 'SNVXPRIME envoie son ECHO vers ce point : arrêt sur un joueur à 4 m');
+  const names = new Map([[3, 'SNVXPRIME']]);
+  assert.equal(autoNoteText('action', 3, 'CLONE', true, names, 'arrêt sur un mur à 8,2 m'), 'SNVXPRIME envoie son CLONE vers ce point : arrêt sur un mur à 8,2 m');
+  assert.equal(autoNoteText('action', 3, 'DX3', true, names, 'ignoré'), 'SNVXPRIME pose son DX3 ici');
+});
