@@ -6,13 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Maximize2, RefreshCw } from 'lucide-react';
 import { KILL_LEAD_S, KILLS_STATUS_TEXT, killRow, killsStatus } from '../../lib/killTimeline';
 import { hasNoPointChange } from '../../lib/pointChangeMarks';
-import { showsUncaptured } from '../../lib/uncapturedPeriods';
 import { formatTime, pctToSpan, spanToPct } from '../../lib/timeline';
 import { useAnalysisStore } from '../../store/analysisStore';
 import { TimelineCapture } from './TimelineCapture';
 import { TimelineKills } from './TimelineKills';
 import { TimelinePointChanges } from './TimelinePointChanges';
-import { TimelineUncaptured } from './TimelineUncaptured';
 
 /** Largeur réelle d'un élément en pixels, suivie quand la fenêtre change de taille. */
 function useWidth(ref: React.RefObject<HTMLDivElement | null>): number {
@@ -78,7 +76,6 @@ export function SegmentTimeline({ duration }: { duration: number }) {
             </p>
             <p className="help__body">
               Trait jaune : changement du point de capture actif (la pastille donne la lettre du point qui devient actif), avec une bande de 10 s avant ; un clic place la vidéo au début de la bande.
-              {zoomed.map === 'Outlaw' ? ' Hachures grises : le point actif n’appartient à personne (pas encore pris, ou perdu).' : ''}
               {noPointChange ? ' Aucun changement de point sur cette carte : pas de repères.' : ''}
             </p>
           </details>
@@ -106,7 +103,6 @@ export function SegmentTimeline({ duration }: { duration: number }) {
           <>
             <TimelineCapture game={zoomed} />
             {!noPointChange && <TimelinePointChanges game={zoomed} />}
-            {showsUncaptured(zoomed.map) && <TimelineUncaptured game={zoomed} />}
           </>
         ) : (
           games.map((g, i) => (
