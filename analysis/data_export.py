@@ -68,7 +68,7 @@ def game_uid(video, game):
 
 def build_game_doc(conn, game):
     """Document JSON d'une game (dictionnaire) : ligne, vidéo, tables."""
-    video = dict(conn.execute("SELECT path, source_url, duration_s, fps, width, height FROM videos WHERE id = ?", (game["video_id"],)).fetchone())
+    video = dict(conn.execute("SELECT path, source_url, duration_s, fps, width, height, intersalle FROM videos WHERE id = ?", (game["video_id"],)).fetchone())
     doc = {"format": FORMAT, "uid": game_uid(video, game), "video": video,
            "game": {k: game[k] for k in game.keys() if k not in ("id", "video_id")}, "tables": {}}
     for table in game_tables(conn):
@@ -244,8 +244,8 @@ def _import_game(conn, doc, video_id, mapping, report):
     """Écrit une game et ses tables (identifiants d'icônes traduits, game_id et video_id de cette base)."""
     if video_id is None:
         v = doc["video"]
-        video_id = conn.execute("INSERT INTO videos (path, source_url, duration_s, fps, width, height) VALUES (?, ?, ?, ?, ?, ?)",
-                                (v["path"], v["source_url"], v["duration_s"], v["fps"], v["width"], v["height"])).lastrowid
+        video_id = conn.execute("INSERT INTO videos (path, source_url, duration_s, fps, width, height, intersalle) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                (v["path"], v["source_url"], v["duration_s"], v["fps"], v["width"], v["height"], int(v.get("intersalle") or 0))).lastrowid
         if not Path(v["path"]).exists():
             report["missing_videos"].append(v["path"])
     known = {c for c, _ in _columns(conn, "games")}

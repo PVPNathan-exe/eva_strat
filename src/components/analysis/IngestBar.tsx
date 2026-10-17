@@ -26,6 +26,7 @@ export function IngestBar({ onCalibrate }: { onCalibrate: () => void }) {
   const currentVideo = videos.find((v) => v.id === videoId);
   const job = useAnalysisStore((s) => s.job);
   const selectVideo = useAnalysisStore((s) => s.selectVideo);
+  const setVideoIntersalle = useAnalysisStore((s) => s.setVideoIntersalle);
   const startIngest = useAnalysisStore((s) => s.startIngest);
   const controlJob = useAnalysisStore((s) => s.controlJob);
 
@@ -82,6 +83,11 @@ export function IngestBar({ onCalibrate }: { onCalibrate: () => void }) {
               </option>
             ))}
           </select>
+        )}
+        {videoId !== null && currentVideo && (
+          <label className="ingest__inter" title="Chaque équipe joue dans sa propre salle (au lieu des deux équipes dans la même arène) : les joueurs courent plus et plus vite, les statistiques se séparent">
+            <input type="checkbox" checked={currentVideo.intersalle} onChange={(e) => void setVideoIntersalle(currentVideo.id, e.target.checked)} /> Intersalle
+          </label>
         )}
         <details className="menu ingest__options">
           <summary>

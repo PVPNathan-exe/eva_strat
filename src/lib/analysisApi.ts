@@ -25,6 +25,7 @@ export const streamUrl = (videoId: number) => `/api/videos/${videoId}/stream`;
 
 export const analysisApi = {
   videos: () => fetch('/api/videos').then(parse<Video[]>),
+  setVideoIntersalle: (videoId: number, intersalle: boolean) => fetch(`/api/videos/${videoId}`, jsonInit('PATCH', { intersalle })).then(parse<{ ok: true; intersalle: boolean }>),
   games: (videoId: number) => fetch(`/api/games?video=${videoId}`).then(parse<Game[]>),
   weapons: () => fetch('/api/weapons', { cache: 'no-store' }).then(parse<Weapon[]>),
   nameWeapon: (id: string, name: string) => fetch(`/api/weapons/${id}`, jsonInit('PUT', { name })).then(parse<{ ok: true }>),

@@ -175,6 +175,14 @@ function createGame(ctx: ApiContext, body: Row): ApiResult {
   return reply(201, { id: Number(result.lastInsertRowid) });
 }
 
+/** Marque une vidéo comme intersalle (chaque équipe dans sa propre salle, les joueurs courent plus et plus vite que quand les deux équipes sont dans la même arène). */
+function patchVideo(ctx: ApiContext, id: number, body: Row): ApiResult {
+  if (!ctx.db.prepare('SELECT id FROM videos WHERE id = ?').get(id)) return fail('Vidéo introuvable', 404);
+  if (typeof body.intersalle !== 'boolean') return fail('intersalle doit être vrai ou faux');
+  ctx.db.prepare('UPDATE videos SET intersalle = ? WHERE id = ?').run(body.intersalle ? 1 : 0, id);
+  return reply(200, { ok: true, intersalle: body.intersalle });
+}
+
 function patchGame(ctx: ApiContext, id: number, body: Row): ApiResult {
   const current = ctx.db.prepare('SELECT * FROM games WHERE id = ?').get(id) as Row | undefined;
   if (!current) return fail('Game introuvable', 404);
@@ -511,8 +519,11 @@ export function handleApi(
   if (notes) return notes;
 
   if (method === 'GET' && pathname === '/api/videos') {
-    return reply(200, ctx.db.prepare('SELECT id, path, source_url, duration_s, fps, width, height FROM videos ORDER BY id DESC').all());
+    const rows = ctx.db.prepare('SELECT id, path, source_url, duration_s, fps, width, height, intersalle FROM videos ORDER BY id DESC').all() as Row[];
+    return reply(200, rows.map((r) => ({ ...r, intersalle: r.intersalle === 1 })));
   }
+  const videoMatch = /^\/api\/videos\/(\d+)$/.exec(pathname);
+  if (videoMatch && method === 'PATCH') return patchVideo(ctx, Number(videoMatch[1]), payload);
   if (pathname === '/api/games') {
     if (method === 'GET') return listGames(ctx, query);
     if (method === 'POST') return createGame(ctx, payload);

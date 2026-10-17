@@ -16,6 +16,8 @@ def connect(db_path):
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    if "intersalle" not in {row["name"] for row in conn.execute("PRAGMA table_info(videos)")}:
+        conn.execute("ALTER TABLE videos ADD COLUMN intersalle INTEGER NOT NULL DEFAULT 0")
     # Bases créées avant l'ajout de la colonne doubts.
     if "doubts" not in {row["name"] for row in conn.execute("PRAGMA table_info(games)")}:
         conn.execute("ALTER TABLE games ADD COLUMN doubts TEXT")

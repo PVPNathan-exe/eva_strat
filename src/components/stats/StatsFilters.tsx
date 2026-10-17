@@ -4,10 +4,13 @@
 
 import { Layers } from 'lucide-react';
 import { numberOfSlot } from '../../lib/killTimeline';
+import { ROOM_LABEL, type RoomFilter } from '../../lib/roomFilter';
 import { playerChoices, type ShowFilter, type SideFilter, type TeamName } from '../../lib/teamFollow';
 import { gameLabel, specOf, type StatsGame } from './useStats';
 
 export interface StatsFilterState {
+  /** Contexte de jeu : toutes les games, intersalle seulement ou même salle seulement. */
+  room: RoomFilter;
   /** Carte choisie ; null : la première carte qui a des games. */
   map: string | null;
   /** Identifiants des games choisies dans le menu Games ; null : la plus récente seulement. */
@@ -48,6 +51,16 @@ export function StatsFilters({ maps, map, mapGames, mapTotal, selected, teams, s
   const latest = mapGames.length ? mapGames.reduce((best, g) => (g.id > best.id ? g : best)).id : null;
   return (
     <div className="stats__filters">
+      <label className="stats__field" title="Intersalle : chaque équipe joue dans sa propre salle (case à cocher de la vidéo dans l'onglet Analyse). Le gameplay diffère : les joueurs courent plus et plus vite.">
+        Salle
+        <select value={state.room} onChange={(e) => onChange({ ...state, room: e.target.value as RoomFilter, map: null, chosen: null, team: null, side: 'both', show: 'both', slot: 0, player: null })}>
+          {(Object.keys(ROOM_LABEL) as RoomFilter[]).map((r) => (
+            <option key={r} value={r}>
+              {ROOM_LABEL[r]}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className="stats__field">
         Carte
         <select value={map ?? ''} onChange={(e) => onChange({ ...state, map: e.target.value, chosen: null, team: null, side: 'both', show: 'both', slot: 0, player: null })}>

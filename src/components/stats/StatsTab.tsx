@@ -4,6 +4,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { ClipboardList, Flame, Globe, ListChecks, Repeat, ShieldCheck, User, Users, UsersRound } from 'lucide-react';
+import { filterByRoom } from '../../lib/roomFilter';
 import { eligibleGames, pickGames, teamNames } from '../../lib/teamFollow';
 import { StatsFilters, type StatsFilterState } from './StatsFilters';
 import { StatsGlobal } from './StatsGlobal';
@@ -26,7 +27,8 @@ export function StatsTab() {
   const [filters, setFilters] = useState<StatsFilterState>(INITIAL_FILTERS);
   const [replayId, setReplayId] = useState<number | null>(null);
   const gamesLoad = useStatsGames();
-  const all = useMemo(() => gamesLoad.data ?? [], [gamesLoad.data]);
+  const allGames = useMemo(() => gamesLoad.data ?? [], [gamesLoad.data]);
+  const all = useMemo(() => filterByRoom(allGames, filters.room), [allGames, filters.room]); // contexte de jeu : toutes les games, intersalle ou même salle
   const maps = useMemo(() => mapsOf(all), [all]);
   // Carte affichée : le choix s'il existe encore, sinon la première
   const map = filters.map && maps.some(([name]) => name === filters.map) ? filters.map : (maps[0]?.[0] ?? null);

@@ -71,6 +71,8 @@ interface AnalysisState {
   closeWeaponPrompt: () => void;
   loadVideos: () => Promise<void>;
   selectVideo: (id: number | null) => Promise<void>;
+  /** Tag « intersalle » d'une vidéo (enregistré en base, puis relu dans la liste). */
+  setVideoIntersalle: (id: number, intersalle: boolean) => Promise<void>;
   /** Relit les games de la vidéo. applyTeams (par défaut) : applique ensuite les noms d'équipe connus (écrit dans la base) ; false : lecture seule. */
   refreshGames: (applyTeams?: boolean) => Promise<void>;
   /** Version des données d'une game : change après un recalcul des positions, ce qui fait relire positions, contrôles et kills partout où la game est affichée. */
@@ -215,6 +217,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => {
     const videos = await analysisApi.videos();
     set({ videos });
     if (get().videoId === null && videos.length > 0) await get().selectVideo(videos[0].id);
+  },
+
+  setVideoIntersalle: async (id, intersalle) => {
+    await analysisApi.setVideoIntersalle(id, intersalle);
+    set({ videos: get().videos.map((v) => (v.id === id ? { ...v, intersalle } : v)) });
   },
 
   selectVideo: async (id) => {

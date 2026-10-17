@@ -9,6 +9,8 @@ export interface Video {
   fps: number;
   width: number;
   height: number;
+  /** Chaque équipe joue dans sa propre salle (le gameplay diffère d'une arène partagée). */
+  intersalle: boolean;
 }
 
 export type GameStatus = 'detected' | 'confirmed';

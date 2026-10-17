@@ -13,6 +13,25 @@ test('GET /api/videos liste les vidéos', () => {
   assert.equal((res.json as unknown[]).length, 1);
 });
 
+test('PATCH /api/videos/:id enregistre le tag intersalle et la liste le rend', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  const first = handleApi(ctx, 'GET', '/api/videos', q(), undefined).json as { intersalle: boolean }[];
+  assert.equal(first[0].intersalle, false);
+  assert.equal(handleApi(ctx, 'PATCH', `/api/videos/${videoId}`, q(), { intersalle: true }).status, 200);
+  const after = handleApi(ctx, 'GET', '/api/videos', q(), undefined).json as { intersalle: boolean }[];
+  assert.equal(after[0].intersalle, true);
+  assert.equal(handleApi(ctx, 'PATCH', `/api/videos/${videoId}`, q(), { intersalle: false }).status, 200);
+  assert.equal((handleApi(ctx, 'GET', '/api/videos', q(), undefined).json as { intersalle: boolean }[])[0].intersalle, false);
+});
+
+test('PATCH /api/videos/:id refuse une valeur qui n est pas booleenne et une vidéo inconnue', () => {
+  const ctx = testContext();
+  const videoId = insertVideo(ctx);
+  assert.equal(handleApi(ctx, 'PATCH', `/api/videos/${videoId}`, q(), { intersalle: 'oui' }).status, 400);
+  assert.equal(handleApi(ctx, 'PATCH', '/api/videos/999', q(), { intersalle: true }).status, 404);
+});
+
 test('POST /api/games crée une game confirmée manuellement', () => {
   const ctx = testContext();
   const videoId = insertVideo(ctx);

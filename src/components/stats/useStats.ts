@@ -60,17 +60,20 @@ export interface StatsGame {
   startS: number;
   endS: number;
   players: Game['players'];
+  /** Vidéo jouée intersalle (chaque équipe dans sa salle). */
+  intersalle: boolean;
 }
 
 /** Toutes les games dont la carte est connue et dont les positions sont lues, toutes vidéos confondues. */
 export function useStatsGames(): Loaded<StatsGame[]> {
   return useLoad('games', async () => {
     const videos = await analysisApi.videos();
+    const intersalleOf = new Map(videos.map((v) => [v.id, v.intersalle]));
     const perVideo = await Promise.all(videos.map((v) => analysisApi.games(v.id)));
     return perVideo
       .flat()
       .filter((g) => g.map && g.samples > 0)
-      .map((g) => ({ id: g.id, videoId: g.video_id, map: g.map as string, teamA: g.team_a, teamB: g.team_b, startS: g.start_s, endS: g.end_s, players: g.players }))
+      .map((g) => ({ id: g.id, videoId: g.video_id, map: g.map as string, teamA: g.team_a, teamB: g.team_b, startS: g.start_s, endS: g.end_s, players: g.players, intersalle: intersalleOf.get(g.video_id) ?? false }))
       .sort((a, b) => a.videoId - b.videoId || a.startS - b.startS);
   });
 }
@@ -121,7 +124,7 @@ export function noticeOf(...loaded: Loaded<unknown>[]): string | null {
 /** Réglage d'équipe et de joueur lu dans l'état des filtres. */
 export const specOf = (s: StatsFilterState): FollowSpec => ({ team: s.team, side: s.side, show: s.show, slot: s.slot, player: s.player });
 
-export const INITIAL_FILTERS: StatsFilterState = { map: null, chosen: null, team: null, side: 'both', show: 'both', slot: 0, player: null };
+export const INITIAL_FILTERS: StatsFilterState = { room: 'all', map: null, chosen: null, team: null, side: 'both', show: 'both', slot: 0, player: null };
 
 /** Cartes qui ont des games (positions lues, voir useStatsGames), avec leur nombre de games ; la plus fournie en premier. */
 export function mapsOf(games: StatsGame[]): [string, number][] {
