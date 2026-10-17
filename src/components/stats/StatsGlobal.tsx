@@ -113,7 +113,7 @@ export function StatsGlobal({ map, games }: Props) {
               images.length > 0 && !blank ? (
                 <div className="statsmap__layer" style={boxStyle} aria-label={globalLayerDef(layer).label}>
                   {images.map((img) => (
-                    <GlobalCanvas key={img.side} pixels={img.pixels} n={data.n} />
+                    <GlobalCanvas key={`${map}-${img.side}`} pixels={img.pixels} n={data.n} />
                   ))}
                 </div>
               ) : null

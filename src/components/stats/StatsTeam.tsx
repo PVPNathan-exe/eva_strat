@@ -135,7 +135,7 @@ export function StatsTeam({ map, games, spec }: Props) {
               images.length > 0 && !blank ? (
                 <div className="statsmap__layer" style={boxStyle} aria-label={layerDef(shown).label}>
                   {images.map((img, i) => (
-                    <HeatCanvas key={i} pixels={img.pixels} n={data.n} />
+                    <HeatCanvas key={`${map}-${i}`} pixels={img.pixels} n={data.n} />
                   ))}
                 </div>
               ) : null

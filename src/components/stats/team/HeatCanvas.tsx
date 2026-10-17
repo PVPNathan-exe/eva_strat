@@ -6,7 +6,9 @@ export function HeatCanvas({ pixels, n }: { pixels: Uint8ClampedArray; n: number
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const ctx = ref.current?.getContext('2d');
-    if (ctx) ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), n, n), 0, 0);
+    if (!ctx) return;
+    ctx.clearRect(0, 0, n, n);
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), n, n), 0, 0);
   }, [pixels, n]);
   return <canvas ref={ref} width={n} height={n} className="stats__heat team__canvas" />;
 }

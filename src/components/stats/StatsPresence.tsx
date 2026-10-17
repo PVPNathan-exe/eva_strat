@@ -23,7 +23,9 @@ function HeatLayer({ pixels, n }: { pixels: Uint8ClampedArray; n: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const ctx = ref.current?.getContext('2d');
-    if (ctx) ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), n, n), 0, 0);
+    if (!ctx) return;
+    ctx.clearRect(0, 0, n, n); // jamais de pixels de la carte précédente
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), n, n), 0, 0);
   }, [pixels, n]);
   return <canvas ref={ref} width={n} height={n} className="stats__heat" />;
 }
@@ -80,7 +82,7 @@ export function StatsPresence({ map, games, spec }: Props) {
         {({ boxStyle }) =>
           view && view.total > 0 ? (
             <div className="statsmap__layer" style={boxStyle}>
-              <HeatLayer pixels={view.pixels} n={view.n} />
+              <HeatLayer key={map} pixels={view.pixels} n={view.n} />
             </div>
           ) : null
         }

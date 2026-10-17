@@ -23,6 +23,8 @@ function MaskLayer({ url, token }: { url: string; token: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     let cancelled = false;
+    const old = ref.current;
+    old?.getContext('2d')?.clearRect(0, 0, old.width, old.height); // le masque de la carte précédente ne reste pas pendant le chargement
     loadTinted(url, tokenRgb(token, [91, 99, 120]), 110)
       .then((src) => {
         const canvas = ref.current;
@@ -64,7 +66,7 @@ export function StatsMapBase({ map, corridors = false, stations = false, spawns 
       <img src={background} alt={aligned ? `Plan ${map}` : `Minimap de ${map}`} draggable={false} />
       {corridors && reading.maskUrl && (
         <div className="statsmap__layer" style={boxStyle}>
-          <MaskLayer url={reading.maskUrl} token="--c-border-strong" />
+          <MaskLayer key={reading.maskUrl} url={reading.maskUrl} token="--c-border-strong" />
         </div>
       )}
       <svg className="statsmap__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>

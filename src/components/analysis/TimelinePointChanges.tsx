@@ -46,7 +46,9 @@ export function TimelinePointChanges({ game }: { game: Game }) {
             e.stopPropagation();
             requestSeek(m.windowStartVideoT);
           }}
-        />
+        >
+          <span className="timeline__pc-tag">{m.point}</span>
+        </button>
       ))}
     </>
   );
