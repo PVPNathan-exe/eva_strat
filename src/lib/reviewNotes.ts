@@ -161,7 +161,7 @@ export function draftProblem(d: NoteDraftFields): string | null {
     if (d.slot === null) return 'Choisis un joueur (pastille de gadget ou liste).';
     if (!d.gadget.trim()) return 'Choisis un gadget (ou « Autre »).';
     const gk = gadgetKind(d.gadget);
-    if (gk === 'shield' && (d.x === null || d.y === null || d.x2 === null || d.y2 === null)) return 'Glisser pour tracer le trait du shield.';
+    if (gk === 'shield' && (d.x === null || d.y === null || d.x2 === null || d.y2 === null)) return 'Appuyer au centre du shield puis glisser pour l\'orienter.';
     if (gk === 'clone' && (d.x2 === null || d.y2 === null)) return 'Appuie ou glisse sur le plan : la direction et la distance du clone.';
     if (gk === 'clone' && (d.x === null || d.y === null)) return "Ce joueur n'a pas de position lue à cet instant : le clone part de sa position lue.";
     if (d.x === null || d.y === null) return 'Clique sur le plan pour poser le gadget.';

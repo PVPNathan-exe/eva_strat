@@ -28,16 +28,16 @@ import sys
 import episode_common as ec
 
 MODULE = "player_game_stats"
-REVISION = 2  # 2 : gadget_uses = passages de disponible à utilisé (plus les segments utilisé), délai du shield donné par l'utilisateur
+REVISION = 3  # 3 : délais connus de tous les gadgets en repli (KNOWN_DELAYS_S) ; 2 : gadget_uses = passages de disponible à utilisé
 PAIR_S = 0.5  # écart de temps des deux lectures d'une vitesse
 PAIR_TOL_S = 0.06  # tolérance sur cet écart (les lignes arrivent toutes les 0,1 s)
 TP_R = 0.07  # une paire dont chaque bout est à moins de 0,07 (fraction de la minimap) d'une station de la paire est une tyrolienne (un joueur entre en marchant, ressort 0,4 s plus tard)
 JUMP_V = 14.0  # plafond de vitesse du suivi (tracking) : au-dessus, ce n'est pas un déplacement
 JUMP_M = 2.0
 MIN_CYCLES = 3  # cycles prêt, utilisé, prêt pour établir le délai d'un gadget
-# Délais donnés par l'utilisateur (16/10/2026), faute de mesure établie ni de valeur dans les patch notes : le shield (45 s de recharge, 10 s de durée, 400 PV ; voir analysis/patch_reference.json).
-# Servent seulement quand la mesure sur les vidéos n'établit pas de délai ; une mesure établie l'emporte.
-KNOWN_DELAYS_S = {"SHIELD": 45.0}
+# Délais de recharge connus (secondes), repli quand la mesure sur les vidéos n'établit pas de délai : ceux de l'onglet Stratégie (`src/lib/stuffs.ts`, saisis par l'utilisateur d'après le wiki et les patchs, confirmés par lui
+# le 16 et le 17/10/2026) : DX3 45, STICKY 20 (patch 0.5.2), SONAR 40, SHIELD 45 (10 s de durée, 400 PV), CLONE 45, MEDPACK 20 (patch 1.8.2.33). Une mesure établie l'emporte toujours.
+KNOWN_DELAYS_S = {"DX3": 45.0, "STICKY": 20.0, "SONAR": 40.0, "SHIELD": 45.0, "CLONE": 45.0, "MEDPACK": 20.0}
 CYCLE_TOL = 0.25  # un cycle est « proche » du délai médian à 25 % près
 MIN_LIFE_S = 3.0  # une vie plus courte n'est pas comptée dans les utilisations possibles (comme gadget_state.life_stats)
 NOT_KILLS = ("suicide", "environment")  # genres de killfeed qui ne sont pas un kill de joueur

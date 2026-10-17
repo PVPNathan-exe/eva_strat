@@ -132,8 +132,8 @@ test('marque d un SHIELD ou d un CLONE : deuxième point gardé ; un autre gadge
 
 test('brouillon SHIELD et CLONE : deuxième point exigé, corps envoyé avec x2 et y2', () => {
   const base: NoteDraftFields = { kind: 'action', slot: 2, t: 12.5, x: null, y: null, x2: null, y2: null, angle: null, gadget: 'SHIELD', text: '' };
-  assert.match(draftProblem(base) ?? '', /Glisser pour tracer le trait du shield/);
-  assert.match(draftProblem({ ...base, x: 0.2, y: 0.5 }) ?? '', /Glisser pour tracer le trait du shield/, 'début sans fin');
+  assert.match(draftProblem(base) ?? '', /Appuyer au centre du shield/);
+  assert.match(draftProblem({ ...base, x: 0.2, y: 0.5 }) ?? '', /Appuyer au centre du shield/, 'début sans fin');
   assert.equal(draftProblem({ ...base, x: 0.2, y: 0.5, x2: 0.3, y2: 0.5 }), null);
   const clone = { ...base, gadget: 'CLONE' };
   assert.match(draftProblem({ ...clone, x: 0.2, y: 0.5 }) ?? '', /direction et la distance/);

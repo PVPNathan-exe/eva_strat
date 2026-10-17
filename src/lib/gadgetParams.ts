@@ -3,7 +3,7 @@
 // Le site nomme le clone « CLONE », la référence « ECHO ». Fonctions pures, testées dans tests/gadgetParams.test.ts.
 
 import reference from '../../analysis/patch_reference.json' with { type: 'json' };
-import { metres } from './pathCut.ts';
+import { ARENA_M, metres } from './pathCut.ts';
 
 /** Une entrée datée de la référence : le patch, sa date, et les champs qu'il fixe. */
 interface Entry {
@@ -71,20 +71,29 @@ export interface Radius {
   m: number;
 }
 
-/** Rayons connus d'un gadget posé (STICKY : portée de mort sur le coup 3 m, portée de dégâts 5 m, d'après la référence) ; liste vide quand ils sont inconnus. */
+/** Rayons connus d'un gadget posé, d'après la référence : STICKY 3 m (mort sur le coup) et 5 m (dégâts) ; DX3 0 à 2 m (dégâts maximaux) et 4 m (limite des dégâts) ; SONAR 4 m (8 m de diamètre) ; liste vide quand ils sont inconnus. */
 export function knownRadii(name: string | null | undefined): Radius[] {
-  if (gadgetKey(name) !== 'STICKY') return [];
-  const f = gadgetFields('STICKY');
+  const f = gadgetFields(name);
+  const key = gadgetKey(name);
   const out: Radius[] = [];
-  const os = num(f.portee_os_m);
-  const dmg = num(f.portee_degats_m);
-  if (os !== null) out.push({ label: 'mort sur le coup', m: os });
-  if (dmg !== null) out.push({ label: 'dégâts', m: dmg });
+  const add = (label: string, v: unknown) => {
+    const m = num(v);
+    if (m !== null) out.push({ label, m });
+  };
+  if (key === 'STICKY') {
+    add('mort sur le coup', f.portee_os_m);
+    add('dégâts', f.portee_degats_m);
+  } else if (key === 'DX3') {
+    add('dégâts maximaux', f.rayon_degats_max_m);
+    add('limite des dégâts', f.rayon_limite_m);
+  } else if (key === 'SONAR') {
+    add('détection', f.rayon_m);
+  }
   return out;
 }
 
-/** Gadgets dont on montre le rayon à l'arrêt du clone (les « 2 grenades » de la demande ne sont pas nommées : on montre ce que la référence connaît et on dit le reste inconnu). */
-export const CLONE_EXPLOSIVES = ['STICKY', 'DX3', 'SONAR'];
+/** Gadgets dont on montre le rayon d'explosion à l'arrêt du clone : les deux grenades explosives, DX3 et STICKY (le SONAR détecte, il n'explose pas). */
+export const CLONE_EXPLOSIVES = ['DX3', 'STICKY'];
 
 /** Ligne de légende par gadget : « STICKY : 3 m (mort sur le coup), 5 m (dégâts) » ou « DX3 : rayon non connu ». */
 export function explosionLegend(): { name: string; text: string }[] {
@@ -103,4 +112,23 @@ export function shieldLengthM(a: { x: number; y: number }, b: { x: number; y: nu
 /** « 3,4 m » : mètres avec une décimale seulement quand il y en a une. */
 export function formatMetres(m: number): string {
   return `${m.toFixed(m % 1 ? 1 : 0).replace('.', ',')} m`;
+}
+
+/** Longueur du shield en mètres d'après la référence (mesurée sur une image du point A d'Atlantis : environ 1,9 m) ; null si absente. */
+export function shieldFixedLengthM(): number | null {
+  return num(gadgetFields('SHIELD').longueur_m);
+}
+
+/**
+ * Trait d'un SHIELD de longueur fixe, CENTRÉ sur `center` (l'icône du shield est au milieu du trait) et orienté vers `toward` (fractions de la minimap) : renvoie les deux extrémités,
+ * ou null si le pointeur est sur le centre (pas d'orientation). La longueur et l'orientation se calculent en mètres (la minimap n'est pas carrée : 31 m sur 16,5 m).
+ */
+export function shieldSegment(center: { x: number; y: number }, toward: { x: number; y: number }, lengthM: number): { a: { x: number; y: number }; b: { x: number; y: number } } | null {
+  const dx = (toward.x - center.x) * ARENA_M[0];
+  const dy = (toward.y - center.y) * ARENA_M[1];
+  const d = Math.hypot(dx, dy);
+  if (d === 0) return null;
+  const hx = ((dx / d) * lengthM) / 2 / ARENA_M[0];
+  const hy = ((dy / d) * lengthM) / 2 / ARENA_M[1];
+  return { a: { x: center.x - hx, y: center.y - hy }, b: { x: center.x + hx, y: center.y + hy } };
 }

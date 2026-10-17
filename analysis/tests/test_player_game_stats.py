@@ -11,7 +11,7 @@ import weapons
 SCHEMA = (Path(__file__).resolve().parent.parent / "schema.sql").read_text(encoding="utf-8")
 START = 100.0  # début de la game dans la vidéo
 STEP = 0.1
-NAMES = {"G5": "STICKY", "G10": "DX3", "G12": "DX3", "G7": "SONAR", "G8": "SHIELD"}
+NAMES = {"G5": "STICKY", "G10": "DX3", "G12": "DX3", "G7": "BIDULE", "G8": "SHIELD"}  # BIDULE : un gadget sans délai connu (les délais connus de KNOWN_DELAYS_S servent de repli)
 M_PER_X = ec.ARENA_M[0]  # un déplacement de 1/31 en x fait 1 m
 
 
@@ -113,7 +113,9 @@ def test_les_cycles_sont_groupes_par_nom_de_gadget_sur_toutes_les_games(monkeypa
     add_cycles(conn, 2, 2, "G12", [45.0])
     add_cycles(conn, 1, 3, "G5", [20.0, 20.0, 20.0])
     add_cycles(conn, 1, 4, "G7", [10.0, 45.0])  # deux cycles seulement
-    assert P.gadget_delays(conn) == {"DX3": 45.0, "STICKY": 20.0, "SONAR": None, "SHIELD": 45.0}  # SHIELD : délai donné par l'utilisateur, sans cycle mesuré
+    delays = P.gadget_delays(conn)
+    assert {k: delays[k] for k in ("DX3", "STICKY", "BIDULE", "SHIELD")} == {"DX3": 45.0, "STICKY": 20.0, "BIDULE": None, "SHIELD": 45.0}
+    assert delays["CLONE"] == 45.0 and delays["MEDPACK"] == 20.0 and delays["SONAR"] == 40.0  # délais connus de l'onglet Stratégie, sans cycle mesuré  # SHIELD : délai donné par l'utilisateur, sans cycle mesuré
 
 
 def test_une_mort_coupe_le_cycle(monkeypatch):
@@ -198,7 +200,7 @@ def test_gadget_sans_delai_etabli_donne_un_possible_nul_et_pas_une_somme_partiel
     monkeypatch.setattr(weapons, "display_names", lambda folder=weapons.ICON_DIR: NAMES)
     conn = make_conn()
     build_game(conn)
-    add_cycles(conn, 1, 5, "G7", [10.0, 45.0])  # SONAR : deux cycles, délai non établi
+    add_cycles(conn, 1, 5, "G7", [10.0, 45.0])  # BIDULE : deux cycles, délai non établi et aucun délai connu
     P.compute(conn, 1)
     s = stat(conn, 5)
     assert s["gadget_uses"] == 2 and s["gadget_possible"] is None

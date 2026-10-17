@@ -6,6 +6,20 @@
   "gadgets": {
     "STICKY": [
       {
+        "patch": null,
+        "date": "2026-10-17",
+        "champs": {
+          "delai_explosion_apres_impact_s": 3.5
+        },
+        "source": {
+          "type": "information de l'utilisateur",
+          "url": null,
+          "citation": "la STICKY se déclenche 3,5 s après l'impact",
+          "citation_exacte": false,
+          "note": "CONTRADICTION : la table du patch 0.5.2 et l'onglet Stratégie donnent 2,5 s de « délai avant explosion » ; l'utilisateur dit 3,5 s après l'impact (le jeu a pu changer depuis, ou le délai ne se compte pas du même instant) : les deux sont gardés, l'utilisateur est la source la plus récente"
+        }
+      },
+      {
         "patch": "0.4.7",
         "date": "2024-08-09",
         "champs": {
@@ -51,6 +65,20 @@
       }
     ],
     "SHIELD": [
+      {
+        "patch": null,
+        "date": "2026-10-17",
+        "champs": {
+          "longueur_m": 1.9
+        },
+        "source": {
+          "type": "information de l'utilisateur",
+          "url": null,
+          "citation": "taille du shield par rapport au point A d'Atlantis (image de l'utilisateur)",
+          "citation_exacte": false,
+          "note": "MESURÉ sur l'image de l'utilisateur : le trait du shield fait 100 pixels pour un carré de point d'environ 157 pixels, soit 0,64 du côté ; le point A d'Atlantis mesure 3,10 m de large sur 2,92 m de haut (polygone de map_capture.json), donc environ 1,9 m (plus ou moins 0,2 m)"
+        }
+      },
       {
         "patch": null,
         "date": "2026-10-16",
@@ -149,6 +177,21 @@
     "SONAR": [
       {
         "patch": null,
+        "date": "2026-10-17",
+        "champs": {
+          "diametre_m": 8,
+          "rayon_m": 4
+        },
+        "source": {
+          "type": "information de l'utilisateur",
+          "url": null,
+          "citation": "le sonar fait 8 mètres de diamètre",
+          "citation_exacte": false,
+          "note": "donné par l'utilisateur le 17/10/2026 ; l'onglet Stratégie le notait « rayon 8 m » : c'est le diamètre, le rayon est 4 m"
+        }
+      },
+      {
+        "patch": null,
         "date": "2026-10-16",
         "champs": {
           "max_par_equipe": 1
@@ -162,7 +205,26 @@
         }
       }
     ],
-    "DX3": []
+    "DX3": [
+      {
+        "patch": null,
+        "date": "2026-10-17",
+        "champs": {
+          "degats": 100,
+          "rayon_degats_max_m": 2,
+          "rayon_limite_m": 4,
+          "delai_explosion_apres_lancer_s": 3.5,
+          "cooldown_s": 45
+        },
+        "source": {
+          "type": "information de l'utilisateur",
+          "url": null,
+          "citation": "grenade plasma : dégâts 100, rayon de dégâts maximaux 0 à 2 m, portée maximale (limite des dégâts) 4 m, explosion 3,5 s après le lancer, recharge 45 s",
+          "citation_exacte": false,
+          "note": "valeurs données par l'utilisateur le 17/10/2026, identiques à celles de l'onglet Stratégie (src/lib/stuffs.ts)"
+        }
+      }
+    ]
   },
   "mesure_sur_videos_non_sourcee": {
     "_note": "Délais mesurés sur les vidéos par analysis/gadget_state.py. Ce ne sont PAS des valeurs de patch : aucune valeur trouvée dans les patch notes pour SONAR et DX3.",

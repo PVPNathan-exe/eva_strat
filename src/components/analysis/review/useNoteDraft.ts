@@ -7,6 +7,7 @@ import { useRef, useState, type PointerEvent } from 'react';
 import { stopText, type ClonePathResult, type Point } from '../../../lib/clonePath';
 import { formatMetres, gadgetKind } from '../../../lib/gadgetParams';
 import { autoNoteText, OTHER_GADGET } from '../../../lib/gadgetStates';
+import { shieldFixedLengthM, shieldSegment } from '../../../lib/gadgetParams';
 import type { Inset } from '../../../lib/planInsets';
 import type { NoteDraftFields } from '../../../lib/reviewNotes';
 import type { Game } from '../../../types/analysis';
@@ -33,7 +34,7 @@ interface Line {
 }
 
 /** Dit quoi faire quand un appui sans glissement n'a rien tracé. */
-const SHIELD_HINT = 'Glisser pour tracer le trait du shield.';
+const SHIELD_HINT = 'Appuyer au centre du shield puis glisser pour l\'orienter.';
 
 /** Appui commencé sur un pion du plan : un clic (choisir le joueur) tant qu'il ne bouge pas, un glisser ensuite. */
 interface Pending {
@@ -74,6 +75,7 @@ export function useNoteDraft({ game, nameOf, selected, onSelect, time, inset, pl
   const [gadget, setGadgetState] = useState<{ slot: number; name: string } | null>(null); // gadget choisi pour CE joueur ; null : celui de sa vie à cet instant
   const [typed, setTyped] = useState<string | null>(null); // commentaire écrit à la main ; null : le texte prérempli
   const [mode, setMode] = useState<'place' | 'gaze' | 'line' | null>(null);
+  const center = useRef<{ x: number; y: number } | null>(null); // centre du shield (point d'appui, fractions de la minimap)
   const [hint, setHint] = useState<string | null>(null); // consigne après un appui sans glissement (SHIELD)
   const pending = useRef<Pending | null>(null);
   const line = useRef<Line | null>(null);
@@ -162,6 +164,7 @@ export function useNoteDraft({ game, nameOf, selected, onSelect, time, inset, pl
       setHint(null);
       line.current = { cx: e.clientX, cy: e.clientY };
       const m = planToMinimap(inset, fraction(e).x, fraction(e).y);
+      center.current = m; // le shield est centré sur le point d'appui, l'orientation vient du glissement
       setPlaced({ slot: selected, x: m.x, y: m.y, x2: m.x, y2: m.y, angle: null });
       setMode('line');
       return;
@@ -204,7 +207,9 @@ export function useNoteDraft({ game, nameOf, selected, onSelect, time, inset, pl
     const p = fraction(e);
     if (mode === 'line') {
       const m = planToMinimap(inset, p.x, p.y);
-      setPlaced({ ...mine, x2: m.x, y2: m.y });
+      const length = shape === 'shield' ? shieldFixedLengthM() : null;
+      const seg = length !== null && center.current ? shieldSegment(center.current, m, length) : null; // shield : longueur fixe, centré sur l'appui
+      setPlaced(seg ? { ...mine, x: seg.a.x, y: seg.a.y, x2: seg.b.x, y2: seg.b.y } : { ...mine, x2: m.x, y2: m.y });
       return;
     }
     if (mode === 'place') {

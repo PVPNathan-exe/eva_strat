@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cloneParams, displaySeconds, explosionLegend, formatMetres, gadgetKey, gadgetKind, knownRadii, shieldLengthM } from '../src/lib/gadgetParams.ts';
+import { cloneParams, displaySeconds, explosionLegend, formatMetres, gadgetKey, gadgetKind, knownRadii, shieldLengthM, shieldFixedLengthM, shieldSegment } from '../src/lib/gadgetParams.ts';
 
 test('noms : CLONE et ECHO sont le même gadget, MED PACK et MEDPACK aussi', () => {
   assert.equal(gadgetKey('echo'), 'CLONE');
@@ -28,15 +28,29 @@ test('clone : 5 km/h pendant 10 s, portée maximale d environ 13,9 m', () => {
   assert.ok(Math.abs(p.maxRangeM - 13.8889) < 1e-3);
 });
 
-test('rayons : seul le STICKY est connu (3 m de mort sur le coup, 5 m de dégâts), les autres sont inconnus', () => {
+test('rayons connus : STICKY 3 m et 5 m (patch 0.5.2), DX3 0 à 2 m et 4 m, SONAR 4 m (8 m de diamètre) ; le shield n a pas de rayon', () => {
   assert.deepEqual(knownRadii('STICKY'), [{ label: 'mort sur le coup', m: 3 }, { label: 'dégâts', m: 5 }]);
-  assert.deepEqual(knownRadii('DX3'), []);
-  assert.deepEqual(knownRadii('SONAR'), []);
+  assert.deepEqual(knownRadii('DX3'), [{ label: 'dégâts maximaux', m: 2 }, { label: 'limite des dégâts', m: 4 }]);
+  assert.deepEqual(knownRadii('SONAR'), [{ label: 'détection', m: 4 }]);
   assert.deepEqual(knownRadii('SHIELD'), []);
   const legend = explosionLegend();
+  assert.deepEqual(legend.map((l) => l.name), ['DX3', 'STICKY']); // les deux grenades explosives
   assert.equal(legend.find((l) => l.name === 'STICKY')?.text, 'STICKY : 3 m (mort sur le coup), 5 m (dégâts)');
-  assert.equal(legend.find((l) => l.name === 'DX3')?.text, 'DX3 : rayon non connu');
-  assert.equal(legend.find((l) => l.name === 'SONAR')?.text, 'SONAR : rayon non connu');
+  assert.equal(legend.find((l) => l.name === 'DX3')?.text, 'DX3 : 2 m (dégâts maximaux), 4 m (limite des dégâts)');
+});
+
+test('shield : longueur fixe de la référence (environ 1,9 m) et trait centré sur le point d appui', () => {
+  const length = shieldFixedLengthM();
+  assert.equal(length, 1.9);
+  const center = { x: 0.5, y: 0.5 };
+  for (const toward of [{ x: 0.6, y: 0.5 }, { x: 0.5, y: 0.9 }, { x: 0.3, y: 0.2 }]) {
+    const seg = shieldSegment(center, toward, 1.9)!;
+    assert.ok(Math.abs(shieldLengthM(seg.a, seg.b) - 1.9) < 1e-9, 'longueur fixe quel que soit le glissement');
+    assert.ok(Math.abs((seg.a.x + seg.b.x) / 2 - 0.5) < 1e-12 && Math.abs((seg.a.y + seg.b.y) / 2 - 0.5) < 1e-12, 'centré sur l appui');
+  }
+  const horizontal = shieldSegment(center, { x: 0.9, y: 0.5 }, 1.9)!;
+  assert.ok(Math.abs(horizontal.a.y - 0.5) < 1e-12 && horizontal.b.x > horizontal.a.x, 'orienté vers le pointeur');
+  assert.equal(shieldSegment(center, center, 1.9), null);
 });
 
 test('longueur du trait du shield en mètres (arène de 31 m sur 16,5 m)', () => {

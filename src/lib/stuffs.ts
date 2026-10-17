@@ -293,7 +293,7 @@ export const stuffs: Stuff[] = [
     name: 'STICKY',
     description:
       "Grenade antipersonnel qui adhère à la première surface. Plus précise que la DX3.",
-    fuseS: 2.5,
+    fuseS: 3.5, // 3,5 s après l'impact (information de l'utilisateur, 17/10/2026) ; la table du patch 0.5.2 donnait 2,5 s
     reloadS: 20,
     maxDamage: 95,
     maxDamageRadiusM: 3,
@@ -306,7 +306,7 @@ export const stuffs: Stuff[] = [
       "Balise de reconnaissance : révèle la position des ennemis aux alentours, même à travers les murs. 1 par équipe.",
     fuseS: 0,
     reloadS: 40,
-    radiusM: 8,
+    radiusM: 4, // 8 m de DIAMÈTRE (information de l'utilisateur, 17/10/2026) : le rayon est donc 4 m
   },
   {
     kind: 'utility',
