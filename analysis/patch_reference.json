@@ -9,14 +9,14 @@
         "patch": null,
         "date": "2026-10-17",
         "champs": {
-          "delai_explosion_apres_impact_s": 3.5
+          "delai_explosion_apres_impact_s": 2.5
         },
         "source": {
           "type": "information de l'utilisateur",
           "url": null,
-          "citation": "la STICKY se déclenche 3,5 s après l'impact",
+          "citation": "la STICKY explose 2,5 s après l'impact",
           "citation_exacte": false,
-          "note": "CONTRADICTION : la table du patch 0.5.2 et l'onglet Stratégie donnent 2,5 s de « délai avant explosion » ; l'utilisateur dit 3,5 s après l'impact (le jeu a pu changer depuis, ou le délai ne se compte pas du même instant) : les deux sont gardés, l'utilisateur est la source la plus récente"
+          "note": "l'utilisateur a d'abord dit 3,5 s puis corrigé le 17/10/2026 : 2,5 s après l'impact, comme la table du patch 0.5.2 et l'onglet Stratégie : pas de contradiction"
         }
       },
       {
@@ -179,15 +179,15 @@
         "patch": null,
         "date": "2026-10-17",
         "champs": {
-          "diametre_m": 8,
-          "rayon_m": 4
+          "rayon_m": 8,
+          "diametre_m": 16
         },
         "source": {
           "type": "information de l'utilisateur",
           "url": null,
-          "citation": "le sonar fait 8 mètres de diamètre",
+          "citation": "le sonar fait 8 m de rayon",
           "citation_exacte": false,
-          "note": "donné par l'utilisateur le 17/10/2026 ; l'onglet Stratégie le notait « rayon 8 m » : c'est le diamètre, le rayon est 4 m"
+          "note": "l'utilisateur a d'abord dit 8 m de diamètre puis corrigé le 17/10/2026 : c'est 8 m de RAYON, comme l'onglet Stratégie le notait déjà"
         }
       },
       {

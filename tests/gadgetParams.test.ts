@@ -28,10 +28,10 @@ test('clone : 5 km/h pendant 10 s, portée maximale d environ 13,9 m', () => {
   assert.ok(Math.abs(p.maxRangeM - 13.8889) < 1e-3);
 });
 
-test('rayons connus : STICKY 3 m et 5 m (patch 0.5.2), DX3 0 à 2 m et 4 m, SONAR 4 m (8 m de diamètre) ; le shield n a pas de rayon', () => {
+test('rayons connus : STICKY 3 m et 5 m (patch 0.5.2), DX3 0 à 2 m et 4 m, SONAR 8 m de rayon ; le shield n a pas de rayon', () => {
   assert.deepEqual(knownRadii('STICKY'), [{ label: 'mort sur le coup', m: 3 }, { label: 'dégâts', m: 5 }]);
   assert.deepEqual(knownRadii('DX3'), [{ label: 'dégâts maximaux', m: 2 }, { label: 'limite des dégâts', m: 4 }]);
-  assert.deepEqual(knownRadii('SONAR'), [{ label: 'détection', m: 4 }]);
+  assert.deepEqual(knownRadii('SONAR'), [{ label: 'détection', m: 8 }]);
   assert.deepEqual(knownRadii('SHIELD'), []);
   const legend = explosionLegend();
   assert.deepEqual(legend.map((l) => l.name), ['DX3', 'STICKY']); // les deux grenades explosives
